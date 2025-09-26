@@ -2,7 +2,6 @@ package com.example.teamozy.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,7 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.teamozy.viewmodel.AttendanceViewModel
+import com.example.teamozy.feature.attendance.presentation.AttendanceViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

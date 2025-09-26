@@ -3,9 +3,9 @@ package com.example.teamozy.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.teamozy.repository.AttendanceRepository
-import com.example.teamozy.repository.AttendanceResult
-import com.example.teamozy.repository.AttendanceStatusResult
+import com.example.teamozy.feature.attendance.data.AttendanceRepository
+import com.example.teamozy.feature.attendance.data.AttendanceResult
+import com.example.teamozy.feature.attendance.data.AttendanceStatusResult
 import com.example.teamozy.utils.LocationHelper
 import com.example.teamozy.utils.LocationResult
 import kotlinx.coroutines.flow.MutableStateFlow
