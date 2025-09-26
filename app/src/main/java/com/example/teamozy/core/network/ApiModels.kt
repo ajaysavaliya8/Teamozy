@@ -1,51 +1,35 @@
-//ApiModel.kt
-package com.example.teamozy.network
+package com.example.teamozy.core.network
 
 import com.google.gson.annotations.SerializedName
 
-// Response Models
-data class ApiResponse<T>(
-    @SerializedName("status") val status: String,
-    @SerializedName("message") val message: String,
-    @SerializedName("data") val data: T? = null
+// -------- Auth --------
+data class BasicResponse(
+    val status: String,           // "success" | "error" | "reject"
+    val message: String? = null,
+    val token: String? = null     // present on verify-login success
 )
 
-// Direct login response that matches your actual API
-data class DirectLoginResponse(
-    @SerializedName("status") val status: String,
-    @SerializedName("message") val message: String,
-    @SerializedName("token") val token: String
+// -------- Status (/check-status) --------
+data class CheckStatusEnvelope(
+    val status: String,
+    val message: String? = null,
+    val data: CheckStatusData? = null
 )
 
-data class CheckStatusResponse(
-    @SerializedName("current-state") val currentState: String
+data class CheckStatusData(
+    @SerializedName("current-state")
+    val currentState: String      // "CHECK_IN_NEEDED" | "CHECK_OUT_NEEDED"
 )
 
-data class CheckInOutResponse(
-    @SerializedName("is_late") val isLate: Boolean = false,
-    @SerializedName("location_verified") val locationVerified: Boolean = true,
-    @SerializedName("t_token") val tToken: String = ""
-)
-
-data class LoginResponse(
-    @SerializedName("token") val token: String
-)
-
-// Request Models
-data class ViolationRequest(
-    @SerializedName("t_token") val tToken: String,
-    @SerializedName("late_reason") val lateReason: String? = null,
-    @SerializedName("geo_reason") val geoReason: String? = null,
-    @SerializedName("early_reason") val earlyReason: String? = null
-)
-
-data class FaceVectorResponse(
-    @SerializedName("status") val status: String,
-    @SerializedName("message") val message: String,
-    @SerializedName("face_vector") val faceVector: List<Float>? = null
-)
-
-data class SaveFaceVectorResponse(
-    @SerializedName("status") val status: String,
-    @SerializedName("message") val message: String
+// -------- Actions (/check-in, /check-out) --------
+// Your backend returns top-level fields (not nested "data")
+data class ActionResponse(
+    val status: String,               // "success"
+    val message: String? = null,
+    // For check-in
+    @SerializedName("is_late") val isLate: Boolean? = null,
+    // For check-out
+    @SerializedName("is_early") val isEarly: Boolean? = null,
+    @SerializedName("location_verified") val locationVerified: Boolean? = null,
+    @SerializedName("t_token") val tToken: String? = null
 )

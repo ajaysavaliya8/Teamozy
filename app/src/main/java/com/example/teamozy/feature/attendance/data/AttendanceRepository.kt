@@ -1,305 +1,248 @@
-package com.example.teamozy.repository
+package com.example.teamozy.feature.attendance.data
 
 import android.content.Context
-import android.content.SharedPreferences
-import com.example.teamozy.network.NetworkModule
+import android.util.Log
+import com.example.teamozy.core.network.ActionResponse
+import com.example.teamozy.core.network.BasicResponse
+import com.example.teamozy.core.network.CheckStatusEnvelope
+import com.example.teamozy.core.network.NetworkModule
+import com.example.teamozy.core.utils.PreferencesManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import okhttp3.ResponseBody
+import retrofit2.Response
+
+sealed class AttendanceOutcome {
+    /** canCheckIn = true  -> show "Check In"  button
+     *  canCheckIn = false -> show "Check Out" button */
+    data class Success(val canCheckIn: Boolean) : AttendanceOutcome()
+    /** 307 case returning t_token + message for UI to collect reasons */
+    data class Violation(val token: String, val message: String) : AttendanceOutcome()
+    data class Error(val message: String) : AttendanceOutcome()
+}
+
+private enum class LastAction { CHECK_IN, CHECK_OUT }
 
 class AttendanceRepository(context: Context) {
 
-    private val apiService = NetworkModule.apiService
-    private val prefs: SharedPreferences = context.getSharedPreferences("teamozy", Context.MODE_PRIVATE)
+    private val api = NetworkModule.apiService
+    private val pm = PreferencesManager.getInstance(context)
 
-    private fun getAuthToken(): String {
-        return prefs.getString("token", "") ?: ""
+    private fun deviceId(): String = pm.deviceId
+    private fun token(): String = pm.authToken.orEmpty()
+
+    // Track which action produced the last 307 so submitViolation can auto-route
+    private var lastAction: LastAction? = null
+
+    // ---------------- Status ----------------
+    suspend fun getStatus(): AttendanceOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val res = api.checkStatus(
+                deviceId = deviceId(),
+                token = token()
+            )
+            Log.d("NET", "checkStatus -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+            if (res.isSuccessful) {
+                val body: CheckStatusEnvelope? = res.body()
+                val state = body?.data?.currentState
+                val can = when (state) {
+                    "CHECK_IN_NEEDED" -> true
+                    "CHECK_OUT_NEEDED" -> false
+                    else -> true
+                }
+                AttendanceOutcome.Success(canCheckIn = can)
+            } else if (res.code() == 401) {
+                AttendanceOutcome.Error("Unauthorized. Please login again.")
+            } else {
+                AttendanceOutcome.Error(extractError(res))
+            }
+        } catch (e: Exception) {
+            AttendanceOutcome.Error(friendlyNetError(e))
+        }
     }
 
-    private fun getDeviceId(): String = prefs.getString("device_id", "default_device") ?: "default_device"
-
-    suspend fun checkStatus(): AttendanceStatusResult {
-        return try {
-            val response = apiService.checkStatus(
-                deviceId = getDeviceId(),
-                token = getAuthToken()
-            )
-
-            println("DEBUG: CheckStatus response code: ${response.code()}")
-
-            when (response.code()) {
-                200 -> {
-                    val responseBody = response.body()
-                    if (responseBody != null && responseBody.status == "success") {
-                        val currentState = responseBody.data?.currentState ?: ""
-                        println("DEBUG: Current state from API: '$currentState'")
-
-                        when (currentState) {
-                            "CHECK_IN_NEEDED" -> {
-                                println("DEBUG: User needs to check in")
-                                AttendanceStatusResult.Success(canCheckIn = true, buttonText = "Check In")
-                            }
-                            "CHECK_OUT_NEEDED" -> {
-                                println("DEBUG: User needs to check out")
-                                AttendanceStatusResult.Success(canCheckIn = false, buttonText = "Check Out")
-                            }
-                            else -> {
-                                println("DEBUG: Unknown state: '$currentState', defaulting to Check In")
-                                AttendanceStatusResult.Success(canCheckIn = true, buttonText = "Check In")
-                            }
-                        }
-                    } else {
-                        println("DEBUG: Invalid response format for check status")
-                        AttendanceStatusResult.Error("Invalid response format")
+    // ---------------- Check In ----------------
+    suspend fun checkIn(
+        lat: Double,
+        lng: Double,
+        accuracy: Float,
+        faceVerify: Boolean = false      // default keeps older callers safe
+    ): AttendanceOutcome =
+        withContext(Dispatchers.IO) {
+            return@withContext try {
+                lastAction = LastAction.CHECK_IN
+                val res = api.checkIn(
+                    deviceId = deviceId(),
+                    longitude = lng,
+                    latitude = lat,
+                    faceVerify = faceVerify,   // <— CHANGED
+                    token = token()
+                )
+                Log.d(
+                    "NET",
+                    "checkIn -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}"
+                )
+                when {
+                    res.code() == 307 -> {
+                        val parsed = parseActionFromNon2xx(res)
+                        AttendanceOutcome.Violation(
+                            token = parsed?.tToken.orEmpty(),
+                            message = parsed?.message.orEmpty()
+                        )
                     }
+
+                    res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = false)
+                    res.code() == 401 -> AttendanceOutcome.Error("Unauthorized. Please login again.")
+                    else -> AttendanceOutcome.Error(extractError(res))
                 }
-                404, 403 -> {
-                    // Handle specific error cases from your API
-                    val errorMessage = parseErrorMessage(response.errorBody())
-                    println("DEBUG: CheckStatus client error (${response.code()}): $errorMessage")
-                    AttendanceStatusResult.Error(errorMessage)
-                }
-                else -> {
-                    val errorMessage = parseErrorMessage(response.errorBody())
-                    println("DEBUG: CheckStatus error (${response.code()}): $errorMessage")
-                    AttendanceStatusResult.Error(errorMessage)
-                }
+            } catch (e: Exception) {
+                AttendanceOutcome.Error(friendlyNetError(e))
             }
-        } catch (e: Exception) {
-            println("DEBUG: CheckStatus exception: ${e.message}")
-            e.printStackTrace()
-            AttendanceStatusResult.Error("Failed to check status: ${e.message}")
         }
-    }
-
-    suspend fun checkIn(longitude: Double, latitude: Double): AttendanceResult {
-        return try {
-            val token = getAuthToken()
-            if (token.isEmpty()) {
-                return AttendanceResult.Error("No auth token found. Please login first.")
+    // ---------------- Check Out ----------------
+    suspend fun checkOut(
+        lat: Double,
+        lng: Double,
+        accuracy: Float,
+        faceVerify: Boolean = false      // default keeps older callers safe
+    ): AttendanceOutcome =
+        withContext(Dispatchers.IO) {
+            return@withContext try {
+                lastAction = LastAction.CHECK_OUT
+                val res = api.checkOut(
+                    deviceId = deviceId(),
+                    longitude = lng,
+                    latitude = lat,
+                    faceVerify = faceVerify,   // <— CHANGED
+                    token = token()
+                )
+                Log.d("NET", "checkOut -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+                when {
+                    res.code() == 307 -> {
+                        val parsed = parseActionFromNon2xx(res)
+                        AttendanceOutcome.Violation(
+                            token = parsed?.tToken.orEmpty(),
+                            message = parsed?.message.orEmpty()
+                        )
+                    }
+                    res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = true)
+                    res.code() == 401 -> AttendanceOutcome.Error("Unauthorized. Please login again.")
+                    else -> AttendanceOutcome.Error(extractError(res))
+                }
+            } catch (e: Exception) {
+                AttendanceOutcome.Error(friendlyNetError(e))
             }
-
-            val response = apiService.checkIn(
-                deviceId = getDeviceId(),
-                longitude = longitude,
-                latitude = latitude,
-                faceVerify = true,
-                token = token
-            )
-
-            println("DEBUG: Response code: ${response.code()}")
-            println("DEBUG: Response message: ${response.message()}")
-
-            when (response.code()) {
-                200 -> {
-                    AttendanceResult.Success("Check-in successful")
-                }
-                307 -> {
-                    // Handle 307 response by reading the error body
-                    handleViolationResponse(response.errorBody())
-                }
-                else -> {
-                    // Parse error message from response body
-                    val errorMessage = parseErrorMessage(response.errorBody())
-                    println("DEBUG: Final error message: $errorMessage")
-                    AttendanceResult.Error(errorMessage)
-                }
-            }
-        } catch (e: Exception) {
-            println("DEBUG: Exception: ${e.message}")
-            e.printStackTrace()
-            AttendanceResult.Error("Network error: ${e.message}")
         }
-    }
 
-    private fun handleViolationResponse(errorBody: ResponseBody?): AttendanceResult {
-        return try {
-            val responseBodyString = errorBody?.string() ?: ""
-            println("DEBUG: 307 Response body: $responseBodyString")
 
-            if (responseBodyString.isNotEmpty()) {
-                val jsonObject = JSONObject(responseBodyString)
-                val token = jsonObject.optString("t_token", "")
-                val isLate = jsonObject.optBoolean("is_late", false)
-                val locationVerified = jsonObject.optBoolean("location_verified", true)
-                val message = jsonObject.optString("message", "Violation detected")
-
-                println("DEBUG: Parsed violation - t_token: '$token', isLate: $isLate, locationVerified: $locationVerified, message: '$message'")
-
-                if (token.isNotEmpty()) {
-                    AttendanceResult.ViolationRequired(
-                        tToken = token,
-                        isLate = isLate,
-                        isLocationViolation = !locationVerified,
-                        message = message
-                    )
-                } else {
-                    println("DEBUG: Empty t_token received")
-                    AttendanceResult.Error("Invalid violation response - missing token")
-                }
-            } else {
-                println("DEBUG: Empty response body for 307")
-                AttendanceResult.Error("Failed to parse violation response")
-            }
-        } catch (e: Exception) {
-            println("DEBUG: Error parsing 307 response: ${e.message}")
-            e.printStackTrace()
-            AttendanceResult.Error("Failed to process violation response: ${e.message}")
-        }
-    }
-
-    private fun parseErrorMessage(errorBody: ResponseBody?): String {
-        return try {
-            val errorBodyString = errorBody?.string()
-            println("DEBUG: Error body: $errorBodyString")
-            if (errorBodyString != null) {
-                val jsonObject = JSONObject(errorBodyString)
-                val status = jsonObject.optString("status")
-                val message = jsonObject.optString("message")
-                if (status == "reject" && message.isNotEmpty()) {
-                    message
-                } else {
-                    "Request failed"
-                }
-            } else {
-                "Request failed"
-            }
-        } catch (e: Exception) {
-            println("DEBUG: Error parsing error response: ${e.message}")
-            "Request failed"
-        }
-    }
-
-    suspend fun submitCheckInViolation(tToken: String, reason: String): AttendanceResult {
-        return try {
-            val token = getAuthToken()
-
-            // Print payload details in logcat
-            println("=== CHECK-IN VIOLATION PAYLOAD ===")
-            println("URL: https://teamozy.com/m/check-in-violation")
-            println("Query Parameters:")
-            println("  token = $token")
-            println("Form Data:")
-            println("  t_token = $tToken")
-            println("  late_reason = $reason")
-            println("  geo_reason = $reason")
-            println("================================")
-
-            val response = apiService.submitCheckInViolation(
-                token = token,
+    // ---------------- Violation submit (explicit) ----------------
+    /** For CHECK-IN violation: send both reasons as your backend accepts (late_reason, geo_reason) */
+    suspend fun submitCheckInViolation(
+        tToken: String,
+        lateReason: String? = null,
+        geoReason: String? = null
+    ): AttendanceOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val res = api.submitCheckInViolation(
                 tToken = tToken,
-                lateReason = reason,
-                geoReason = reason
+                lateReason = lateReason,
+                geoReason = geoReason,
+                token = token()
             )
-
-            println("=== CHECK-IN VIOLATION RESPONSE ===")
-            println("Response Code: ${response.code()}")
-            println("Response Body: ${response.body()}")
-            println("Response Error Body: ${response.errorBody()?.string()}")
-            println("===================================")
-
-            if (response.isSuccessful) {
-                AttendanceResult.Success("Check-in completed")
-            } else {
-                val errorMessage = parseErrorMessage(response.errorBody())
-                AttendanceResult.Error(errorMessage)
+            Log.d("NET", "submitCheckInViolation -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+            when {
+                res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = false) // now user is checked in
+                res.code() == 401 -> AttendanceOutcome.Error("Unauthorized. Please login again.")
+                else -> AttendanceOutcome.Error(extractError(res))
             }
         } catch (e: Exception) {
-            println("=== CHECK-IN VIOLATION ERROR ===")
-            println("Exception: ${e.message}")
-            println("Stack trace:")
-            e.printStackTrace()
-            println("================================")
-            AttendanceResult.Error("Network error: ${e.message}")
+            AttendanceOutcome.Error(friendlyNetError(e))
         }
     }
 
-    suspend fun checkOut(longitude: Double, latitude: Double): AttendanceResult {
-        return try {
-            val response = apiService.checkOut(
-                deviceId = getDeviceId(),
-                longitude = longitude,
-                latitude = latitude,
-                faceVerify = true,
-                token = getAuthToken()
-            )
-
-            println("DEBUG: CheckOut response code: ${response.code()}")
-
-            when (response.code()) {
-                200 -> AttendanceResult.Success("Check-out successful")
-                307 -> {
-                    // Handle 307 response by reading the error body
-                    handleViolationResponse(response.errorBody())
-                }
-                else -> {
-                    val errorMessage = parseErrorMessage(response.errorBody())
-                    AttendanceResult.Error(errorMessage)
-                }
-            }
-        } catch (e: Exception) {
-            println("DEBUG: CheckOut exception: ${e.message}")
-            e.printStackTrace()
-            AttendanceResult.Error("Network error: ${e.message}")
-        }
-    }
-
-    suspend fun submitCheckOutViolation(tToken: String, reason: String): AttendanceResult {
-        return try {
-            val token = getAuthToken()
-
-            // Print payload details in logcat
-            println("=== CHECK-OUT VIOLATION PAYLOAD ===")
-            println("URL: https://teamozy.com/m/check-out-violation")
-            println("Query Parameters:")
-            println("  token = $token")
-            println("Form Data:")
-            println("  t_token = $tToken")
-            println("  early_reason = $reason")
-            println("  geo_reason = $reason")
-            println("==================================")
-
-            val response = apiService.submitCheckOutViolation(
-                token = token,
+    /** For CHECK-OUT violation: backend accepts early_reason + geo_reason (same pattern) */
+    suspend fun submitCheckOutViolation(
+        tToken: String,
+        earlyReason: String? = null,
+        geoReason: String? = null
+    ): AttendanceOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val res = api.submitCheckOutViolation(
                 tToken = tToken,
-                earlyReason = reason,
-                geoReason = reason
+                earlyReason = earlyReason,
+                geoReason = geoReason,
+                token = token()
             )
-
-            println("=== CHECK-OUT VIOLATION RESPONSE ===")
-            println("Response Code: ${response.code()}")
-            println("Response Body: ${response.body()}")
-            println("Response Error Body: ${response.errorBody()?.string()}")
-            println("====================================")
-
-            if (response.isSuccessful) {
-                AttendanceResult.Success("Check-out completed")
-            } else {
-                val errorMessage = parseErrorMessage(response.errorBody())
-                AttendanceResult.Error(errorMessage)
+            Log.d("NET", "submitCheckOutViolation -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+            when {
+                res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = true) // day complete
+                res.code() == 401 -> AttendanceOutcome.Error("Unauthorized. Please login again.")
+                else -> AttendanceOutcome.Error(extractError(res))
             }
         } catch (e: Exception) {
-            println("=== CHECK-OUT VIOLATION ERROR ===")
-            println("Exception: ${e.message}")
-            println("Stack trace:")
-            e.printStackTrace()
-            println("=================================")
-            AttendanceResult.Error("Network error: ${e.message}")
+            AttendanceOutcome.Error(friendlyNetError(e))
         }
     }
-}
 
-sealed class AttendanceResult {
-    data class Success(val message: String) : AttendanceResult()
-    data class ViolationRequired(
-        val tToken: String,
-        val isLate: Boolean,
-        val isLocationViolation: Boolean,
-        val message: String
-    ) : AttendanceResult()
-    data class Error(val message: String) : AttendanceResult()
-}
+    // ---------------- Violation submit (auto-route) ----------------
+    /**
+     * Convenience:
+     *  - If last action was CHECK-IN → calls /check-in-violation with lateReason & geoReason
+     *  - If last action was CHECK-OUT → calls /check-out-violation with earlyReason & geoReason
+     */
+    suspend fun submitViolation(
+        tToken: String,
+        lateReason: String? = null,  // for check-in flow
+        earlyReason: String? = null, // for check-out flow
+        geoReason: String? = null
+    ): AttendanceOutcome = withContext(Dispatchers.IO) {
+        return@withContext when (lastAction ?: LastAction.CHECK_IN) {
+            LastAction.CHECK_IN  -> submitCheckInViolation(tToken, lateReason, geoReason)
+            LastAction.CHECK_OUT -> submitCheckOutViolation(tToken, earlyReason, geoReason)
+        }
+    }
 
-sealed class AttendanceStatusResult {
-    data class Success(val canCheckIn: Boolean, val buttonText: String) : AttendanceStatusResult()
-    data class Error(val message: String) : AttendanceStatusResult()
+    // ---------------- Helpers ----------------
+
+    /** Parse JSON from non-2xx (e.g., 307) response to extract message/t_token/etc. */
+    private fun parseActionFromNon2xx(res: Response<ActionResponse>): ActionResponse? {
+        return try {
+            val raw = res.errorBody()?.string().orEmpty()
+            if (raw.isBlank()) return null
+            val o = JSONObject(raw)
+            ActionResponse(
+                status = o.optString("status"),
+                message = o.optString("message"),
+                isLate = if (o.has("is_late")) o.optBoolean("is_late") else null,
+                isEarly = if (o.has("is_early")) o.optBoolean("is_early") else null,
+                locationVerified = if (o.has("location_verified")) o.optBoolean("location_verified") else null,
+                tToken = o.optString("t_token")
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractError(res: Response<*>): String {
+        return try {
+            val raw = res.errorBody()?.string().orEmpty()
+            if (raw.isBlank()) "Request failed with ${res.code()}" else {
+                if (raw.trim().startsWith("{")) {
+                    val obj = JSONObject(raw)
+                    obj.optString("message")
+                        .ifBlank { obj.optString("error") }
+                        .ifBlank { obj.optString("detail") }
+                        .ifBlank { "Request failed with ${res.code()}" }
+                } else raw
+            }
+        } catch (_: Exception) {
+            "Request failed with ${res.code()}"
+        }
+    }
+
+    private fun friendlyNetError(e: Throwable): String = when (e) {
+        is java.net.UnknownHostException -> "Can’t reach server. Check your internet or server URL."
+        is java.net.SocketTimeoutException -> "Server timed out. Please try again."
+        else -> e.message ?: "Network error, please try again."
+    }
 }

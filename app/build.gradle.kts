@@ -10,6 +10,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
+
         applicationId = "com.example.teamozy"
         minSdk = 24
         targetSdk = 36
@@ -42,10 +43,16 @@ android {
 
 dependencies {
     // Network dependencies
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    implementation("com.google.code.gson:gson:2.11.0")
+
+    // Chucker (network inspector) — debug only
+    debugImplementation("com.github.chuckerteam.chucker:library:4.0.0")
+    releaseImplementation("com.github.chuckerteam.chucker:library-no-op:4.0.0")
+
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // ONNX Runtime for Android
@@ -79,7 +86,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.6")
 
     // Location services
-    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
