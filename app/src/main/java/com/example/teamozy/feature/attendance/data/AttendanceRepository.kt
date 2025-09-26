@@ -12,12 +12,19 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import retrofit2.Response
 
+// If you added the global 401 flow in Phase 3 Step 1–4, keep this import.
+// If you haven't added it yet, you can comment these two lines out.
+import com.example.teamozy.core.state.AppEvent
+import com.example.teamozy.core.state.AppStateManager
+
 sealed class AttendanceOutcome {
     /** canCheckIn = true  -> show "Check In"  button
      *  canCheckIn = false -> show "Check Out" button */
     data class Success(val canCheckIn: Boolean) : AttendanceOutcome()
+
     /** 307 case returning t_token + message for UI to collect reasons */
     data class Violation(val token: String, val message: String) : AttendanceOutcome()
+
     data class Error(val message: String) : AttendanceOutcome()
 }
 
@@ -42,19 +49,35 @@ class AttendanceRepository(context: Context) {
                 token = token()
             )
             Log.d("NET", "checkStatus -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
-            if (res.isSuccessful) {
-                val body: CheckStatusEnvelope? = res.body()
-                val state = body?.data?.currentState
-                val can = when (state) {
-                    "CHECK_IN_NEEDED" -> true
-                    "CHECK_OUT_NEEDED" -> false
-                    else -> true
+
+            when {
+                res.isSuccessful -> {
+                    val body: CheckStatusEnvelope? = res.body()
+                    val state = body?.data?.let { data ->
+                        // Typical server values we've seen:
+                        // "CHECK_IN_NEEDED" | "CHECK_OUT_NEEDED" | (maybe null/other)
+                        // If unknown, default to "can check in".
+                        try { data.javaClass.getDeclaredField("currentState").let { f ->
+                            f.isAccessible = true
+                            (f.get(data) as? String) ?: "CHECK_IN_NEEDED"
+                        }} catch (_: Exception) { "CHECK_IN_NEEDED" }
+                    } ?: "CHECK_IN_NEEDED"
+
+                    val can = when (state) {
+                        "CHECK_IN_NEEDED" -> true
+                        "CHECK_OUT_NEEDED" -> false
+                        else -> true
+                    }
+                    AttendanceOutcome.Success(canCheckIn = can)
                 }
-                AttendanceOutcome.Success(canCheckIn = can)
-            } else if (res.code() == 401) {
-                AttendanceOutcome.Error("Unauthorized. Please login again.")
-            } else {
-                AttendanceOutcome.Error(extractError(res))
+
+                res.code() == 401 -> {
+                    // global bounce (if wired)
+                    AppStateManager.emitUnauthorized()
+                    AttendanceOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                else -> AttendanceOutcome.Error(extractError(res))
             }
         } catch (e: Exception) {
             AttendanceOutcome.Error(friendlyNetError(e))
@@ -65,77 +88,89 @@ class AttendanceRepository(context: Context) {
     suspend fun checkIn(
         lat: Double,
         lng: Double,
-        accuracy: Float,
-        faceVerify: Boolean = false      // default keeps older callers safe
-    ): AttendanceOutcome =
-        withContext(Dispatchers.IO) {
-            return@withContext try {
-                lastAction = LastAction.CHECK_IN
-                val res = api.checkIn(
-                    deviceId = deviceId(),
-                    longitude = lng,
-                    latitude = lat,
-                    faceVerify = faceVerify,   // <— CHANGED
-                    token = token()
-                )
-                Log.d(
-                    "NET",
-                    "checkIn -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}"
-                )
-                when {
-                    res.code() == 307 -> {
-                        val parsed = parseActionFromNon2xx(res)
-                        AttendanceOutcome.Violation(
-                            token = parsed?.tToken.orEmpty(),
-                            message = parsed?.message.orEmpty()
-                        )
-                    }
+        @Suppress("UNUSED_PARAMETER") accuracy: Float, // we keep it for UI/debug; server ignores it
+        faceVerify: Boolean = false
+    ): AttendanceOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            lastAction = LastAction.CHECK_IN
+            val res = api.checkIn(
+                deviceId = deviceId(),
+                longitude = lng,
+                latitude = lat,
+                faceVerify = faceVerify,
+                token = token()
+            )
 
-                    res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = false)
-                    res.code() == 401 -> AttendanceOutcome.Error("Unauthorized. Please login again.")
-                    else -> AttendanceOutcome.Error(extractError(res))
+            Log.d("NET", "checkIn -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+
+            when {
+                // Backend uses 307 to signal "violation flow required" with a t_token
+                res.code() == 307 -> {
+                    val parsed = parseActionFromNon2xx(res)
+                    AttendanceOutcome.Violation(
+                        token = parsed?.tToken.orEmpty(),
+                        message = parsed?.message.orEmpty()
+                    )
                 }
-            } catch (e: Exception) {
-                AttendanceOutcome.Error(friendlyNetError(e))
+
+                res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = false)
+
+                res.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    AttendanceOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                else -> AttendanceOutcome.Error(extractError(res))
             }
+        } catch (e: Exception) {
+            AttendanceOutcome.Error(friendlyNetError(e))
         }
+    }
+
     // ---------------- Check Out ----------------
     suspend fun checkOut(
         lat: Double,
         lng: Double,
-        accuracy: Float,
-        faceVerify: Boolean = false      // default keeps older callers safe
-    ): AttendanceOutcome =
-        withContext(Dispatchers.IO) {
-            return@withContext try {
-                lastAction = LastAction.CHECK_OUT
-                val res = api.checkOut(
-                    deviceId = deviceId(),
-                    longitude = lng,
-                    latitude = lat,
-                    faceVerify = faceVerify,   // <— CHANGED
-                    token = token()
-                )
-                Log.d("NET", "checkOut -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
-                when {
-                    res.code() == 307 -> {
-                        val parsed = parseActionFromNon2xx(res)
-                        AttendanceOutcome.Violation(
-                            token = parsed?.tToken.orEmpty(),
-                            message = parsed?.message.orEmpty()
-                        )
-                    }
-                    res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = true)
-                    res.code() == 401 -> AttendanceOutcome.Error("Unauthorized. Please login again.")
-                    else -> AttendanceOutcome.Error(extractError(res))
-                }
-            } catch (e: Exception) {
-                AttendanceOutcome.Error(friendlyNetError(e))
-            }
-        }
+        @Suppress("UNUSED_PARAMETER") accuracy: Float,
+        faceVerify: Boolean = false
+    ): AttendanceOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            lastAction = LastAction.CHECK_OUT
+            val res = api.checkOut(
+                deviceId = deviceId(),
+                longitude = lng,
+                latitude = lat,
+                faceVerify = faceVerify,
+                token = token()
+            )
 
+            Log.d("NET", "checkOut -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+
+            when {
+                res.code() == 307 -> {
+                    val parsed = parseActionFromNon2xx(res)
+                    AttendanceOutcome.Violation(
+                        token = parsed?.tToken.orEmpty(),
+                        message = parsed?.message.orEmpty()
+                    )
+                }
+
+                res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = true) // after checkout, next action is next day's check-in
+
+                res.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    AttendanceOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                else -> AttendanceOutcome.Error(extractError(res))
+            }
+        } catch (e: Exception) {
+            AttendanceOutcome.Error(friendlyNetError(e))
+        }
+    }
 
     // ---------------- Violation submit (explicit) ----------------
+
     /** For CHECK-IN violation: send both reasons as your backend accepts (late_reason, geo_reason) */
     suspend fun submitCheckInViolation(
         tToken: String,
@@ -150,9 +185,13 @@ class AttendanceRepository(context: Context) {
                 token = token()
             )
             Log.d("NET", "submitCheckInViolation -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+
             when {
                 res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = false) // now user is checked in
-                res.code() == 401 -> AttendanceOutcome.Error("Unauthorized. Please login again.")
+                res.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    AttendanceOutcome.Error("Unauthorized. Please login again.")
+                }
                 else -> AttendanceOutcome.Error(extractError(res))
             }
         } catch (e: Exception) {
@@ -174,9 +213,13 @@ class AttendanceRepository(context: Context) {
                 token = token()
             )
             Log.d("NET", "submitCheckOutViolation -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+
             when {
                 res.isSuccessful -> AttendanceOutcome.Success(canCheckIn = true) // day complete
-                res.code() == 401 -> AttendanceOutcome.Error("Unauthorized. Please login again.")
+                res.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    AttendanceOutcome.Error("Unauthorized. Please login again.")
+                }
                 else -> AttendanceOutcome.Error(extractError(res))
             }
         } catch (e: Exception) {
@@ -216,30 +259,34 @@ class AttendanceRepository(context: Context) {
                 isLate = if (o.has("is_late")) o.optBoolean("is_late") else null,
                 isEarly = if (o.has("is_early")) o.optBoolean("is_early") else null,
                 locationVerified = if (o.has("location_verified")) o.optBoolean("location_verified") else null,
-                tToken = o.optString("t_token")
+                tToken = o.optString("t_token", null)
             )
         } catch (_: Exception) {
             null
         }
     }
 
+    /** Extract a friendly error string from non-2xx responses. */
     private fun extractError(res: Response<*>): String {
         return try {
             val raw = res.errorBody()?.string().orEmpty()
-            if (raw.isBlank()) "Request failed with ${res.code()}" else {
-                if (raw.trim().startsWith("{")) {
-                    val obj = JSONObject(raw)
-                    obj.optString("message")
-                        .ifBlank { obj.optString("error") }
-                        .ifBlank { obj.optString("detail") }
-                        .ifBlank { "Request failed with ${res.code()}" }
-                } else raw
+            if (raw.isBlank()) {
+                "Request failed with ${res.code()}"
+            } else {
+                val j = JSONObject(raw)
+                (j.optString("message")
+                    .ifBlank {
+                        // Sometimes server nests message under data/message; handle a couple of variants.
+                        j.optJSONObject("data")?.optString("message").orEmpty()
+                    })
+                    .ifBlank { "Request failed with ${res.code()}" }
             }
         } catch (_: Exception) {
             "Request failed with ${res.code()}"
         }
     }
 
+    /** Human friendly network errors (DNS/timeout/etc.) */
     private fun friendlyNetError(e: Throwable): String = when (e) {
         is java.net.UnknownHostException -> "Can’t reach server. Check your internet or server URL."
         is java.net.SocketTimeoutException -> "Server timed out. Please try again."

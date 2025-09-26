@@ -28,9 +28,7 @@
     <uses-feature
         android:name="android.hardware.location"
         android:required="true" />
-    <uses-feature
-        android:name="android.hardware.location.gps"
-        android:required="false" />
+    <uses-feature  android:name="android.hardware.location.gps" android:required="false" />
 
     <application
         android:allowBackup="true"

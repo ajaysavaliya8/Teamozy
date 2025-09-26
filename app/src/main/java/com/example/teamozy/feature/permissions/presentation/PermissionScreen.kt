@@ -1,9 +1,9 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.example.teamozy.feature.permissions.presentation
 
 import android.Manifest
-import android.app.Activity
-import android.os.Build
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -14,142 +14,136 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.example.teamozy.core.utils.PermissionHelper
-import kotlinx.coroutines.launch
-import androidx.compose.material3.TopAppBar
+
 @Composable
 fun PermissionScreen(
-    onAllGranted: () -> Unit,
-    onBackToLogin: (() -> Unit)? = null
+    onAllGood: () -> Unit
 ) {
     val context = LocalContext.current
-    val activity = context as Activity
 
-    val requiredPermissions = remember {
-        buildList<String> {
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-            add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            add(Manifest.permission.CAMERA)
-            // Background location optional:
-            // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-        }.toTypedArray()
+    var fineGranted by remember { mutableStateOf(isGranted(context, Manifest.permission.ACCESS_FINE_LOCATION)) }
+    var coarseGranted by remember { mutableStateOf(isGranted(context, Manifest.permission.ACCESS_COARSE_LOCATION)) }
+    var cameraGranted by remember { mutableStateOf(isGranted(context, Manifest.permission.CAMERA)) }
+    var gpsEnabled by remember { mutableStateOf(PermissionHelper.isLocationEnabled(context)) }
+
+    val multiPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        result[Manifest.permission.ACCESS_FINE_LOCATION]?.let { fineGranted = it }
+        result[Manifest.permission.ACCESS_COARSE_LOCATION]?.let { coarseGranted = it }
+        result[Manifest.permission.CAMERA]?.let { cameraGranted = it }
     }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-
-    // Early auto-advance if already granted
-    LaunchedEffect(Unit) {
-        if (PermissionHelper.areAllGranted(context, requiredPermissions)) {
-            onAllGranted()
-        }
-    }
-
-    var permanentlyDenied by remember { mutableStateOf(false) }
-    var justRequested by remember { mutableStateOf(false) }
-
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { grantMap ->
-        justRequested = true
-        val allGranted = grantMap.values.all { it }
-        permanentlyDenied = PermissionHelper.anyPermanentlyDenied(activity, requiredPermissions)
-
-        if (allGranted) {
-            scope.launch { snackbarHostState.showSnackbar("All permissions granted.") }
-            onAllGranted()
-        } else {
-            scope.launch {
-                if (permanentlyDenied) {
-                    snackbarHostState.showSnackbar("Permission permanently denied. Open App Settings.")
-                } else {
-                    snackbarHostState.showSnackbar("Some permissions were denied. Try again.")
-                }
-            }
-        }
-    }
-
-    fun requestNow() {
-        permanentlyDenied = false
-        launcher.launch(requiredPermissions)
-    }
+    val locationOk = fineGranted || coarseGranted
+    val everythingOk = locationOk && gpsEnabled   // camera NOT required
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = {
-            TopAppBar( // ⬅️ changed
-                title = { Text("Permissions") },
-                navigationIcon = {
-                    onBackToLogin?.let {
-                        TextButton(onClick = it) { Text("Back") }
-                    }
-                }
-            )
-        }
-    ) { padding ->
+        topBar = { TopAppBar(title = { Text("Permissions") }) }
+    ) { pad ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(pad)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("We need a couple of permissions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Location: to verify you're at the work location.\nCamera: for face verification or evidence when needed.",
-                style = MaterialTheme.typography.bodyMedium
+            Text("We need location before you continue:", fontWeight = FontWeight.SemiBold)
+
+            PermissionCard(
+                title = "Location",
+                description = "Required for accurate Check In / Check Out.",
+                statusLines = listOf(
+                    "Permission: " + (if (locationOk) "GRANTED" else "NOT GRANTED"),
+                    "GPS: " + (if (gpsEnabled) "ENABLED" else "DISABLED")
+                ),
+                primaryButton = {
+                    if (!locationOk) {
+                        Button(onClick = {
+                            multiPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        }) { Text("Grant Location") }
+                    }
+                },
+                secondaryButton = {
+                    if (!gpsEnabled) {
+                        OutlinedButton(onClick = { PermissionHelper.openLocationSettings(context) }) {
+                            Text("Enable GPS")
+                        }
+                    } else {
+                        OutlinedButton(onClick = {
+                            gpsEnabled = PermissionHelper.isLocationEnabled(context)
+                            fineGranted = isGranted(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                            coarseGranted = isGranted(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+                        }) { Text("Refresh") }
+                    }
+                }
             )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Tip: Allow “While using the app” for smooth check-ins.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+
+            PermissionCard(
+                title = "Camera (optional)",
+                description = "Only needed if we later add selfie verification upload. Safe to skip now.",
+                statusLines = listOf("Permission: " + (if (cameraGranted) "GRANTED" else "NOT GRANTED")),
+                primaryButton = {
+                    if (!cameraGranted) {
+                        OutlinedButton(onClick = {
+                            multiPermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA))
+                        }) { Text("Grant Camera") }
+                    }
+                },
+                secondaryButton = {
+                    if (!cameraGranted) {
+                        TextButton(onClick = { PermissionHelper.openAppSettings(context) }) {
+                            Text("Open App Settings")
+                        }
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Button(
+                onClick = onAllGood,
+                enabled = everythingOk,
+                modifier = Modifier.align(Alignment.End)
+            ) { Text("Continue") }
+        }
+    }
+}
+
+@Composable
+private fun PermissionCard(
+    title: String,
+    description: String,
+    statusLines: List<String>,
+    primaryButton: (@Composable () -> Unit)? = null,
+    secondaryButton: (@Composable () -> Unit)? = null
+) {
+    ElevatedCard {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(description, style = MaterialTheme.typography.bodyMedium)
+            statusLines.forEach { line ->
+                Text("• $line", style = MaterialTheme.typography.bodySmall)
             }
-
-            Spacer(Modifier.height(24.dp))
-
-            if (permanentlyDenied) {
-                Button(
-                    onClick = { PermissionHelper.openAppSettings(context) },
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text("Open App Settings") }
-
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = {
-                        if (PermissionHelper.areAllGranted(context, requiredPermissions)) {
-                            scope.launch { snackbarHostState.showSnackbar("Thanks! Permissions enabled.") }
-                            onAllGranted()
-                        } else {
-                            requestNow()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text("I’ve enabled them, continue") }
-            } else {
-                Button(
-                    onClick = { requestNow() },
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text(if (justRequested) "Try Again" else "Grant Permissions") }
-
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = {
-                        if (PermissionHelper.areAllGranted(context, requiredPermissions)) {
-                            scope.launch { snackbarHostState.showSnackbar("All set!") }
-                            onAllGranted()
-                        } else {
-                            scope.launch { snackbarHostState.showSnackbar("Still missing permissions.") }
-                            justRequested = true
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) { Text("Check Again") }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                primaryButton?.invoke()
+                secondaryButton?.invoke()
             }
         }
     }
 }
+
+private fun isGranted(context: android.content.Context, permission: String): Boolean =
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED

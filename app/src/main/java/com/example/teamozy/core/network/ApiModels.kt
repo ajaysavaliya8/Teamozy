@@ -33,3 +33,10 @@ data class ActionResponse(
     @SerializedName("location_verified") val locationVerified: Boolean? = null,
     @SerializedName("t_token") val tToken: String? = null
 )
+
+// Face verify upload response (adjust fields to match your backend when ready)
+data class FaceVerifyResponse(
+    val status: String? = null,
+    val message: String? = null,
+    val face_token: String? = null // sometimes called "face_token" or similar
+)
