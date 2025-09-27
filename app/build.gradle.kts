@@ -42,6 +42,11 @@ android {
 }
 
 dependencies {
+
+    val koinVersion = "3.5.6"
+    implementation("io.insert-koin:koin-android:$koinVersion")
+    implementation("io.insert-koin:koin-androidx-compose:$koinVersion")
+
     // Network dependencies
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
@@ -53,16 +58,19 @@ dependencies {
     debugImplementation("com.github.chuckerteam.chucker:library:4.0.0")
     releaseImplementation("com.github.chuckerteam.chucker:library-no-op:4.0.0")
 
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+// --- Secure local storage for the 512-d embedding ---
+    implementation("androidx.security:security-crypto:1.1.0")
 
-    // ONNX Runtime for Android
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.16.3")
+// --- ONNX Runtime (on-device inference) ---
+//    implementation("ai.onnxruntime:onnxruntime-android:1.19.2")
+//    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 
     // ML Kit Face Detection
-    implementation("com.google.mlkit:face-detection:16.1.5")
+    implementation("com.google.mlkit:face-detection:16.1.7")
 
     // Camera dependencies (for future real face detection)
-    implementation("androidx.camera:camera-core:1.3.1")
+    implementation("androidx.camera:camera-core:1.3.4")
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")
     implementation("androidx.camera:camera-view:1.4.0")
