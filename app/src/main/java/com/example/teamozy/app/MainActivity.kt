@@ -1,35 +1,56 @@
 package com.example.teamozy.app
 
-import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
-import com.example.teamozy.core.state.AppEvent
-import com.example.teamozy.core.state.AppStateManager
-import com.example.teamozy.core.utils.PermissionHelper
 import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.auth.presentation.LoginScreen
 import com.example.teamozy.feature.home.presentation.HomePage
+import org.koin.android.ext.koin.androidContext
+import org.koin.core.context.GlobalContext
+import org.koin.core.context.startKoin
+import com.example.teamozy.di.authModule
+import com.example.teamozy.di.attendanceModule
+import com.example.teamozy.di.permissionsModule
+import com.example.teamozy.di.homeModule
+import kotlinx.coroutines.delay
 
-import com.example.teamozy.feature.permissions.presentation.PermissionScreen
-import com.example.teamozy.feature.splash.presentation.SplashScreen
-import com.example.teamozy.ui.theme.TeamozyTheme
-import kotlinx.coroutines.flow.collectLatest
-
-
+private enum class AppScreen { SPLASH, LOGIN, HOME }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Start Koin here (since there's no Application class now)
+        if (GlobalContext.getOrNull() == null) {
+            startKoin {
+                androidContext(application)
+                modules(
+                    authModule,
+                    attendanceModule,
+                    permissionsModule,
+                    homeModule
+                )
+            }
+        }
+
         enableEdgeToEdge()
         setContent {
-            TeamozyTheme {
-                AppRoot()
+            MaterialTheme {
+                Surface { AppRoot() }
             }
         }
     }
@@ -38,73 +59,54 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AppRoot() {
     val context = LocalContext.current
-    val pm = remember { PreferencesManager.getInstance(context) }
-    var current by rememberSaveable { mutableStateOf(AppScreen.SPLASH) }
-
-    // Global 401 -> Login
-    LaunchedEffect(Unit) {
-        AppStateManager.events.collectLatest { ev ->
-            when (ev) {
-                is AppEvent.Unauthorized -> {
-                    pm.clearAll()
-                    current = AppScreen.LOGIN
-                }
-            }
-        }
-    }
+    val prefs = remember { PreferencesManager.getInstance(context) }
+    var current by remember { mutableStateOf(AppScreen.SPLASH) }
 
     when (current) {
-        AppScreen.SPLASH -> SplashScreen {
-            // Decide next screen after splash
-            val hasLocationPerm = PermissionHelper.areAllGranted(
-                context,
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
-            val gpsEnabled = PermissionHelper.isLocationEnabled(context)
-            val cameraGranted = PermissionHelper.areAllGranted(
-                context,
-                arrayOf(Manifest.permission.CAMERA)
-            )
-
-            val needsPermissions = !hasLocationPerm || !gpsEnabled || !cameraGranted
-            current = when {
-                needsPermissions -> AppScreen.PERMISSIONS
-                pm.authToken != null -> AppScreen.HOME
-                else -> AppScreen.LOGIN
-            }
-        }
-
-        AppScreen.PERMISSIONS -> PermissionScreen(
-            onAllGood = {
-                // After permissions, go to Home if already logged in; otherwise Login
-                current = if (pm.authToken != null) AppScreen.HOME else AppScreen.LOGIN
+        AppScreen.SPLASH -> InlineSplash(
+            onComplete = {
+                val hasToken = !prefs.authToken.isNullOrBlank()
+                current = if (hasToken) AppScreen.HOME else AppScreen.LOGIN
             }
         )
 
-        AppScreen.LOGIN -> {
-            // Move to Home when LoginScreen saves a token
-            LaunchedEffect(Unit) {
-                snapshotFlow { pm.authToken }.collectLatest { tok ->
-                    if (!tok.isNullOrEmpty()) current = AppScreen.HOME
-                }
-            }
-            LoginScreen(
-                onLoginSuccess = {
-                    // In case LoginScreen doesn’t set token immediately,
-                    // still navigate to Home on callback.
-                    current = AppScreen.HOME
-                }
-            )
-        }
+        AppScreen.LOGIN -> LoginScreen(
+            onLoginSuccess = { current = AppScreen.HOME }
+        )
 
         AppScreen.HOME -> HomePage(
             onLogout = {
-                pm.clearAll()
+                prefs.clearAll()
                 current = AppScreen.LOGIN
             }
         )
+    }
+}
+
+@Composable
+private fun InlineSplash(onComplete: () -> Unit, durationMillis: Long = 1200L) {
+    LaunchedEffect(Unit) {
+        delay(durationMillis)
+        onComplete()
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Teamozy",
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(16.dp))
+            CircularProgressIndicator()
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Loading…",
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }

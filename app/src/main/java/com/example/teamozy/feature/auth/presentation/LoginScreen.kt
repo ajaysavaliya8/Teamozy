@@ -7,21 +7,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
-import com.example.teamozy.feature.auth.data.AuthOutcome
-import com.example.teamozy.feature.auth.domain.usecase.LoginUseCase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.teamozy.feature.auth.data.AuthOutcome
+import com.example.teamozy.feature.auth.data.AuthRepository
+import com.example.teamozy.feature.auth.domain.usecase.LoginUseCase
+
+// ✅ Keyboard imports for older Compose versions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit
 ) {
     val context = LocalContext.current
-    val useCase = remember { LoginUseCase(context) }
+
+    // ✅ Build repo from context, then pass repo to use case
+    val repo = remember(context) { AuthRepository(context) }
+    val useCase = remember(repo) { LoginUseCase(repo) }
+
     val scope = rememberCoroutineScope()
 
     var phone by remember { mutableStateOf("") }
@@ -31,11 +40,11 @@ fun LoginScreen(
 
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snack = remember { SnackbarHostState() }
 
+    // resend flow
     var canResend by remember { mutableStateOf(true) }
     var secondsLeft by remember { mutableStateOf(0) }
-
     fun startResendTimer(seconds: Int = 30) {
         canResend = false
         secondsLeft = seconds
@@ -48,111 +57,159 @@ fun LoginScreen(
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = { TopAppBar(title = { Text("Login") }) }
-    ) { padding ->
+    Scaffold(snackbarHost = { SnackbarHost(snack) }) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(if (useOtp) "Login with OTP" else "Login with Password", fontSize = 22.sp)
+            Text("Welcome", fontSize = 26.sp)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Sign in with your registered mobile number.",
+                style = MaterialTheme.typography.bodyMedium
+            )
             Spacer(Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = phone,
-                onValueChange = { phone = it.filter(Char::isDigit).take(10) },
-                label = { Text("Phone number") },
+                onValueChange = {
+                    error = null
+                    phone = it.filter(Char::isDigit).take(10)
+                },
+                label = { Text("Mobile number") },
+                supportingText = {
+                    if (phone.length in 1..9) Text("Enter 10-digit number")
+                },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(12.dp))
 
-            if (!useOtp) {
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
+            // Auth method toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = useOtp,
+                    onClick = { useOtp = true; password = ""; error = null },
+                    label = { Text("Use OTP") }
                 )
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { useOtp = true }) { Text("Use OTP instead") }
-            } else {
+                FilterChip(
+                    selected = !useOtp,
+                    onClick = { useOtp = false; otp = ""; error = null },
+                    label = { Text("Use Password") }
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            if (useOtp) {
                 OutlinedTextField(
                     value = otp,
-                    onValueChange = { otp = it.filter(Char::isDigit).take(6) },
-                    label = { Text("OTP (6 digits)") },
+                    onValueChange = {
+                        error = null
+                        otp = it.filter(Char::isDigit).take(4) // backend sends 4-digit OTP (0000)
+                    },
+                    label = { Text("OTP (4 digits)") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     TextButton(
                         enabled = phone.length == 10 && !loading && canResend,
                         onClick = {
                             scope.launch {
-                                loading = true
-                                val out = useCase.sendOtp(phone)
-                                when (out) {
+                                loading = true; error = null
+                                when (val out = useCase.sendOtp(phone)) {
                                     is AuthOutcome.Success -> {
-                                        snackbarHostState.showSnackbar(out.message)
+                                        snack.showSnackbar(out.message)
                                         startResendTimer(30)
                                     }
                                     is AuthOutcome.Error -> {
-                                        snackbarHostState.showSnackbar(out.message)
+                                        snack.showSnackbar(out.message)
+                                        error = out.message
                                     }
                                 }
                                 loading = false
                             }
                         }
-                    ) { Text(if (canResend) "Send OTP" else "Resend in ${secondsLeft}s") }
-
-                    TextButton(onClick = { useOtp = false }) { Text("Use Password") }
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            val submitEnabled =
-                phone.length == 10 &&
-                        !loading &&
-                        ((!useOtp && password.length >= 4) || (useOtp && otp.length >= 4))
-
-            Button(
-                enabled = submitEnabled,
-                onClick = {
-                    scope.launch {
-                        loading = true
-                        error = null
-                        val out = if (!useOtp) {
-                            useCase.loginWithPassword(phone, password)
-                        } else {
-                            useCase.loginWithOtp(phone, otp)
-                        }
-                        when (out) {
-                            is AuthOutcome.Success -> {
-                                snackbarHostState.showSnackbar(out.message)
-                                onLoginSuccess()
-                            }
-                            is AuthOutcome.Error -> {
-                                error = out.message
-                            }
-                        }
-                        loading = false
+                    ) {
+                        Text(if (canResend) "Send OTP" else "Resend in ${secondsLeft}s")
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-            ) {
-                Text(if (loading) "Please wait…" else "Login")
+
+                    Button(
+                        enabled = phone.length == 10 && otp.length == 4 && !loading,
+                        onClick = {
+                            scope.launch {
+                                loading = true; error = null
+                                when (val out = useCase.loginWithOtp(phone, otp)) {
+                                    is AuthOutcome.Success -> {
+                                        snack.showSnackbar(out.message)
+                                        onLoginSuccess()
+                                    }
+                                    is AuthOutcome.Error -> {
+                                        error = out.message
+                                        snack.showSnackbar(out.message)
+                                    }
+                                }
+                                loading = false
+                            }
+                        }
+                    ) {
+                        Text(if (loading) "Please wait…" else "Verify & Login")
+                    }
+                }
+            } else {
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { error = null; password = it },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    enabled = phone.length == 10 && password.isNotBlank() && !loading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    onClick = {
+                        scope.launch {
+                            loading = true; error = null
+                            when (val out = useCase.loginWithPassword(phone, password)) {
+                                is AuthOutcome.Success -> {
+                                    snack.showSnackbar(out.message)
+                                    onLoginSuccess()
+                                }
+                                is AuthOutcome.Error -> {
+                                    error = out.message
+                                    snack.showSnackbar(out.message)
+                                }
+                            }
+                            loading = false
+                        }
+                    }
+                ) { Text(if (loading) "Please wait…" else "Login") }
+
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = { useOtp = true; password = ""; error = null }) {
+                    Text("Use OTP instead")
+                }
             }
 
             error?.let {

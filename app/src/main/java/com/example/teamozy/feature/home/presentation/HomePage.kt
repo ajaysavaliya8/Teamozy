@@ -2,18 +2,28 @@
 
 package com.example.teamozy.feature.home.presentation
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
 import com.example.teamozy.feature.attendance.presentation.AttendanceViewModel
 import com.example.teamozy.feature.face.presentation.FaceCaptureScreen
+import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
+import com.example.teamozy.feature.face.data.EmbeddingExtractor
+import com.example.teamozy.feature.face.data.FaceStore
+import com.example.teamozy.feature.face.domain.FaceVerifier
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private const val VERIFY_THRESHOLD = 0.55f
+private enum class PunchAction { IN, OUT }
 
 @Composable
 fun HomePage(
@@ -21,175 +31,175 @@ fun HomePage(
 ) {
     val context = LocalContext.current
     val vm = rememberAttendanceViewModel(context)
-    val ui by vm.ui.collectAsState()
-
-    val snack = remember { SnackbarHostState() }
+    val ui = vm.ui.collectAsState().value
     val scope = rememberCoroutineScope()
+    val snack = remember { SnackbarHostState() }
 
-    var showFaceScreen by remember { mutableStateOf(false) }
-    var pendingAction by remember { mutableStateOf<String?>(null) } // "IN" | "OUT"
-    var isProcessing by remember { mutableStateOf(false) }
-    var isSubmitting by remember { mutableStateOf(false) }
+    // Load initial Check in/out status from backend
+    LaunchedEffect(Unit) { vm.refreshStatus() }
 
-    var showReasonField by remember { mutableStateOf(false) }
-    var reasonMessage by remember { mutableStateOf<String?>(null) }
+    var pendingAction by remember { mutableStateOf<PunchAction?>(null) }
+    var showRegistration by remember { mutableStateOf(false) }
+    var showVerify by remember { mutableStateOf(false) }
+    var verifyBusy by remember { mutableStateOf(false) }
+    var verifyError by remember { mutableStateOf<String?>(null) }
 
-    fun openFaceFor(action: String) {
-        pendingAction = action
-        showFaceScreen = true
-        isProcessing = false
-        isSubmitting = false
-        showReasonField = false
-        reasonMessage = null
-    }
-
-    suspend fun autoPunchAfterVerify() {
-        if (isProcessing) return
-        isProcessing = true
-        try {
-            when (pendingAction) {
-                "IN"  -> vm.checkIn(context)
-                "OUT" -> vm.checkOut(context)
-            }
-        } finally {
-            isProcessing = false
+    fun proceedPunch() {
+        when (pendingAction) {
+            PunchAction.IN  -> vm.checkIn(context)
+            PunchAction.OUT -> vm.checkOut(context)
+            null -> Unit
         }
+        // Never leak the flag to the next attempt
+        vm.setFaceVerifyEnabled(false)
+        pendingAction = null
     }
 
-    LaunchedEffect(
-        ui.showViolationSheet, ui.violationMessage,
-        ui.successMessage, ui.errorMessage, ui.isLoading
-    ) {
-        if (!showFaceScreen) return@LaunchedEffect
-
-        when {
-            // Violation → stay on screen and show reason field
-            ui.showViolationSheet -> {
-                showReasonField = true
-                reasonMessage = ui.violationMessage
-            }
-
-            // Success → close screen and refresh status
-            !ui.isLoading && ui.successMessage != null -> {
-                vm.refreshStatus()
-                showFaceScreen = false
-                pendingAction = null
-                showReasonField = false
-                reasonMessage = null
-                isSubmitting = false
-            }
-
-            // Error (like "Maximum one punch in allow.") → stay on face screen
-            !ui.isLoading && ui.errorMessage != null -> {
-                // do nothing here; FaceCaptureScreen will display the message
-            }
-        }
-    }
-
-    fun onFinalSubmit(reason: String?) {
-        if (!showReasonField) return
-        isSubmitting = true
-        scope.launch {
-            try {
-                vm.submitViolation(reason.orEmpty())
-                vm.refreshStatus()
-                showFaceScreen = false
-                pendingAction = null
-                showReasonField = false
-                reasonMessage = null
-            } finally {
-                isSubmitting = false
-            }
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Teamozy", fontWeight = FontWeight.SemiBold) },
-                actions = { TextButton(onClick = onLogout) { Text("Logout") } }
-            )
-        },
-        snackbarHost = { SnackbarHost(hostState = snack) }
-    ) { inner ->
+    Scaffold(snackbarHost = { SnackbarHost(snack) }) { inner ->
         Column(
             modifier = Modifier
                 .padding(inner)
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text("Welcome 👋", style = MaterialTheme.typography.titleLarge)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Can Check In now: ${ui.canCheckIn}")
-                    Button(onClick = { vm.refreshStatus() }, enabled = !ui.isRefreshing) {
-                        Text(if (ui.isRefreshing) "Refreshing…" else "Refresh")
+            Spacer(Modifier.height(24.dp))
+
+            val buttonText = if (ui.canCheckIn) "Check in" else "Check out"
+            Button(
+                onClick = {
+                    pendingAction = if (ui.canCheckIn) PunchAction.IN else PunchAction.OUT
+                    verifyError = null
+
+                    val store = FaceStore.getInstance(context)
+                    if (!store.hasEnrollment()) {
+                        // First-time: open Registration (no API call after this)
+                        showRegistration = true
+                    } else {
+                        // Already enrolled: open Verify → only on match we call API
+                        showVerify = true
                     }
-                }
-                ui.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                ui.successMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                },
+                enabled = !ui.isLoading,
+                modifier = Modifier
+                    .padding(horizontal = 24.dp)
+                    .fillMaxWidth()
+                    .height(54.dp)
+            ) {
+                Text(buttonText, style = MaterialTheme.typography.titleMedium)
             }
 
-            val busy = ui.isLoading || showFaceScreen || isProcessing || isSubmitting
-            Column(
+            Spacer(Modifier.height(10.dp))
+
+            // TEMP helper for testing re-enrollment
+            OutlinedButton(
+                onClick = {
+                    FaceStore.getInstance(context).clear()
+                    vm.setFaceVerifyEnabled(false)
+                    pendingAction = null
+                    showRegistration = false
+                    showVerify = false
+                    verifyBusy = false
+                    verifyError = null
+                    scope.launch { snack.showSnackbar("Face data cleared. Tap the main button to re-register.") }
+                },
                 modifier = Modifier
+                    .padding(horizontal = 24.dp)
                     .fillMaxWidth()
-                    .padding(bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (ui.canCheckIn) {
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !busy,
-                        onClick = { openFaceFor("IN") }
-                    ) { Text(if (busy) "Please wait…" else "Check In") }
-                } else {
-                    Button(
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !busy,
-                        onClick = { openFaceFor("OUT") }
-                    ) { Text(if (busy) "Please wait…" else "Check Out") }
-                }
+                    .height(44.dp)
+            ) { Text("Clear face data (temp)") }
+
+            if (!ui.errorMessage.isNullOrBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    ui.errorMessage!!,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
             }
         }
     }
 
-    if (showFaceScreen) {
-        var hasAutoPunched by remember { mutableStateOf(false) }
+    // === First-time registration (NO API CALL here) ===
+    if (showRegistration) {
+        FaceRegistrationScreen(
+            onDismiss = {
+                showRegistration = false
+                pendingAction = null
+            },
+            onEnrolled = {
+                // ✅ Only finish registration. DO NOT punch or set face_verify here.
+                showRegistration = false
+                pendingAction = null
+                vm.setFaceVerifyEnabled(false)
 
+                // Optional: confirm we really saved the vector
+                FaceStore.getInstance(context).loadEmbedding()?.let {
+                    android.util.Log.d("FaceEnroll", "embedding512=" + it.joinToString(prefix = "[", postfix = "]"))
+                }
+
+                // Tell user to tap again to proceed (then Verify → API)
+                scope.launch { snack.showSnackbar("Face registered. Tap the button again to continue.") }
+            }
+        )
+    }
+
+    // === Verification for enrolled users (API only on match) ===
+    if (showVerify) {
         FaceCaptureScreen(
             onDismiss = {
-                if (!isProcessing && !isSubmitting) {
-                    showFaceScreen = false
-                    pendingAction = null
-                    showReasonField = false
-                    reasonMessage = null
+                showVerify = false
+                verifyBusy = false
+                verifyError = null
+                pendingAction = null
+            },
+            onCaptured = { /* unused */ },
+            onBitmapCaptured = { bmp: Bitmap ->
+                if (verifyBusy) return@FaceCaptureScreen
+                verifyBusy = true
+                verifyError = null
+
+                val store = FaceStore.getInstance(context)
+                val stored = store.loadEmbedding()
+                if (stored == null) {
+                    verifyError = "Face data missing. Please enroll again."
+                    verifyBusy = false
+                    return@FaceCaptureScreen
+                }
+
+                // Use the top-level scope (rememberCoroutineScope)
+                scope.launch {
+                    try {
+                        val extractor = EmbeddingExtractor.getInstance(context)
+                        val live = withContext(Dispatchers.Default) { extractor.extract(bmp) }
+                        android.util.Log.d("FaceVerify", "live512=" + live.joinToString(prefix = "[", postfix = "]"))
+
+                        val matched = withContext(Dispatchers.Default) {
+                            FaceVerifier.isMatch(stored, live, VERIFY_THRESHOLD)
+                        }
+                        android.util.Log.d("FaceVerify", "matched=$matched thr=$VERIFY_THRESHOLD")
+
+                        if (matched) {
+                            // ✅ Only now we mark and perform API call
+                            vm.setFaceVerifyEnabled(true)
+                            showVerify = false
+                            verifyBusy = false
+                            proceedPunch()
+                        } else {
+                            verifyError = "Face didn’t match. Try again in good light."
+                            verifyBusy = false
+                        }
+                    } catch (t: Throwable) {
+                        verifyError = t.message ?: "Verification failed"
+                        verifyBusy = false
+                    }
                 }
             },
-            // your temporary flow (keep as-is)
-            onCaptured = { _ ->
-                if (hasAutoPunched) return@FaceCaptureScreen
-                hasAutoPunched = true
-                scope.launch { autoPunchAfterVerify() }
-            },
-            onBitmapCaptured = { _ ->
-                if (hasAutoPunched) return@FaceCaptureScreen
-                hasAutoPunched = true
-                scope.launch { autoPunchAfterVerify() }
-            },
-            showReasonField = showReasonField,
-            reasonMessage = reasonMessage,
-            isSubmitting = isSubmitting || ui.isSubmittingViolation,
-            onSubmit = { reason -> onFinalSubmit(reason) },
-            serverError = ui.errorMessage
+            showReasonField = false,
+            reasonMessage = null,
+            isSubmitting = verifyBusy,
+            onSubmit = { /* unused */ },
+            serverError = verifyError
         )
     }
 
