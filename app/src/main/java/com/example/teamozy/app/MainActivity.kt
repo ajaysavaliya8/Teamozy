@@ -1,10 +1,10 @@
 package com.example.teamozy.app
 
+import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
@@ -17,11 +17,11 @@ import com.example.teamozy.feature.auth.presentation.LoginScreen
 import com.example.teamozy.feature.home.presentation.HomePage
 
 import com.example.teamozy.feature.permissions.presentation.PermissionScreen
-import com.example.teamozy.splash.presentation.SplashScreen
+import com.example.teamozy.feature.splash.presentation.SplashScreen
 import com.example.teamozy.ui.theme.TeamozyTheme
 import kotlinx.coroutines.flow.collectLatest
 
-enum class AppScreen { SPLASH, PERMISSIONS, LOGIN, HOME }
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,14 +59,14 @@ private fun AppRoot() {
             val hasLocationPerm = PermissionHelper.areAllGranted(
                 context,
                 arrayOf(
-                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
             val gpsEnabled = PermissionHelper.isLocationEnabled(context)
             val cameraGranted = PermissionHelper.areAllGranted(
                 context,
-                arrayOf(android.Manifest.permission.CAMERA)
+                arrayOf(Manifest.permission.CAMERA)
             )
 
             val needsPermissions = !hasLocationPerm || !gpsEnabled || !cameraGranted
