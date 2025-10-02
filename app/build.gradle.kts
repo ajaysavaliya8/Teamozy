@@ -50,6 +50,9 @@ dependencies {
 // TensorFlow Lite
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    // GPU delegate + CompatibilityList  👈 fixes "GpuDelegate"/"CompatibilityList" unresolved
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
+
 
     // Network dependencies
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

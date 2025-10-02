@@ -6,9 +6,9 @@ import android.Manifest
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import android.graphics.Rect
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
 import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,18 +38,17 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.teamozy.feature.face.data.FaceStore
 import com.example.teamozy.feature.face.data.EmbeddingExtractor
-import com.example.teamozy.feature.face.util.FaceDetector
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.Executors
 
 /**
- * FaceRegistrationScreen
- * - Captures multiple frames (default 8), spaced by captureIntervalMs (default 650ms)
- * - Averages & L2-normalizes to a stable 512-D vector
- * - Saves locally (no API call), logs vector, and closes the camera cleanly
+ * FaceRegistrationScreen - Multi-frame enrollment with quality checks
+ *
+ * Captures multiple frames, averages embeddings, and saves to FaceStore.
+ * Uses the production-grade EmbeddingExtractor and FaceDetector.
  */
 @Composable
 fun FaceRegistrationScreen(
@@ -63,7 +62,7 @@ fun FaceRegistrationScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
 
-    var progress by remember { mutableStateOf(0) }
+    var progress by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("Position your face inside the circle") }
     var isSaving by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
@@ -78,23 +77,41 @@ fun FaceRegistrationScreen(
     }
     LaunchedEffect(Unit) { requestPermission.launch(Manifest.permission.CAMERA) }
 
-    // CameraX references (so we can unbind/stop properly)
+    // Camera references
     val cameraProviderRef = remember { mutableStateOf<ProcessCameraProvider?>(null) }
     val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
-    val previewRef  = remember { mutableStateOf<Preview?>(null) }
+    val previewRef = remember { mutableStateOf<Preview?>(null) }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            // Full teardown on screen dispose
+    // Cleanup function
+    fun cleanupCamera() {
+        Log.d("FaceReg", "Cleaning up camera...")
+        try {
             analysisRef.value?.clearAnalyzer()
+            analysisRef.value = null
             cameraProviderRef.value?.unbindAll()
+            cameraProviderRef.value = null
             previewRef.value?.setSurfaceProvider(null)
+            previewRef.value = null
+        } catch (e: Exception) {
+            Log.e("FaceReg", "Cleanup error", e)
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose { cleanupCamera() }
+    }
+
+    // Frame collection state
     val vectors = remember { mutableStateListOf<FloatArray>() }
-    val busy = remember { AtomicBoolean(false) }
+    var isProcessing by remember { mutableStateOf(false) }
     var lastCaptureAt by remember { mutableLongStateOf(0L) }
+
+    // 2-minute auto-close
+    LaunchedEffect(Unit) {
+        delay(120_000)
+        cleanupCamera()
+        onDismiss()
+    }
 
     Scaffold(
         topBar = {
@@ -102,10 +119,7 @@ fun FaceRegistrationScreen(
                 title = { Text("Face Registration") },
                 navigationIcon = {
                     IconButton(onClick = {
-                        // Teardown on dismiss
-                        analysisRef.value?.clearAnalyzer()
-                        cameraProviderRef.value?.unbindAll()
-                        previewRef.value?.setSurfaceProvider(null)
+                        cleanupCamera()
                         onDismiss()
                     }) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -146,118 +160,78 @@ fun FaceRegistrationScreen(
                     .align(Alignment.CenterHorizontally)
             ) {
                 if (hasPermission.value) {
-                    AndroidView(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clip(CircleShape),
-                        factory = { ctx ->
-                            val previewView = PreviewView(ctx).apply {
-                                setBackgroundColor(android.graphics.Color.BLACK)
-                                scaleType = PreviewView.ScaleType.FILL_CENTER
+                    CameraPreviewWithAnalysis(
+                        lifecycleOwner = lifecycleOwner,
+                        onCameraReady = { provider, preview, analysis ->
+                            cameraProviderRef.value = provider
+                            previewRef.value = preview
+                            analysisRef.value = analysis
+                        },
+                        onFrameProcessed = { bitmap, rotation ->
+                            // Rate limiting
+                            val now = System.currentTimeMillis()
+                            if (isProcessing || isSaving ||
+                                vectors.size >= targetFrames ||
+                                (now - lastCaptureAt) < captureIntervalMs) {
+                                bitmap.recycle()  // Don't process, but recycle immediately
+                                return@CameraPreviewWithAnalysis
                             }
 
-                            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                            cameraProviderFuture.addListener({
-                                val cameraProvider = cameraProviderFuture.get()
-                                cameraProviderRef.value = cameraProvider
-
-                                val preview = Preview.Builder()
-                                    .setTargetResolution(Size(720, 1280))
-                                    .build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
-                                previewRef.value = preview
-
-                                val analysis = ImageAnalysis.Builder()
-                                    .setTargetResolution(Size(720, 1280))
-                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                    .build()
-                                analysisRef.value = analysis
-
-                                val faceDetector = FaceDetector(ctx)
-                                val extractor = EmbeddingExtractor.getInstance(ctx)
-
-                                analysis.setAnalyzer(Dispatchers.Default.asExecutor()) { image ->
-                                    val now = System.currentTimeMillis()
-                                    if (isSaving || vectors.size >= targetFrames ||
-                                        (now - lastCaptureAt) < captureIntervalMs ||
-                                        !busy.compareAndSet(false, true)
-                                    ) {
-                                        image.close()
-                                        return@setAnalyzer
-                                    }
-
-                                    // Convert to Bitmap and fix orientation + mirror for front camera
-                                    val rotation = image.imageInfo.rotationDegrees
-                                    val bmp: Bitmap = image.toBitmap().rotateAndMirror(rotationDegrees = rotation, mirror = true)
-                                    image.close()
-
-                                    scope.launch {
-                                        try {
-                                            status = "Checking face…"
-                                            val detected = withContext(Dispatchers.Default) {
-                                                faceDetector.detectBestFace(bmp)
-                                            }
-                                            if (detected == null) {
-                                                status = "No face detected. Hold steady."
-                                                return@launch
-                                            }
-
-                                            val accept = isFaceCenteredEnough(
-                                                bmp.width, bmp.height, detected.boundingBox, minFacePctOfCircle
-                                            )
-                                            if (!accept) {
-                                                status = "Move closer and center your face."
-                                                return@launch
-                                            }
-
-                                            status = "Capturing… (${vectors.size + 1}/$targetFrames)"
-                                            val vec = withContext(Dispatchers.Default) { extractor.extract(bmp) }
-                                            vectors.add(vec)
-                                            lastCaptureAt = System.currentTimeMillis()
-                                            progress = vectors.size
-                                            status = "Good capture ${vectors.size} / $targetFrames"
-
-                                            if (vectors.size >= targetFrames) {
-                                                isSaving = true
-                                                status = "Finalizing…"
-                                                withContext(Dispatchers.Default) {
-                                                    val avg = averageAndNormalize(vectors.toList())
-                                                    // Log the final 512-D vector
-                                                    android.util.Log.d("FaceEnroll", "embedding512=" + avg.joinToString(prefix = "[", postfix = "]"))
-                                                    FaceStore.getInstance(ctx).saveEmbedding(avg)
-                                                }
-
-                                                // 🔻 stop camera cleanly BEFORE leaving
-                                                withContext(Dispatchers.Main) {
-                                                    analysisRef.value?.clearAnalyzer()
-                                                    cameraProviderRef.value?.unbindAll()
-                                                    previewRef.value?.setSurfaceProvider(null)
-                                                }
-
-                                                status = "Face enrolled"
-                                                onEnrolled()
-                                            }
-                                        } catch (t: Throwable) {
-                                            errorText = t.message ?: "Failed to process frame"
-                                        } finally {
-                                            busy.set(false)
-                                        }
-                                    }
-                                }
-
+                            isProcessing = true
+                            scope.launch {
                                 try {
-                                    cameraProvider.unbindAll()
-                                    cameraProvider.bindToLifecycle(
-                                        lifecycleOwner,
-                                        CameraSelector.DEFAULT_FRONT_CAMERA,
-                                        preview,
-                                        analysis
-                                    )
-                                } catch (t: Throwable) {
-                                    errorText = t.message
-                                }
-                            }, ContextCompat.getMainExecutor(ctx))
+                                    status = "Checking face quality..."
 
-                            previewView
+                                    // Use the production EmbeddingExtractor
+                                    val extractor = EmbeddingExtractor.getInstance(
+                                        context = context,
+                                        numThreads = 4,
+                                        enableGpu = false,
+                                        debugLogging = true
+                                    )
+
+                                    val embedding = withContext(Dispatchers.Default) {
+                                        extractor.extractNoRetry(bitmap, rotation)
+                                    }
+
+                                    vectors.add(embedding)
+                                    lastCaptureAt = System.currentTimeMillis()
+                                    progress = vectors.size
+                                    status = "Good capture ${vectors.size} / $targetFrames"
+                                    Log.d("FaceReg", "Frame ${vectors.size}/$targetFrames captured")
+
+                                    // Check if done
+                                    if (vectors.size >= targetFrames) {
+                                        isSaving = true
+                                        cleanupCamera()  // Stop camera ASAP
+                                        status = "Finalizing…"
+
+                                        withContext(Dispatchers.Default) {
+                                            val avg = averageAndNormalize(vectors.toList())
+                                            FaceStore.getInstance(context).saveEmbedding(avg)
+                                            Log.d("FaceReg", "Enrollment complete: ${avg.take(5)}")
+                                        }
+
+                                        status = "Face enrolled"
+                                        onEnrolled()
+                                    }
+
+                                } catch (e: IllegalStateException) {
+                                    // FaceDetectOutcome rejection messages
+                                    status = e.message ?: "Face quality check failed"
+                                    Log.w("FaceReg", "Face rejected: ${e.message}")
+                                } catch (e: Exception) {
+                                    errorText = e.message ?: "Failed to process frame"
+                                    Log.e("FaceReg", "Processing error", e)
+                                } finally {
+                                    bitmap.recycle()  // ALWAYS recycle after processing
+                                    isProcessing = false
+                                }
+                            }
+                        },
+                        onError = { error ->
+                            errorText = error
+                            Log.e("FaceReg", "Camera error: $error")
                         }
                     )
                 } else {
@@ -314,7 +288,87 @@ fun FaceRegistrationScreen(
     }
 }
 
-/** Progress ring with dotted ticks, fills as frames are captured */
+@Composable
+private fun CameraPreviewWithAnalysis(
+    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+    onCameraReady: (ProcessCameraProvider, Preview, ImageAnalysis) -> Unit,
+    onFrameProcessed: (Bitmap, Int) -> Unit,
+    onError: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val executor = remember { Executors.newSingleThreadExecutor() }
+
+    DisposableEffect(Unit) {
+        onDispose { executor.shutdown() }
+    }
+
+    AndroidView(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(CircleShape),
+        factory = { ctx ->
+            val previewView = PreviewView(ctx).apply {
+                setBackgroundColor(android.graphics.Color.BLACK)
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+            }
+
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+            cameraProviderFuture.addListener({
+                try {
+                    val cameraProvider = cameraProviderFuture.get()
+
+                    val preview = Preview.Builder()
+                        .setTargetResolution(Size(720, 1280))
+                        .build()
+                        .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+
+                    val analysis = ImageAnalysis.Builder()
+                        .setTargetResolution(Size(720, 1280))
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+
+                    analysis.setAnalyzer(executor) { imageProxy ->
+                        try {
+                            val rotation = imageProxy.imageInfo.rotationDegrees
+                            val bitmap = imageProxy.toBitmap()
+                                .rotateAndMirror(rotation, mirror = true)
+                                .copy(Bitmap.Config.ARGB_8888, false)  // Make a copy we can keep
+
+                            onFrameProcessed(bitmap, 0)  // Pass rotation=0 since we pre-rotated
+
+                            // Don't recycle here - let the processing coroutine handle it
+
+                        } catch (e: Exception) {
+                            Log.e("CameraPreview", "Frame error", e)
+                        } finally {
+                            imageProxy.close()
+                        }
+                    }
+
+                    try {
+                        cameraProvider.unbindAll()
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_FRONT_CAMERA,
+                            preview,
+                            analysis
+                        )
+                        onCameraReady(cameraProvider, preview, analysis)
+                        Log.d("CameraPreview", "Camera started successfully")
+                    } catch (e: Exception) {
+                        onError("Failed to start camera: ${e.message}")
+                    }
+
+                } catch (e: Exception) {
+                    onError("Camera init failed: ${e.message}")
+                }
+            }, ContextCompat.getMainExecutor(ctx))
+
+            previewView
+        }
+    )
+}
+
 @Composable
 private fun ProgressRingOverlay(
     modifier: Modifier,
@@ -352,7 +406,6 @@ private fun ProgressRingOverlay(
     }
 }
 
-/** Shown when CAMERA permission is not granted */
 @Composable
 private fun PermissionHint(onOpenSettings: () -> Unit) {
     Column(
@@ -370,19 +423,6 @@ private fun PermissionHint(onOpenSettings: () -> Unit) {
     }
 }
 
-/** Quick accept heuristic: face big enough & near center of the circle */
-private fun isFaceCenteredEnough(w: Int, h: Int, face: Rect, minPct: Float): Boolean {
-    val cx = w / 2f; val cy = h / 2f
-    val radius = minOf(cx, cy) * 0.95f
-    val fx = face.centerX().toFloat()
-    val fy = face.centerY().toFloat()
-    val dist = kotlin.math.hypot(fx - cx, fy - cy)
-    val sizeOk = (minOf(face.width(), face.height()).toFloat() / (radius * 2f)) >= minPct
-    val centerOk = dist <= radius * 0.35f
-    return sizeOk && centerOk
-}
-
-/** Average a set of 512-D vectors and L2-normalize */
 private fun averageAndNormalize(list: List<FloatArray>): FloatArray {
     require(list.isNotEmpty())
     val dim = list[0].size
@@ -390,13 +430,13 @@ private fun averageAndNormalize(list: List<FloatArray>): FloatArray {
     for (v in list) for (i in 0 until dim) out[i] += v[i]
     val n = list.size.toFloat()
     for (i in 0 until dim) out[i] /= n
-    var sum = 0.0; for (x in out) sum += (x * x)
+    var sum = 0.0
+    for (x in out) sum += (x * x)
     val denom = kotlin.math.sqrt(sum).toFloat().coerceAtLeast(1e-12f)
     for (i in out.indices) out[i] = out[i] / denom
     return out
 }
 
-/** Rotate by camera rotation and mirror horizontally for front camera */
 private fun Bitmap.rotateAndMirror(rotationDegrees: Int, mirror: Boolean = true): Bitmap {
     val m = Matrix()
     if (rotationDegrees != 0) m.postRotate(rotationDegrees.toFloat())

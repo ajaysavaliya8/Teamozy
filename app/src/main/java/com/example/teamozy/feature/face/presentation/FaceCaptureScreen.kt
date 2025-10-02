@@ -2,17 +2,12 @@
 
 package com.example.teamozy.feature.face.presentation
 
-import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Rect
-import android.graphics.YuvImage
+import android.graphics.Matrix
+import android.util.Log
 import android.util.Size
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.ImageProxy
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -29,13 +24,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color as JetColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
-import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
+import kotlinx.coroutines.launch
+import java.util.concurrent.Executors
+
+private const val TAG = "FaceCapture"
+private const val RETRY_INTERVAL_MS = 800L  // Try every 800ms
 
 @Composable
 fun FaceCaptureScreen(
@@ -51,36 +49,41 @@ fun FaceCaptureScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
-    var isCapturing by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    var statusText by remember { mutableStateOf("Position your face in the frame") }
+    var isProcessing by remember { mutableStateOf(false) }
+    var attemptCount by remember { mutableIntStateOf(0) }
 
-    // 2-minute auto-close
-    var secondsLeft by remember { mutableStateOf(120) }
-    LaunchedEffect(Unit) {
-        while (secondsLeft > 0) { delay(1000); secondsLeft-- }
-        onDismiss()
+    // Camera references for cleanup
+    val cameraProviderRef = remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
+
+    fun cleanupCamera() {
+        Log.d(TAG, "Cleaning up camera")
+        try {
+            analysisRef.value?.clearAnalyzer()
+            analysisRef.value = null
+            cameraProviderRef.value?.unbindAll()
+            cameraProviderRef.value = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Cleanup error", e)
+        }
     }
 
-    // Auto-capture once, 5s after camera ready
-    var autoTriggered by remember { mutableStateOf(false) }
-    LaunchedEffect(imageCapture) {
-        if (imageCapture != null && !autoTriggered) {
-            autoTriggered = true
-            delay(5000)
-            val cap = imageCapture
-            if (cap != null && !isCapturing) {
-                isCapturing = true
-                captureToBytes(context, cap) { bytes, err ->
-                    isCapturing = false
-                    if (err != null) errorText = err
-                    else if (bytes != null) {
-                        onCaptured(bytes)
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let(onBitmapCaptured)
-                    }
-                }
-            }
+    DisposableEffect(Unit) {
+        onDispose { cleanupCamera() }
+    }
+
+    // 60-second timeout with auto-close
+    var secondsLeft by remember { mutableIntStateOf(60) }
+    LaunchedEffect(Unit) {
+        while (secondsLeft > 0) {
+            delay(1000)
+            secondsLeft--
         }
+        Log.d(TAG, "Timeout reached - closing")
+        cleanupCamera()
+        onDismiss()
     }
 
     var reason by remember { mutableStateOf("") }
@@ -88,9 +91,12 @@ fun FaceCaptureScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Face Verify") },
+                title = { Text("Face Verification") },
                 navigationIcon = {
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = {
+                        cleanupCamera()
+                        onDismiss()
+                    }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -118,28 +124,95 @@ fun FaceCaptureScreen(
                         val previewView = PreviewView(ctx).apply {
                             scaleType = PreviewView.ScaleType.FILL_CENTER
                         }
+
+                        val executor = Executors.newSingleThreadExecutor()
+                        var lastAttemptTime = 0L
+
                         val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                         cameraProviderFuture.addListener({
-                            val cameraProvider = cameraProviderFuture.get()
-                            val preview = Preview.Builder()
-                                .setTargetResolution(Size(720, 1280))
-                                .build()
-                                .apply { setSurfaceProvider(previewView.surfaceProvider) }
-                            val capture = ImageCapture.Builder()
-                                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                                .build()
                             try {
-                                cameraProvider.unbindAll()
-                                cameraProvider.bindToLifecycle(
-                                    lifecycleOwner,
-                                    CameraSelector.DEFAULT_FRONT_CAMERA,
-                                    preview, capture
-                                )
-                                imageCapture = capture
-                            } catch (t: Throwable) {
-                                errorText = t.message ?: "Camera error"
+                                val cameraProvider = cameraProviderFuture.get()
+                                cameraProviderRef.value = cameraProvider
+
+                                val preview = Preview.Builder()
+                                    .setTargetResolution(Size(720, 1280))
+                                    .build()
+                                    .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+
+                                val analysis = ImageAnalysis.Builder()
+                                    .setTargetResolution(Size(720, 1280))
+                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                    .build()
+
+                                analysisRef.value = analysis
+
+                                analysis.setAnalyzer(executor) { imageProxy ->
+                                    try {
+                                        val now = System.currentTimeMillis()
+
+                                        // Skip if already processing
+                                        if (isProcessing) {
+                                            imageProxy.close()
+                                            return@setAnalyzer
+                                        }
+
+                                        // Rate limit: only attempt every RETRY_INTERVAL_MS
+                                        if (now - lastAttemptTime < RETRY_INTERVAL_MS) {
+                                            imageProxy.close()
+                                            return@setAnalyzer
+                                        }
+
+                                        lastAttemptTime = now
+                                        isProcessing = true
+                                        attemptCount++
+                                        statusText = "Verifying... (attempt $attemptCount)"
+
+                                        val rotation = imageProxy.imageInfo.rotationDegrees
+                                        val bitmap = imageProxy.toBitmap()
+                                            .rotateAndMirror(rotation, mirror = true)
+                                            .copy(Bitmap.Config.ARGB_8888, false)
+
+                                        imageProxy.close()
+
+                                        Log.d(TAG, "Attempt $attemptCount - capturing frame")
+
+                                        // Pass bitmap to HomePage for verification
+                                        onBitmapCaptured(bitmap)
+
+                                        // Reset processing flag after a short delay
+                                        // HomePage will handle success/failure and close screen if matched
+                                        kotlinx.coroutines.GlobalScope.launch {
+                                            kotlinx.coroutines.delay(500)
+                                            isProcessing = false
+                                        }
+
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Frame processing error", e)
+                                        errorText = e.message
+                                        isProcessing = false
+                                    } finally {
+                                        imageProxy.close()
+                                    }
+                                }
+
+                                try {
+                                    cameraProvider.unbindAll()
+                                    cameraProvider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        CameraSelector.DEFAULT_FRONT_CAMERA,
+                                        preview,
+                                        analysis
+                                    )
+                                    Log.d(TAG, "Camera started - continuous verification mode")
+                                } catch (e: Exception) {
+                                    errorText = e.message ?: "Failed to start camera"
+                                }
+
+                            } catch (e: Exception) {
+                                errorText = e.message ?: "Camera initialization failed"
                             }
                         }, ContextCompat.getMainExecutor(ctx))
+
                         previewView
                     }
                 )
@@ -165,28 +238,78 @@ fun FaceCaptureScreen(
                         .padding(10.dp),
                     shape = RoundedCornerShape(50)
                 ) {
-                    val label =
-                        when {
-                            isCapturing -> "Capturing…"
-                            !autoTriggered && imageCapture == null -> "Preparing camera…"
-                            !autoTriggered -> "Auto-capturing in 5s…"
-                            else -> "Processing…"
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(statusText)
+                        if (attemptCount > 0) {
+                            Text(
+                                "Attempts: $attemptCount",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
-                    Text(label, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    }
                 }
             }
 
-            LinearProgressIndicator(progress = { (120 - secondsLeft) / 120f }, modifier = Modifier.fillMaxWidth())
-            Text("Auto Close in %02d:%02d".format(secondsLeft / 60, secondsLeft % 60))
+            LinearProgressIndicator(
+                progress = { (60 - secondsLeft) / 60f },
+                modifier = Modifier.fillMaxWidth()
+            )
 
-            if (errorText != null) Text(errorText!!, color = MaterialTheme.colorScheme.error)
-
-            if (!serverError.isNullOrBlank()) {
-                Text(serverError, color = MaterialTheme.colorScheme.error)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Time remaining: %02d:%02d".format(secondsLeft / 60, secondsLeft % 60))
+                if (attemptCount > 0) {
+                    Text("Attempts: $attemptCount", style = MaterialTheme.typography.bodyMedium)
+                }
             }
 
+            if (errorText != null) {
+                Text(errorText!!, color = MaterialTheme.colorScheme.error)
+            }
 
-            // Reason + Submit + Cancel (only when redirect)
+            if (!serverError.isNullOrBlank()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Text(
+                        serverError!!,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
+            // Info card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        "Keep your face visible",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "• Look at the camera\n• Good lighting\n• Hold steady\n• Will retry automatically",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+
+            // Reason field (for violation flow - not used in normal verification)
             if (showReasonField) {
                 if (!reasonMessage.isNullOrBlank()) {
                     Text(reasonMessage!!, style = MaterialTheme.typography.labelLarge)
@@ -207,7 +330,10 @@ fun FaceCaptureScreen(
                     OutlinedButton(
                         modifier = Modifier.weight(1f),
                         enabled = !isSubmitting,
-                        onClick = onDismiss
+                        onClick = {
+                            cleanupCamera()
+                            onDismiss()
+                        }
                     ) { Text("Cancel") }
 
                     Button(
@@ -216,71 +342,14 @@ fun FaceCaptureScreen(
                         onClick = { onSubmit(reason.trim()) }
                     ) { Text(if (isSubmitting) "Submitting…" else "Submit") }
                 }
-            } else {
-                // No reason required: nothing to show; HomePage will auto-close on success.
             }
         }
     }
 }
 
-/* helpers */
-private fun captureToBytes(
-    context: Context,
-    capture: ImageCapture,
-    onResult: (bytes: ByteArray?, error: String?) -> Unit
-) {
-    val executor = ContextCompat.getMainExecutor(context)
-    capture.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
-        override fun onCaptureSuccess(image: ImageProxy) {
-            try {
-                val bmp = image.toBitmap()
-                val bytes = bmp.compressToJpeg()
-                onResult(bytes, null)
-            } catch (t: Throwable) {
-                onResult(null, t.message ?: "Capture failed")
-            } finally { image.close() }
-        }
-        override fun onError(exception: ImageCaptureException) {
-            onResult(null, exception.message ?: "Capture error")
-        }
-    })
-}
-
-private fun ImageProxy.toBitmap(): Bitmap {
-    val nv21 = yuv420ToNv21(this)
-    val yuv = YuvImage(nv21, ImageFormat.NV21, width, height, null)
-    val out = ByteArrayOutputStream()
-    yuv.compressToJpeg(Rect(0, 0, width, height), 90, out)
-    val jpegBytes = out.toByteArray()
-    return BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
-}
-
-private fun Bitmap.compressToJpeg(quality: Int = 90): ByteArray {
-    val bos = ByteArrayOutputStream()
-    compress(Bitmap.CompressFormat.JPEG, quality, bos)
-    return bos.toByteArray()
-}
-
-private fun yuv420ToNv21(image: ImageProxy): ByteArray {
-    val yBuffer: ByteBuffer = image.planes[0].buffer
-    val uBuffer: ByteBuffer = image.planes[1].buffer
-    val vBuffer: ByteBuffer = image.planes[2].buffer
-    val ySize = yBuffer.remaining()
-    val uSize = uBuffer.remaining()
-    val vSize = vBuffer.remaining()
-    val nv21 = ByteArray(ySize + uSize + vSize)
-    yBuffer.get(nv21, 0, ySize)
-    val chromaRowStride = image.planes[1].rowStride
-    val chromaPixelStride = image.planes[1].pixelStride
-    var offset = ySize
-    for (row in 0 until image.height / 2) {
-        var col = 0
-        while (col < image.width / 2) {
-            val vuIndex = row * chromaRowStride + col * chromaPixelStride
-            nv21[offset++] = vBuffer.get(vuIndex)
-            nv21[offset++] = uBuffer.get(vuIndex)
-            col++
-        }
-    }
-    return nv21
+private fun Bitmap.rotateAndMirror(rotationDegrees: Int, mirror: Boolean = true): Bitmap {
+    val m = Matrix()
+    if (rotationDegrees != 0) m.postRotate(rotationDegrees.toFloat())
+    if (mirror) m.postScale(-1f, 1f)
+    return Bitmap.createBitmap(this, 0, 0, width, height, m, true)
 }
