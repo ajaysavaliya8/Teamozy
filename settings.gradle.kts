@@ -21,4 +21,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "Teamozy"
 include(":app")
-include(":retrofit")
