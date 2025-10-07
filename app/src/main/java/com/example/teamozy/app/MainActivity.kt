@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
+import com.example.teamozy.core.network.NetworkModule
 import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.auth.presentation.LoginScreen
 import com.example.teamozy.feature.home.presentation.HomePage
@@ -33,6 +34,9 @@ private enum class AppScreen { SPLASH, LOGIN, HOME }
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize NetworkModule with context for auth interceptor
+        NetworkModule.initialize(applicationContext)
 
         // Start Koin here (since there's no Application class now)
         if (GlobalContext.getOrNull() == null) {

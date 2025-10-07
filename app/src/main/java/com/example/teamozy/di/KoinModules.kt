@@ -1,9 +1,9 @@
 package com.example.teamozy.di
 
 import com.example.teamozy.feature.auth.data.AuthRepository
-import com.example.teamozy.feature.auth.domain.usecase.LoginUseCase
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
 import com.example.teamozy.feature.attendance.presentation.AttendanceViewModel
+import com.example.teamozy.feature.auth.domain.usecase.LoginUseCase
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module

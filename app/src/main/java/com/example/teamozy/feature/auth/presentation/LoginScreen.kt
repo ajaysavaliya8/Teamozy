@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,6 +55,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.example.teamozy.feature.auth.data.AuthOutcome
 import com.example.teamozy.feature.auth.data.AuthRepository
@@ -71,12 +73,12 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     val useCase = remember(repo) { LoginUseCase(repo) }
     val scope = rememberCoroutineScope()
 
-    // --- Focus requesters for smart keyboard flow
+    // Focus requesters
     val phoneFR = remember { FocusRequester() }
     val otpFR = remember { FocusRequester() }
     val pwdFR = remember { FocusRequester() }
 
-    // --- State (saveable for rotations)
+    // State
     var phone by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var otp by rememberSaveable { mutableStateOf("") }
@@ -88,6 +90,17 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var canResend by rememberSaveable { mutableStateOf(true) }
     var secondsLeft by rememberSaveable { mutableStateOf(0) }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+
+    // Device registration dialog state
+    var showDeviceDialog by remember { mutableStateOf(false) }
+    var deviceDialogMessage by remember { mutableStateOf("") }
+    var deviceMobileNumber by remember { mutableStateOf(phone) }
+    var deviceOtp by remember { mutableStateOf("") }
+    var deviceOtpSent by remember { mutableStateOf(false) }
+    var deviceOtpLoading by remember { mutableStateOf(false) }
+    var deviceRequestLoading by remember { mutableStateOf(false) }
+    var deviceCanResend by remember { mutableStateOf(true) }
+    var deviceSecondsLeft by remember { mutableStateOf(0) }
 
     val snack = remember { SnackbarHostState() }
 
@@ -103,7 +116,38 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         }
     }
 
-    // Palette / motion
+    fun startDeviceResendTimer(seconds: Int = 30) {
+        deviceCanResend = false
+        deviceSecondsLeft = seconds
+        scope.launch {
+            while (deviceSecondsLeft > 0) {
+                delay(1000)
+                deviceSecondsLeft--
+            }
+            deviceCanResend = true
+        }
+    }
+
+    fun handleAuthOutcome(outcome: AuthOutcome, onSuccess: () -> Unit) {
+        when (outcome) {
+            is AuthOutcome.Success -> {
+                scope.launch {
+                    snack.showSnackbar(outcome.message)
+                }
+                onSuccess()
+            }
+            is AuthOutcome.Error -> {
+                error = outcome.message
+            }
+            is AuthOutcome.DeviceNotRegistered -> {
+                deviceDialogMessage = outcome.message
+                deviceMobileNumber = phone  // Use login phone number
+                showDeviceDialog = true
+            }
+        }
+    }
+
+    // Palette
     val primaryGrad = Brush.verticalGradient(listOf(Color(0xFF6366F1), Color(0xFF8B5CF6)))
     val headerGrad = Brush.verticalGradient(listOf(Color(0xFFEEF2FF), Color(0xFFF8FAFF)))
     val logoScale by animateFloatAsState(
@@ -121,7 +165,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                // Tap anywhere blank to dismiss keyboard
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = {
                         focus.clearFocus()
@@ -146,7 +189,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                             .background(primaryGrad)
                             .scale(logoScale),
                         contentAlignment = Alignment.Center
-                    ) { Text("T", fontSize = 44.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                    ) {
+                        Text("T", fontSize = 44.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                     Spacer(Modifier.height(14.dp))
                     Text("Welcome back", fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A))
                     Spacer(Modifier.height(6.dp))
@@ -181,8 +226,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                 val clean = it.filter(Char::isDigit).take(10)
                                 error = null
                                 phone = clean
-
-                                // 👉 Auto-hide keyboard when 10 digits reached
                                 if (clean.length == 10) {
                                     focus.clearFocus()
                                     keyboard?.hide()
@@ -197,12 +240,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                             ),
                             keyboardActions = KeyboardActions(
                                 onNext = {
-                                    // If user presses IME Next, jump to chosen auth input
-                                    if (useOtp) {
-                                        otpFR.requestFocus()
-                                    } else {
-                                        pwdFR.requestFocus()
-                                    }
+                                    if (useOtp) otpFR.requestFocus() else pwdFR.requestFocus()
                                     keyboard?.show()
                                 }
                             ),
@@ -222,7 +260,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         }
                     }
 
-                    // 1) INPUT (OTP or Password)
+                    // Input (OTP or Password)
                     AnimatedContent(
                         targetState = useOtp,
                         transitionSpec = {
@@ -234,14 +272,12 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         if (isOtp) {
                             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                 Text("Enter OTP", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF334155))
-
                                 OtpBoxes(
                                     value = otp,
                                     onValueChange = { input ->
                                         val clean = input.filter(Char::isDigit).take(4)
                                         error = null
                                         otp = clean
-                                        // 👉 When 4 digits entered, auto-hide keyboard
                                         if (clean.length == 4) {
                                             focus.clearFocus()
                                             keyboard?.hide()
@@ -250,7 +286,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     boxCount = 4,
                                     focusRequester = otpFR
                                 )
-
                                 if (otpSent) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
@@ -285,14 +320,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                                 keyboard?.hide()
                                                 scope.launch {
                                                     loading = true; error = null
-                                                    when (val out = useCase.loginWithPassword(phone, password)) {
-                                                        is AuthOutcome.Success -> {
-                                                            snack.showSnackbar(out.message)
-                                                            onLoginSuccess()
-                                                        }
-                                                        is AuthOutcome.Error -> error = out.message
-                                                    }
+                                                    val outcome = useCase.loginWithPassword(phone, password)
                                                     loading = false
+                                                    handleAuthOutcome(outcome) { onLoginSuccess() }
                                                 }
                                             }
                                         }
@@ -312,7 +342,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         }
                     }
 
-                    // 2) TOGGLE (between input and actions)
+                    // Toggle
                     SegmentedTwoWay(
                         left = "Login with OTP",
                         right = "Password",
@@ -321,7 +351,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                             useOtp = true
                             password = ""
                             error = null
-                            // 👉 Focus OTP field & open keyboard
                             otpFR.requestFocus()
                             keyboard?.show()
                         },
@@ -330,13 +359,12 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                             otp = ""
                             otpSent = false
                             error = null
-                            // 👉 Focus Password field & open keyboard
                             pwdFR.requestFocus()
                             keyboard?.show()
                         }
                     )
 
-                    // 3) ACTION BUTTONS (below the toggle)
+                    // Action Buttons
                     AnimatedContent(
                         targetState = useOtp,
                         transitionSpec = {
@@ -355,18 +383,14 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     onClick = {
                                         scope.launch {
                                             loading = true; error = null
-                                            when (val out = useCase.sendOtp(phone)) {
-                                                is AuthOutcome.Success -> {
-                                                    otpSent = true
-                                                    snack.showSnackbar(out.message)
-                                                    startResendTimer(30)
-                                                    // 👉 After sending OTP, focus OTP field & show keyboard
-                                                    otpFR.requestFocus()
-                                                    keyboard?.show()
-                                                }
-                                                is AuthOutcome.Error -> error = out.message
-                                            }
+                                            val outcome = useCase.sendOtp(phone)
                                             loading = false
+                                            handleAuthOutcome(outcome) {
+                                                otpSent = true
+                                                startResendTimer(30)
+                                                otpFR.requestFocus()
+                                                keyboard?.show()
+                                            }
                                         }
                                     },
                                     modifier = Modifier
@@ -388,14 +412,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                         keyboard?.hide()
                                         scope.launch {
                                             loading = true; error = null
-                                            when (val out = useCase.loginWithOtp(phone, otp)) {
-                                                is AuthOutcome.Success -> {
-                                                    snack.showSnackbar(out.message)
-                                                    onLoginSuccess()
-                                                }
-                                                is AuthOutcome.Error -> error = out.message
-                                            }
+                                            val outcome = useCase.loginWithOtp(phone, otp)
                                             loading = false
+                                            handleAuthOutcome(outcome) { onLoginSuccess() }
                                         }
                                     },
                                     modifier = Modifier
@@ -419,14 +438,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     keyboard?.hide()
                                     scope.launch {
                                         loading = true; error = null
-                                        when (val out = useCase.loginWithPassword(phone, password)) {
-                                            is AuthOutcome.Success -> {
-                                                snack.showSnackbar(out.message)
-                                                onLoginSuccess()
-                                            }
-                                            is AuthOutcome.Error -> error = out.message
-                                        }
+                                        val outcome = useCase.loginWithPassword(phone, password)
                                         loading = false
+                                        handleAuthOutcome(outcome) { onLoginSuccess() }
                                     }
                                 },
                                 modifier = Modifier
@@ -479,9 +493,317 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             )
         }
     }
+
+    // Device Registration Dialog
+    if (showDeviceDialog) {
+        DeviceRegistrationDialog(
+            message = deviceDialogMessage,
+            mobileNumber = deviceMobileNumber,
+            onMobileNumberChange = { deviceMobileNumber = it },
+            otp = deviceOtp,
+            onOtpChange = { deviceOtp = it },
+            otpSent = deviceOtpSent,
+            otpLoading = deviceOtpLoading,
+            requestLoading = deviceRequestLoading,
+            canResend = deviceCanResend,
+            secondsLeft = deviceSecondsLeft,
+            onDismiss = {
+                showDeviceDialog = false
+                deviceMobileNumber = phone
+                deviceOtp = ""
+                deviceOtpSent = false
+                deviceOtpLoading = false
+                deviceRequestLoading = false
+                deviceCanResend = true
+                deviceSecondsLeft = 0
+            },
+            onSendOtp = {
+                scope.launch {
+                    deviceOtpLoading = true
+                    when (val outcome = repo.sendChangeDeviceOtp(deviceMobileNumber)) {
+                        is AuthOutcome.Success -> {
+                            deviceOtpLoading = false
+                            deviceOtpSent = true
+                            snack.showSnackbar(outcome.message)
+                            startDeviceResendTimer(30)
+                        }
+                        is AuthOutcome.Error -> {
+                            deviceOtpLoading = false
+                            snack.showSnackbar(outcome.message)
+                        }
+                        else -> {
+                            deviceOtpLoading = false
+                        }
+                    }
+                }
+            },
+            onRequestDevice = {
+                scope.launch {
+                    deviceRequestLoading = true
+                    when (val outcome = repo.requestDeviceChange(deviceMobileNumber, deviceOtp)) {
+                        is AuthOutcome.Success -> {
+                            deviceRequestLoading = false
+                            showDeviceDialog = false
+                            deviceMobileNumber = phone
+                            deviceOtp = ""
+                            deviceOtpSent = false
+                            snack.showSnackbar(outcome.message)
+                        }
+                        is AuthOutcome.Error -> {
+                            deviceRequestLoading = false
+                            snack.showSnackbar(outcome.message)
+                        }
+                        else -> {
+                            deviceRequestLoading = false
+                        }
+                    }
+                }
+            }
+        )
+    }
 }
 
-/* ---------------- UI bits ---------------- */
+@Composable
+private fun DeviceRegistrationDialog(
+    message: String,
+    mobileNumber: String,
+    onMobileNumberChange: (String) -> Unit,
+    otp: String,
+    onOtpChange: (String) -> Unit,
+    otpSent: Boolean,
+    otpLoading: Boolean,
+    requestLoading: Boolean,
+    canResend: Boolean,
+    secondsLeft: Int,
+    onDismiss: () -> Unit,
+    onSendOtp: () -> Unit,
+    onRequestDevice: () -> Unit
+) {
+    Dialog(onDismissRequest = { if (!otpLoading && !requestLoading) onDismiss() }) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    tint = Color(0xFFF59E0B)
+                )
+
+                Text(
+                    "Device Not Registered",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF111827)
+                )
+
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF6B7280),
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    "Verify your identity to register this device",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF9CA3AF),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Divider(color = Color(0xFFE5E7EB))
+
+                // Display Mobile Number (read-only)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFF8FAFC)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Phone,
+                                contentDescription = null,
+                                tint = Color(0xFF6366F1),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column {
+                                Text(
+                                    "Mobile Number",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF64748B)
+                                )
+                                Text(
+                                    "+91 $mobileNumber",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF111827)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Send OTP Button (before OTP sent)
+                if (!otpSent) {
+                    Button(
+                        onClick = onSendOtp,
+                        enabled = mobileNumber.length == 10 && !otpLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                    ) {
+                        if (otpLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Sending OTP...")
+                        } else {
+                            Text("Send OTP", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                // OTP Input (after OTP sent)
+                AnimatedVisibility(visible = otpSent) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Enter OTP",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF334155)
+                                )
+                                if (!canResend && secondsLeft > 0) {
+                                    Text(
+                                        "Resend in ${secondsLeft}s",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF6366F1)
+                                    )
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = otp,
+                                onValueChange = {
+                                    val clean = it.filter(Char::isDigit).take(4)
+                                    onOtpChange(clean)
+                                },
+                                placeholder = { Text("Enter 4-digit OTP", color = Color(0xFF94A3B8)) },
+                                leadingIcon = { Icon(Icons.Filled.Lock, null, tint = Color(0xFF6366F1)) },
+                                trailingIcon = {
+                                    if (canResend) {
+                                        TextButton(onClick = onSendOtp, enabled = !otpLoading) {
+                                            Text(
+                                                "RESEND",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = Color(0xFFE5E7EB),
+                                    focusedBorderColor = Color(0xFF6366F1),
+                                    unfocusedContainerColor = Color(0xFFF8FAFC),
+                                    focusedContainerColor = Color.White
+                                )
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onDismiss,
+                                enabled = !requestLoading,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Cancel")
+                            }
+
+                            Button(
+                                onClick = onRequestDevice,
+                                enabled = otp.length == 4 && !requestLoading,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                            ) {
+                                if (requestLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color.White
+                                    )
+                                } else {
+                                    Text("Request", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Cancel button (before OTP sent)
+                if (!otpSent) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        enabled = !otpLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* ---------------- UI Components ---------------- */
 
 @Composable
 private fun SegmentedTwoWay(
@@ -528,7 +850,6 @@ private fun RowScope.SegItem(text: String, selected: Boolean, onClick: () -> Uni
     }
 }
 
-/** Single hidden input + pretty OTP boxes */
 @Composable
 private fun OtpBoxes(
     value: String,
@@ -546,7 +867,6 @@ private fun OtpBoxes(
             .height(IntrinsicSize.Min),
         contentAlignment = Alignment.Center
     ) {
-        // Visual boxes
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             repeat(boxCount) { i ->
                 val ch = internal.getOrNull(i)?.toString() ?: ""
@@ -571,7 +891,6 @@ private fun OtpBoxes(
             }
         }
 
-        // Invisible field capturing input (on top)
         BasicTextField(
             value = internal,
             onValueChange = {

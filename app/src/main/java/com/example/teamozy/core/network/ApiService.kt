@@ -2,11 +2,10 @@ package com.example.teamozy.core.network
 
 import retrofit2.Response
 import retrofit2.http.*
-import okhttp3.MultipartBody
-import retrofit2.http.Multipart
-import retrofit2.http.POST
-import retrofit2.http.Part
-import retrofit2.http.Query
+
+data class DeviceChangeResponse(
+    val detail: String
+)
 
 interface ApiService {
 
@@ -23,7 +22,25 @@ interface ApiService {
         @Query("device_id") deviceId: String,
         @Query("password") password: String? = null,
         @Query("otp") otp: Int? = null
-    ): Response<BasicResponse> // includes token on success
+    ): Response<BasicResponse>
+
+    @FormUrlEncoded
+    @POST("send-change-device-otp")
+    suspend fun sendChangeDeviceOtp(
+        @Field("mobile_number") mobileNumber: Long
+    ): Response<BasicResponse>
+
+    @FormUrlEncoded
+    @POST("request-change-device")
+    suspend fun requestChangeDevice(
+        @Query("otp") otp: String,
+        @Query("mobile_number") mobileNumber: Long,
+        @Query("new_device_id") newDeviceId: String,
+        @Field("new_device_os") newDeviceOs: String,
+        @Field("new_device_model") newDeviceModel: String,
+        @Field("new_device_company_name") newDeviceCompanyName: String,
+        @Field("reason") reason: String? = null
+    ): Response<DeviceChangeResponse>
 
     // ---------- ATTENDANCE (token passed as query) ----------
     @GET("check-status")
@@ -67,6 +84,4 @@ interface ApiService {
         @Field("geo_reason") geoReason: String? = null,
         @Query("token") token: String
     ): Response<BasicResponse>
-
-
 }

@@ -288,7 +288,7 @@ class AttendanceRepository(context: Context) {
 
     /** Human friendly network errors (DNS/timeout/etc.) */
     private fun friendlyNetError(e: Throwable): String = when (e) {
-        is java.net.UnknownHostException -> "Can’t reach server. Check your internet or server URL."
+        is java.net.UnknownHostException -> "Can't reach server. Check your internet or server URL."
         is java.net.SocketTimeoutException -> "Server timed out. Please try again."
         else -> e.message ?: "Network error, please try again."
     }

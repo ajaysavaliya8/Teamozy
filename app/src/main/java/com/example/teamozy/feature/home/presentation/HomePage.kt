@@ -35,7 +35,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val VERIFY_THRESHOLD = 0.55f
 private const val TAG = "HomePage"
 private enum class PunchAction { IN, OUT }
 
@@ -50,15 +49,17 @@ fun HomePage(
     val snack = remember { SnackbarHostState() }
     val prefs = remember { PreferencesManager.getInstance(context) }
 
-    // Load initial status
+    // Get dynamic threshold from server (saved during login)
+    val verifyThreshold = remember { prefs.faceAccuracyThreshold }
+
     LaunchedEffect(Unit) {
         vm.refreshStatus()
 
-        // Debug: Log stored embedding info (first 5 values only)
         val store = FaceStore.getInstance(context)
         if (store.hasEnrollment()) {
             val embedding = store.loadEmbedding()
             Log.d(TAG, "Stored embedding loaded: size=${embedding?.size}, first5=${embedding?.take(5)}")
+            Log.d(TAG, "Face accuracy threshold: $verifyThreshold (from server)")
         } else {
             Log.d(TAG, "No face enrollment found")
         }
@@ -192,7 +193,6 @@ fun HomePage(
 
                 Button(
                     onClick = {
-                        // Determine action based on current state
                         pendingAction = if (ui.canCheckIn) PunchAction.IN else PunchAction.OUT
                         verifyError = null
 
@@ -218,7 +218,7 @@ fun HomePage(
                     shape = RoundedCornerShape(28.dp)
                 ) {
                     Icon(
-                        if (ui.canCheckIn) Icons.Filled.CheckCircle else Icons.Filled.ExitToApp,
+                        if (ui.canCheckIn) Icons.Filled.CheckCircle else Icons.Filled.Close,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp)
                     )
@@ -230,7 +230,6 @@ fun HomePage(
                     )
                 }
 
-                // Status indicator
                 Spacer(Modifier.height(12.dp))
                 Text(
                     text = if (ui.isLoading) "Processing..."
@@ -239,10 +238,16 @@ fun HomePage(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                // Show current threshold
+                Text(
+                    text = "Face threshold: ${String.format("%.2f", verifyThreshold)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             Spacer(Modifier.weight(1f))
-
             Spacer(Modifier.height(24.dp))
 
             // Error/Success Messages
@@ -298,7 +303,8 @@ fun HomePage(
                     scope.launch {
                         snack.showSnackbar("Face data cleared. Tap button to re-enroll.")
                     }
-                    Log.d(TAG, "Face data cleared")
+                    Log.d(TAG, "🗑️ Face data cleared")
+                    Log.d(TAG, "📊 Current threshold (for next enrollment): $verifyThreshold")
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -317,7 +323,7 @@ fun HomePage(
             onDismiss = {
                 showRegistration = false
                 pendingAction = null
-                Log.d(TAG, "Registration dismissed")
+                Log.d(TAG, "❌ Registration dismissed")
             },
             onEnrolled = {
                 showRegistration = false
@@ -326,7 +332,8 @@ fun HomePage(
                 scope.launch {
                     snack.showSnackbar("Face registered! Tap the button again to verify and punch.")
                 }
-                Log.d(TAG, "Registration completed successfully")
+                Log.d(TAG, "✅ Registration completed successfully")
+                Log.d(TAG, "📊 Enrolled face will use threshold: $verifyThreshold")
             }
         )
     }
@@ -339,7 +346,7 @@ fun HomePage(
                 verifyBusy = false
                 verifyError = null
                 pendingAction = null
-                Log.d(TAG, "Verification dismissed")
+                Log.d(TAG, "❌ Verification dismissed")
             },
             onCaptured = { /* unused */ },
             onBitmapCaptured = { bmp: Bitmap ->
@@ -357,12 +364,16 @@ fun HomePage(
                     verifyError = "Face data missing. Please enroll again."
                     verifyBusy = false
                     bmp.recycle()
-                    Log.e(TAG, "Stored embedding is null")
+                    Log.e(TAG, "❌ Stored embedding is null - enrollment data missing!")
                     return@FaceCaptureScreen
                 }
 
+                Log.d(TAG, "✅ Stored embedding loaded successfully (size: ${stored.size})")
+
                 scope.launch {
                     try {
+                        Log.d(TAG, "🔍 Starting face verification with threshold: $verifyThreshold")
+
                         val extractor = EmbeddingExtractor.getInstance(
                             context = context,
                             numThreads = 4,
@@ -377,9 +388,10 @@ fun HomePage(
                             FaceVerifier.cosineSim(stored, live)
                         }
 
-                        val matched = similarity >= VERIFY_THRESHOLD
+                        // Use dynamic threshold from server
+                        val matched = similarity >= verifyThreshold
 
-                        Log.d(TAG, "Attempt result: similarity=${String.format("%.2f", similarity)}, matched=$matched")
+                        Log.d(TAG, "📊 Verification result: similarity=${String.format("%.3f", similarity)}, threshold=${String.format("%.3f", verifyThreshold)}, matched=$matched")
 
                         if (matched) {
                             // SUCCESS - Close verification screen and proceed
@@ -387,16 +399,15 @@ fun HomePage(
                             showVerify = false
                             verifyBusy = false
 
-                            Log.d(TAG, "Face matched! Proceeding with punch...")
+                            Log.d(TAG, "✅ Face matched! Proceeding with punch...")
                             proceedPunch()
                         } else {
                             // NOT MATCHED - Update error but keep trying
-                            verifyError = "Similarity: ${String.format("%.2f", similarity)} (need ≥ $VERIFY_THRESHOLD). Keep trying..."
+                            verifyError = "Similarity: ${String.format("%.2f", similarity)} (need ≥ ${String.format("%.2f", verifyThreshold)}). Keep trying..."
                             verifyBusy = false
-                            Log.d(TAG, "No match yet, will retry automatically")
+                            Log.d(TAG, "❌ No match yet, will retry automatically")
                         }
                     } catch (e: IllegalStateException) {
-                        // Face quality issue - update error but keep trying
                         verifyError = e.message ?: "Face quality issue - keep trying..."
                         verifyBusy = false
                         Log.d(TAG, "Quality issue: ${e.message}")

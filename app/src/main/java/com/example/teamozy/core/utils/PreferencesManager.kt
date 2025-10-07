@@ -24,6 +24,14 @@ class PreferencesManager private constructor(context: Context) {
         get() = prefs.getString(KEY_USER_NAME, null)
         set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
 
+    /**
+     * Face verification accuracy threshold from server.
+     * Default: 0.55f (fallback if server doesn't provide it)
+     */
+    var faceAccuracyThreshold: Float
+        get() = prefs.getFloat(KEY_FACE_ACCURACY, 0.55f)
+        set(value) = prefs.edit().putFloat(KEY_FACE_ACCURACY, value.coerceIn(0.3f, 0.95f)).apply()
+
     fun isLoggedIn(): Boolean = !authToken.isNullOrBlank()
 
     fun clearAll() {
@@ -36,6 +44,7 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
+        private const val KEY_FACE_ACCURACY = "face_accuracy_threshold"
 
         @Volatile private var INSTANCE: PreferencesManager? = null
 
