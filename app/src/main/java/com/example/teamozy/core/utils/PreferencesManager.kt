@@ -28,6 +28,11 @@ class PreferencesManager private constructor(context: Context) {
         get() = prefs.getFloat(KEY_FACE_THRESHOLD, 0.57f)
         set(value) = prefs.edit().putFloat(KEY_FACE_THRESHOLD, value).apply()
 
+    // Alias for backward compatibility
+    var faceAccuracyThreshold: Float
+        get() = faceThreshold
+        set(value) { faceThreshold = value }
+
     var faceVector: String?
         get() = prefs.getString(KEY_FACE_VECTOR, null)
         set(value) = prefs.edit().putString(KEY_FACE_VECTOR, value).apply()

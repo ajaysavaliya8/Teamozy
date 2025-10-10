@@ -50,7 +50,7 @@ fun HomePage(
     val prefs = remember { PreferencesManager.getInstance(context) }
 
     // Get dynamic threshold from server (saved during login)
-    val verifyThreshold = remember { prefs.faceAccuracyThreshold }
+    val verifyThreshold = remember { prefs.faceThreshold }
 
     LaunchedEffect(Unit) {
         vm.refreshStatus()
