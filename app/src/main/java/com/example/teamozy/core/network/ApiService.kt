@@ -7,6 +7,14 @@ data class DeviceChangeResponse(
     val detail: String
 )
 
+// Add verify token endpoint
+data class VerifyTokenResponse(
+    val status: String,
+    val message: String,
+    val face_threshold: Float? = null,
+    val face_vector: String? = null
+)
+
 interface ApiService {
 
     // ---------- AUTH ----------
@@ -21,8 +29,13 @@ interface ApiService {
         @Query("mobile_number") mobileNumber: Long,
         @Query("device_id") deviceId: String,
         @Query("password") password: String? = null,
-        @Query("otp") otp: Int? = null
+        @Query("otp") otp: String? = null
     ): Response<BasicResponse>
+
+    @GET("verify-token")
+    suspend fun verifyToken(
+        @Query("token") token: String
+    ): Response<VerifyTokenResponse>
 
     @FormUrlEncoded
     @POST("send-change-device-otp")

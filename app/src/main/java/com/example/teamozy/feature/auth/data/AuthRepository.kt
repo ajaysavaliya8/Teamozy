@@ -71,7 +71,7 @@ class AuthRepository(private val context: Context) {
                 mobileNumber = phone.toLong(),
                 deviceId = androidId(),
                 password = null,
-                otp = otp.toIntOrNull()
+                otp = otp
             )
             Log.d("NET", "verifyLogin(otp) -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
 
@@ -106,6 +106,42 @@ class AuthRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e("NET", "sendChangeDeviceOtp error", e)
             AuthOutcome.Error(e.message ?: "Failed to send OTP")
+        }
+    }
+
+    suspend fun verifyToken(): AuthOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val token = pm.authToken.orEmpty()
+            if (token.isBlank()) {
+                return@withContext AuthOutcome.Error("No token found")
+            }
+
+            val res = api.verifyToken(token)
+            Log.d("NET", "verifyToken -> code=${res.code()}")
+
+            when {
+                res.isSuccessful -> {
+                    val body = res.body()
+
+                    // Update face threshold and vector if present
+                    body?.face_threshold?.let { pm.faceThreshold = it }
+                    body?.face_vector?.let { pm.faceVector = it }
+
+                    Log.d("AUTH", "Token verified - face_threshold: ${body?.face_threshold}, has_vector: ${body?.face_vector != null}")
+
+                    AuthOutcome.Success(body?.message ?: "Token is valid")
+                }
+                res.code() == 401 -> {
+                    AuthOutcome.Error("Token expired or invalid")
+                }
+                else -> {
+                    val msg = extractMessage(res)
+                    AuthOutcome.Error(msg.ifBlank { "Token verification failed" })
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("NET", "verifyToken error", e)
+            AuthOutcome.Error(e.message ?: "Failed to verify token")
         }
     }
 
@@ -153,9 +189,17 @@ class AuthRepository(private val context: Context) {
                 if (requireToken) {
                     val token = body.token.orEmpty()
                     if (token.isBlank()) return AuthOutcome.Error("Missing token")
-                    // persist
+
+                    // Persist token and device ID
                     pm.authToken = token
                     pm.deviceId = androidId()
+
+                    // Save face threshold and vector
+                    body.face_threshold?.let { pm.faceThreshold = it }
+                    body.face_vector?.let { pm.faceVector = it }
+
+                    Log.d("AUTH", "Login successful - face_threshold: ${body.face_threshold}, has_vector: ${body.face_vector != null}")
+
                     return AuthOutcome.Success(body.message ?: "Login successful.", token)
                 }
                 return AuthOutcome.Success(body?.message ?: "OK")
