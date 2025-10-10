@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.teamozy.core.network.FaceRegistrationRequest
+import com.example.teamozy.core.network.NetworkModule
 import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
 import com.example.teamozy.feature.attendance.presentation.AttendanceViewModel
@@ -34,6 +36,7 @@ import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 private const val TAG = "HomePage"
 private enum class PunchAction { IN, OUT }
@@ -70,6 +73,7 @@ fun HomePage(
     var showVerify by remember { mutableStateOf(false) }
     var verifyBusy by remember { mutableStateOf(false) }
     var verifyError by remember { mutableStateOf<String?>(null) }
+    var registrationBusy by remember { mutableStateOf(false) }
 
     fun proceedPunch() {
         when (pendingAction) {
@@ -207,7 +211,7 @@ fun HomePage(
                             showVerify = true
                         }
                     },
-                    enabled = !ui.isLoading && !ui.isRefreshing,
+                    enabled = !ui.isLoading && !ui.isRefreshing && !registrationBusy,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -217,22 +221,37 @@ fun HomePage(
                     ),
                     shape = RoundedCornerShape(28.dp)
                 ) {
-                    Icon(
-                        if (ui.canCheckIn) Icons.Filled.CheckCircle else Icons.Filled.Close,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = buttonText,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (registrationBusy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "Registering face...",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        Icon(
+                            if (ui.canCheckIn) Icons.Filled.CheckCircle else Icons.Filled.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = buttonText,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = if (ui.isLoading) "Processing..."
+                    text = if (registrationBusy) "Registering face with server..."
+                    else if (ui.isLoading) "Processing..."
                     else if (ui.isRefreshing) "Refreshing status..."
                     else "Ready",
                     style = MaterialTheme.typography.bodyMedium,
@@ -288,31 +307,6 @@ fun HomePage(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-
-            // Debug: Clear face data button
-            OutlinedButton(
-                onClick = {
-                    FaceStore.getInstance(context).clear()
-                    vm.setFaceVerifyEnabled(false)
-                    pendingAction = null
-                    showRegistration = false
-                    showVerify = false
-                    verifyBusy = false
-                    verifyError = null
-                    scope.launch {
-                        snack.showSnackbar("Face data cleared. Tap button to re-enroll.")
-                    }
-                    Log.d(TAG, "🗑️ Face data cleared")
-                    Log.d(TAG, "📊 Current threshold (for next enrollment): $verifyThreshold")
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-            ) {
-                Text("Clear Face Data")
-            }
-
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -325,15 +319,97 @@ fun HomePage(
                 pendingAction = null
                 Log.d(TAG, "❌ Registration dismissed")
             },
-            onEnrolled = {
-                showRegistration = false
-                pendingAction = null
-                vm.setFaceVerifyEnabled(false)
+            onEnrolled = { embedding ->
+                // Don't close screen yet - send to API first
+                registrationBusy = true
+
                 scope.launch {
-                    snack.showSnackbar("Face registered! Tap the button again to verify and punch.")
+                    try {
+                        Log.d(TAG, "📤 Sending face vector to API...")
+
+                        val api = NetworkModule.apiService
+
+                        val request = FaceRegistrationRequest(
+                            face_recognition_data = embedding.toList(),
+                            priority = "normal",
+                            reason_for_change = "Initial face registration"
+                        )
+
+                        val response = withContext(Dispatchers.IO) {
+                            api.registerFaceRecognition(request)
+                        }
+
+                        Log.d(TAG, "📥 API Response: code=${response.code()}")
+
+                        registrationBusy = false
+                        showRegistration = false
+                        pendingAction = null
+
+                        when {
+                            response.isSuccessful && response.code() == 200 -> {
+                                // Success - now save to local storage
+                                withContext(Dispatchers.IO) {
+                                    FaceStore.getInstance(context).saveEmbedding(embedding)
+                                }
+
+                                val message = response.body()?.message
+                                    ?: "Face registered successfully! Your face recognition is now active."
+
+                                Log.d(TAG, "✅ Face registered successfully on server and saved locally")
+
+                                vm.setFaceVerifyEnabled(false)
+                                snack.showSnackbar(message)
+                            }
+
+                            response.code() == 403 -> {
+                                // Permission denied
+                                val errorBody = response.errorBody()?.string()
+                                val message = extractErrorMessage(errorBody)
+                                    ?: "Face registration not enabled for your account. Contact HR/Admin."
+
+                                Log.e(TAG, "❌ Registration forbidden: $message")
+                                snack.showSnackbar(message)
+                            }
+
+                            response.code() == 409 -> {
+                                // Pending request exists
+                                val errorBody = response.errorBody()?.string()
+                                val message = extractErrorMessage(errorBody)
+                                    ?: "You have a pending face recognition request."
+
+                                Log.w(TAG, "⚠️ Pending request: $message")
+                                snack.showSnackbar(message)
+                            }
+
+                            response.code() == 404 -> {
+                                // Employee not found
+                                val errorBody = response.errorBody()?.string()
+                                val message = extractErrorMessage(errorBody)
+                                    ?: "Employee not found."
+
+                                Log.e(TAG, "❌ Employee not found: $message")
+                                snack.showSnackbar(message)
+                            }
+
+                            else -> {
+                                // Other errors
+                                val errorBody = response.errorBody()?.string()
+                                val message = extractErrorMessage(errorBody)
+                                    ?: "Failed to register face. Please try again."
+
+                                Log.e(TAG, "❌ Registration failed: code=${response.code()}, message=$message")
+                                snack.showSnackbar(message)
+                            }
+                        }
+
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Error registering face", e)
+                        registrationBusy = false
+                        showRegistration = false
+                        pendingAction = null
+                        snack.showSnackbar("Network error. Please check your connection and try again.")
+                    }
                 }
-                Log.d(TAG, "✅ Registration completed successfully")
-                Log.d(TAG, "📊 Enrolled face will use threshold: $verifyThreshold")
             }
         )
     }
@@ -440,6 +516,19 @@ fun HomePage(
             snack.showSnackbar(it)
             Log.d(TAG, "Success: $it")
         }
+    }
+}
+
+// Helper function to extract error message from response
+private fun extractErrorMessage(errorBody: String?): String? {
+    return try {
+        if (errorBody.isNullOrBlank()) return null
+        val json = JSONObject(errorBody)
+        json.optString("message").ifBlank {
+            json.optString("detail").ifBlank { null }
+        }
+    } catch (e: Exception) {
+        null
     }
 }
 

@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.example.teamozy.feature.face.data.FaceStore
 import com.example.teamozy.feature.face.data.EmbeddingExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -47,13 +46,13 @@ import java.util.concurrent.Executors
 /**
  * FaceRegistrationScreen - Multi-frame enrollment with quality checks
  *
- * Captures multiple frames, averages embeddings, and saves to FaceStore.
+ * Captures multiple frames, averages embeddings, and passes to parent for API submission.
  * Uses the production-grade EmbeddingExtractor and FaceDetector.
  */
 @Composable
 fun FaceRegistrationScreen(
     onDismiss: () -> Unit,
-    onEnrolled: () -> Unit,
+    onEnrolled: (FloatArray) -> Unit,
     targetFrames: Int = 8,
     minFacePctOfCircle: Float = 0.28f,
     captureIntervalMs: Long = 650L
@@ -206,14 +205,14 @@ fun FaceRegistrationScreen(
                                         cleanupCamera()  // Stop camera ASAP
                                         status = "Finalizing…"
 
-                                        withContext(Dispatchers.Default) {
-                                            val avg = averageAndNormalize(vectors.toList())
-                                            FaceStore.getInstance(context).saveEmbedding(avg)
-                                            Log.d("FaceReg", "Enrollment complete: ${avg.take(5)}")
+                                        val avg = withContext(Dispatchers.Default) {
+                                            averageAndNormalize(vectors.toList())
                                         }
 
-                                        status = "Face enrolled"
-                                        onEnrolled()
+                                        Log.d("FaceReg", "Enrollment complete: ${avg.take(5)}")
+
+                                        // Pass embedding to parent (HomePage) for API submission
+                                        onEnrolled(avg)
                                     }
 
                                 } catch (e: IllegalStateException) {

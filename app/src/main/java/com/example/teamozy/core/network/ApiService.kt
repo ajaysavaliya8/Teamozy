@@ -15,6 +15,12 @@ data class VerifyTokenResponse(
     val face_vector: String? = null
 )
 
+data class FaceRegistrationRequest(
+    val face_recognition_data: List<Float>,
+    val priority: String = "normal",
+    val reason_for_change: String? = null
+)
+
 interface ApiService {
 
     // ---------- AUTH ----------
@@ -96,5 +102,11 @@ interface ApiService {
         @Field("early_reason") earlyReason: String? = null,
         @Field("geo_reason") geoReason: String? = null,
         @Query("token") token: String
+    ): Response<BasicResponse>
+
+    // ---------- FACE RECOGNITION ----------
+    @POST("employees/face-recognition")
+    suspend fun registerFaceRecognition(
+        @Body request: FaceRegistrationRequest
     ): Response<BasicResponse>
 }
