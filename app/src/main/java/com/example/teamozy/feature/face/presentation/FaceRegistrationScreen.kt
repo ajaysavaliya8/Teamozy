@@ -52,7 +52,7 @@ import java.util.concurrent.Executors
 @Composable
 fun FaceRegistrationScreen(
     onDismiss: () -> Unit,
-    onEnrolled: (FloatArray) -> Unit,
+    onEnrolled: (embedding: FloatArray, image: Bitmap) -> Unit,
     targetFrames: Int = 8,
     minFacePctOfCircle: Float = 0.28f,
     captureIntervalMs: Long = 650L
@@ -81,6 +81,12 @@ fun FaceRegistrationScreen(
     val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
     val previewRef = remember { mutableStateOf<Preview?>(null) }
 
+    // Frame collection state
+    val vectors = remember { mutableStateListOf<FloatArray>() }
+    val capturedBitmaps = remember { mutableStateListOf<Bitmap>() }
+    var isProcessing by remember { mutableStateOf(false) }
+    var lastCaptureAt by remember { mutableLongStateOf(0L) }
+
     // Cleanup function
     fun cleanupCamera() {
         Log.d("FaceReg", "Cleaning up camera...")
@@ -97,18 +103,20 @@ fun FaceRegistrationScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose { cleanupCamera() }
+        onDispose {
+            cleanupCamera()
+            // Clean up any remaining bitmaps
+            capturedBitmaps.forEach { it.recycle() }
+            capturedBitmaps.clear()
+        }
     }
-
-    // Frame collection state
-    val vectors = remember { mutableStateListOf<FloatArray>() }
-    var isProcessing by remember { mutableStateOf(false) }
-    var lastCaptureAt by remember { mutableLongStateOf(0L) }
 
     // 2-minute auto-close
     LaunchedEffect(Unit) {
         delay(120_000)
         cleanupCamera()
+        capturedBitmaps.forEach { it.recycle() }
+        capturedBitmaps.clear()
         onDismiss()
     }
 
@@ -119,6 +127,8 @@ fun FaceRegistrationScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         cleanupCamera()
+                        capturedBitmaps.forEach { it.recycle() }
+                        capturedBitmaps.clear()
                         onDismiss()
                     }) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -193,7 +203,13 @@ fun FaceRegistrationScreen(
                                         extractor.extractNoRetry(bitmap, rotation)
                                     }
 
+                                    // Store both embedding and bitmap
                                     vectors.add(embedding)
+
+                                    // Make a copy of bitmap to keep
+                                    val bitmapCopy = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                                    capturedBitmaps.add(bitmapCopy)
+
                                     lastCaptureAt = System.currentTimeMillis()
                                     progress = vectors.size
                                     status = "Good capture ${vectors.size} / $targetFrames"
@@ -209,10 +225,20 @@ fun FaceRegistrationScreen(
                                             averageAndNormalize(vectors.toList())
                                         }
 
+                                        // Use the middle frame as representative image
+                                        val representativeImage = capturedBitmaps[capturedBitmaps.size / 2]
+
                                         Log.d("FaceReg", "Enrollment complete: ${avg.take(5)}")
 
-                                        // Pass embedding to parent (HomePage) for API submission
-                                        onEnrolled(avg)
+                                        // Pass embedding AND image to parent (HomePage) for API submission
+                                        onEnrolled(avg, representativeImage)
+
+                                        // Clean up other bitmaps (keep the representative one)
+                                        capturedBitmaps.forEachIndexed { index, bmp ->
+                                            if (index != capturedBitmaps.size / 2) {
+                                                bmp.recycle()
+                                            }
+                                        }
                                     }
 
                                 } catch (e: IllegalStateException) {
@@ -223,7 +249,7 @@ fun FaceRegistrationScreen(
                                     errorText = e.message ?: "Failed to process frame"
                                     Log.e("FaceReg", "Processing error", e)
                                 } finally {
-                                    bitmap.recycle()  // ALWAYS recycle after processing
+                                    bitmap.recycle()  // ALWAYS recycle original after processing
                                     isProcessing = false
                                 }
                             }

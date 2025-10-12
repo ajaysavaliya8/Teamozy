@@ -1,5 +1,7 @@
 package com.example.teamozy.core.network
 
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -13,12 +15,6 @@ data class VerifyTokenResponse(
     val message: String,
     val face_threshold: Float? = null,
     val face_vector: String? = null
-)
-
-data class FaceRegistrationRequest(
-    val face_recognition_data: List<Float>,
-    val priority: String = "normal",
-    val reason_for_change: String? = null
 )
 
 interface ApiService {
@@ -105,8 +101,12 @@ interface ApiService {
     ): Response<BasicResponse>
 
     // ---------- FACE RECOGNITION ----------
+    @Multipart
     @POST("employees/face-recognition")
     suspend fun registerFaceRecognition(
-        @Body request: FaceRegistrationRequest
+        @Part face_image: MultipartBody.Part,
+        @Part("face_recognition_data") faceRecognitionData: RequestBody,
+        @Part("priority") priority: RequestBody,
+        @Part("reason_for_change") reasonForChange: RequestBody? = null
     ): Response<BasicResponse>
 }

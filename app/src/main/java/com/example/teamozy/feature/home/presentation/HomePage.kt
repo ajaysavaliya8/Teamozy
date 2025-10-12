@@ -23,7 +23,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.teamozy.core.network.FaceRegistrationRequest
 import com.example.teamozy.core.network.NetworkModule
 import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
@@ -36,6 +35,7 @@ import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
 
 private const val TAG = "HomePage"
@@ -319,24 +319,58 @@ fun HomePage(
                 pendingAction = null
                 Log.d(TAG, "❌ Registration dismissed")
             },
-            onEnrolled = { embedding ->
+            onEnrolled = { embedding, bitmap ->
                 // Don't close screen yet - send to API first
                 registrationBusy = true
 
                 scope.launch {
                     try {
-                        Log.d(TAG, "📤 Sending face vector to API...")
+                        Log.d(TAG, "📤 Sending face vector and image to API...")
 
                         val api = NetworkModule.apiService
 
-                        val request = FaceRegistrationRequest(
-                            face_recognition_data = embedding.toList(),
-                            priority = "normal",
-                            reason_for_change = "Initial face registration"
+                        // Convert bitmap to JPEG bytes
+                        val imageBytes = withContext(Dispatchers.Default) {
+                            val outputStream = java.io.ByteArrayOutputStream()
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
+                            outputStream.toByteArray()
+                        }
+
+                        // Convert embedding to JSON string
+                        val embeddingJson = com.google.gson.Gson().toJson(embedding.toList())
+
+                        // Create multipart request parts
+                        val imagePart = okhttp3.MultipartBody.Part.createFormData(
+                            "face_image",
+                            "face_${System.currentTimeMillis()}.jpg",
+                            okhttp3.RequestBody.create(
+                                "image/jpeg".toMediaTypeOrNull(),
+                                imageBytes
+                            )
+                        )
+
+                        val faceDataPart = okhttp3.RequestBody.create(
+                            "text/plain".toMediaTypeOrNull(),
+                            embeddingJson
+                        )
+
+                        val priorityPart = okhttp3.RequestBody.create(
+                            "text/plain".toMediaTypeOrNull(),
+                            "normal"
+                        )
+
+                        val reasonPart = okhttp3.RequestBody.create(
+                            "text/plain".toMediaTypeOrNull(),
+                            "Initial face registration"
                         )
 
                         val response = withContext(Dispatchers.IO) {
-                            api.registerFaceRecognition(request)
+                            api.registerFaceRecognition(
+                                face_image = imagePart,
+                                faceRecognitionData = faceDataPart,
+                                priority = priorityPart,
+                                reasonForChange = reasonPart
+                            )
                         }
 
                         Log.d(TAG, "📥 API Response: code=${response.code()}")
@@ -344,6 +378,9 @@ fun HomePage(
                         registrationBusy = false
                         showRegistration = false
                         pendingAction = null
+
+                        // Clean up bitmap
+                        bitmap.recycle()
 
                         when {
                             response.isSuccessful && response.code() == 200 -> {
@@ -391,6 +428,16 @@ fun HomePage(
                                 snack.showSnackbar(message)
                             }
 
+                            response.code() == 400 -> {
+                                // Bad request - invalid data
+                                val errorBody = response.errorBody()?.string()
+                                val message = extractErrorMessage(errorBody)
+                                    ?: "Invalid face data. Please try again."
+
+                                Log.e(TAG, "❌ Bad request: $message")
+                                snack.showSnackbar(message)
+                            }
+
                             else -> {
                                 // Other errors
                                 val errorBody = response.errorBody()?.string()
@@ -407,6 +454,10 @@ fun HomePage(
                         registrationBusy = false
                         showRegistration = false
                         pendingAction = null
+
+                        // Clean up bitmap on error
+                        try { bitmap.recycle() } catch (_: Exception) {}
+
                         snack.showSnackbar("Network error. Please check your connection and try again.")
                     }
                 }
