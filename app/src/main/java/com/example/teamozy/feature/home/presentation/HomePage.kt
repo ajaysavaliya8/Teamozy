@@ -32,6 +32,7 @@ import com.example.teamozy.feature.face.data.FaceStore
 import com.example.teamozy.feature.face.domain.FaceVerifier
 import com.example.teamozy.feature.face.presentation.FaceCaptureScreen
 import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
+import com.example.teamozy.feature.profile.presentation.ProfileScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,6 +41,7 @@ import org.json.JSONObject
 
 private const val TAG = "HomePage"
 private enum class PunchAction { IN, OUT }
+private enum class HomeScreen { HOME, ATTENDANCE, PROFILE }
 
 @Composable
 fun HomePage(
@@ -51,6 +53,9 @@ fun HomePage(
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val prefs = remember { PreferencesManager.getInstance(context) }
+
+    // Navigation state
+    var currentScreen by remember { mutableStateOf(HomeScreen.HOME) }
 
     // Get dynamic threshold from server (saved during login)
     val verifyThreshold = remember { prefs.faceThreshold }
@@ -234,294 +239,326 @@ fun HomePage(
                 tonalElevation = 3.dp
             ) {
                 NavigationBarItem(
-                    selected = true,
-                    onClick = { },
-                    icon = { Icon(Icons.Filled.Home, "Home") },
+                    selected = currentScreen == HomeScreen.HOME,
+                    onClick = { currentScreen = HomeScreen.HOME },
+                    icon = { Icon(if (currentScreen == HomeScreen.HOME) Icons.Filled.Home else Icons.Outlined.Home, "Home") },
                     label = { Text("Home") }
                 )
                 NavigationBarItem(
-                    selected = false,
-                    onClick = { },
-                    icon = { Icon(Icons.Outlined.Person, "Attendance") },
+                    selected = currentScreen == HomeScreen.ATTENDANCE,
+                    onClick = { currentScreen = HomeScreen.ATTENDANCE },
+                    icon = { Icon(if (currentScreen == HomeScreen.ATTENDANCE) Icons.Filled.CalendarToday else Icons.Outlined.CalendarToday, "Attendance") },
                     label = { Text("Attendance") }
                 )
                 NavigationBarItem(
-                    selected = false,
-                    onClick = { },
-                    icon = { Icon(Icons.Outlined.Settings, "Settings") },
-                    label = { Text("Settings") }
+                    selected = currentScreen == HomeScreen.PROFILE,
+                    onClick = { currentScreen = HomeScreen.PROFILE },
+                    icon = { Icon(if (currentScreen == HomeScreen.PROFILE) Icons.Filled.Person else Icons.Outlined.Person, "Profile") },
+                    label = { Text("Profile") }
                 )
             }
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Top Bar
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp
-            ) {
-                Row(
+        when (currentScreen) {
+            HomeScreen.HOME -> {
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxSize()
+                        .padding(padding)
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    // Top Bar
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 2.dp
                     ) {
-                        Icon(
-                            Icons.Filled.Info,
-                            contentDescription = "Company",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Teamozy",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Info,
+                                    contentDescription = "Company",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Teamozy",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
 
-                    IconButton(
-                        onClick = { /* Profile */ },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                    ) {
-                        Icon(
-                            Icons.Filled.Person,
-                            contentDescription = "Profile",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            // Greeting
-            Text(
-                text = "Hello, ${prefs.userName ?: "User"}",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 20.dp),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.height(32.dp))
-
-            // Main Punch Button
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val buttonText = if (ui.canCheckIn) "Check In" else "Check Out"
-                val buttonColor = if (ui.canCheckIn) Color(0xFF00C896) else Color(0xFFFF6B6B)
-
-                Button(
-                    onClick = {
-                        pendingAction = if (ui.canCheckIn) PunchAction.IN else PunchAction.OUT
-                        verifyError = null
-
-                        Log.d(TAG, "🔘 Check In/Out button clicked")
-                        Log.d(TAG, "📍 Pending action: $pendingAction")
-
-                        // Check if face verification is required
-                        val requireFaceCheckin = prefs.requireFaceCheckin
-                        Log.d(TAG, "🎭 require_face_checkin: $requireFaceCheckin")
-
-                        if (!requireFaceCheckin) {
-                            // Face verification NOT required - proceed directly to check-in/check-out
-                            Log.d(TAG, "✅ Face verification NOT required - proceeding directly to punch")
-                            vm.setFaceVerifyEnabled(false)
-                            proceedPunch()
-                            return@Button
-                        }
-
-                        // Face verification IS required - check face data
-                        Log.d(TAG, "🎭 Face verification REQUIRED - checking face data...")
-                        checkingFaceData = true
-
-                        scope.launch {
-                            try {
-                                val store = FaceStore.getInstance(context)
-
-                                // Check if face vector exists locally
-                                val hasLocalEnrollment = store.hasEnrollment()
-                                Log.d(TAG, "💾 Local enrollment exists: $hasLocalEnrollment")
-
-                                if (!hasLocalEnrollment) {
-                                    Log.d(TAG, "⚠️ No local face data - checking server...")
-
-                                    // Call GET API to check server
-                                    val hasServerData = checkFaceDataFromServer()
-
-                                    checkingFaceData = false
-                                    Log.d(TAG, "🔄 Server check result: $hasServerData")
-
-                                    when (hasServerData) {
-                                        true -> {
-                                            // Server has face data and it's now saved locally
-                                            // Proceed to verification
-                                            Log.d(TAG, "✅ Face data synced from server - showing VERIFICATION screen")
-                                            showVerify = true
-                                        }
-                                        false -> {
-                                            // Server confirmed no face data exists
-                                            // Proceed to registration
-                                            Log.d(TAG, "📝 No face data on server - showing REGISTRATION screen")
-                                            showRegistration = true
-                                        }
-                                        null -> {
-                                            // Error occurred (already shown to user via snackbar)
-                                            Log.d(TAG, "❌ Error checking face data - STOPPING flow")
-                                            pendingAction = null
-                                        }
-                                    }
-                                } else {
-                                    // Local face data exists - proceed to verification
-                                    Log.d(TAG, "✅ Local face data exists - showing VERIFICATION screen")
-                                    checkingFaceData = false
-                                    showVerify = true
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "❌ Error in button click handler", e)
-                                Log.e(TAG, "❌ Exception type: ${e.javaClass.simpleName}, message: ${e.message}")
-                                e.printStackTrace()
-                                checkingFaceData = false
-                                snack.showSnackbar("An error occurred. Please try again.")
-                                pendingAction = null
+                            IconButton(
+                                onClick = { currentScreen = HomeScreen.PROFILE },
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Person,
+                                    contentDescription = "Profile",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                             }
                         }
-                    },
-                    enabled = !ui.isLoading && !ui.isRefreshing && !registrationBusy && !checkingFaceData,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = buttonColor,
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(28.dp)
-                ) {
-                    if (checkingFaceData) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.White
-                        )
-                        Spacer(Modifier.width(12.dp))
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    // Greeting
+                    Text(
+                        text = "Hello, ${prefs.userName ?: "User"}",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(Modifier.height(32.dp))
+
+                    // Main Punch Button
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        val buttonText = if (ui.canCheckIn) "Check In" else "Check Out"
+                        val buttonColor = if (ui.canCheckIn) Color(0xFF00C896) else Color(0xFFFF6B6B)
+
+                        Button(
+                            onClick = {
+                                pendingAction = if (ui.canCheckIn) PunchAction.IN else PunchAction.OUT
+                                verifyError = null
+
+                                Log.d(TAG, "🔘 Check In/Out button clicked")
+                                Log.d(TAG, "📍 Pending action: $pendingAction")
+
+                                // Check if face verification is required
+                                val requireFaceCheckin = prefs.requireFaceCheckin
+                                Log.d(TAG, "🎭 require_face_checkin: $requireFaceCheckin")
+
+                                if (!requireFaceCheckin) {
+                                    // Face verification NOT required - proceed directly to check-in/check-out
+                                    Log.d(TAG, "✅ Face verification NOT required - proceeding directly to punch")
+                                    vm.setFaceVerifyEnabled(false)
+                                    proceedPunch()
+                                    return@Button
+                                }
+
+                                // Face verification IS required - check face data
+                                Log.d(TAG, "🎭 Face verification REQUIRED - checking face data...")
+                                checkingFaceData = true
+
+                                scope.launch {
+                                    try {
+                                        val store = FaceStore.getInstance(context)
+
+                                        // Check if face vector exists locally
+                                        val hasLocalEnrollment = store.hasEnrollment()
+                                        Log.d(TAG, "💾 Local enrollment exists: $hasLocalEnrollment")
+
+                                        if (!hasLocalEnrollment) {
+                                            Log.d(TAG, "⚠️ No local face data - checking server...")
+
+                                            // Call GET API to check server
+                                            val hasServerData = checkFaceDataFromServer()
+
+                                            checkingFaceData = false
+                                            Log.d(TAG, "🔄 Server check result: $hasServerData")
+
+                                            when (hasServerData) {
+                                                true -> {
+                                                    // Server has face data and it's now saved locally
+                                                    // Proceed to verification
+                                                    Log.d(TAG, "✅ Face data synced from server - showing VERIFICATION screen")
+                                                    showVerify = true
+                                                }
+                                                false -> {
+                                                    // Server confirmed no face data exists
+                                                    // Proceed to registration
+                                                    Log.d(TAG, "📝 No face data on server - showing REGISTRATION screen")
+                                                    showRegistration = true
+                                                }
+                                                null -> {
+                                                    // Error occurred (already shown to user via snackbar)
+                                                    Log.d(TAG, "❌ Error checking face data - STOPPING flow")
+                                                    pendingAction = null
+                                                }
+                                            }
+                                        } else {
+                                            // Local face data exists - proceed to verification
+                                            Log.d(TAG, "✅ Local face data exists - showing VERIFICATION screen")
+                                            checkingFaceData = false
+                                            showVerify = true
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "❌ Error in button click handler", e)
+                                        Log.e(TAG, "❌ Exception type: ${e.javaClass.simpleName}, message: ${e.message}")
+                                        e.printStackTrace()
+                                        checkingFaceData = false
+                                        snack.showSnackbar("An error occurred. Please try again.")
+                                        pendingAction = null
+                                    }
+                                }
+                            },
+                            enabled = !ui.isLoading && !ui.isRefreshing && !registrationBusy && !checkingFaceData,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = buttonColor,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(28.dp)
+                        ) {
+                            if (checkingFaceData) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = "Checking face data...",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else if (registrationBusy) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = "Registering face...",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else {
+                                Icon(
+                                    if (ui.canCheckIn) Icons.Filled.CheckCircle else Icons.Filled.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = buttonText,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
                         Text(
-                            text = "Checking face data...",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            text = if (checkingFaceData) "Checking face data..."
+                            else if (registrationBusy) "Registering face with server..."
+                            else if (ui.isLoading) "Processing..."
+                            else if (ui.isRefreshing) "Refreshing status..."
+                            else "Ready",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else if (registrationBusy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.White
-                        )
-                        Spacer(Modifier.width(12.dp))
+
+                        // Show current threshold
                         Text(
-                            text = "Registering face...",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            text = "Face threshold: ${String.format("%.2f", verifyThreshold)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else {
-                        Icon(
-                            if (ui.canCheckIn) Icons.Filled.CheckCircle else Icons.Filled.Close,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(Modifier.width(12.dp))
+
+                        // Show face verification requirement status
+                        val requireFace = prefs.requireFaceCheckin
                         Text(
-                            text = buttonText,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            text = "Face verification: ${if (requireFace) "Required" else "Not required"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (requireFace) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+
+                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.height(24.dp))
+
+                    // Error/Success Messages
+                    if (!ui.errorMessage.isNullOrBlank()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Text(
+                                text = ui.errorMessage!!,
+                                modifier = Modifier.padding(16.dp),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+
+                    if (!ui.successMessage.isNullOrBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFE8F5E9)
+                            )
+                        ) {
+                            Text(
+                                text = ui.successMessage!!,
+                                modifier = Modifier.padding(16.dp),
+                                color = Color(0xFF2E7D32),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(24.dp))
                 }
-
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = if (checkingFaceData) "Checking face data..."
-                    else if (registrationBusy) "Registering face with server..."
-                    else if (ui.isLoading) "Processing..."
-                    else if (ui.isRefreshing) "Refreshing status..."
-                    else "Ready",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Show current threshold
-                Text(
-                    text = "Face threshold: ${String.format("%.2f", verifyThreshold)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Show face verification requirement status
-                val requireFace = prefs.requireFaceCheckin
-                Text(
-                    text = "Face verification: ${if (requireFace) "Required" else "Not required"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (requireFace) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
 
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.height(24.dp))
-
-            // Error/Success Messages
-            if (!ui.errorMessage.isNullOrBlank()) {
-                Card(
+            HomeScreen.ATTENDANCE -> {
+                // Placeholder for future Attendance screen
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = ui.errorMessage!!,
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text("Attendance Screen\n(Coming Soon)", textAlign = TextAlign.Center)
                 }
             }
 
-            if (!ui.successMessage.isNullOrBlank()) {
-                Spacer(Modifier.height(12.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFE8F5E9)
-                    )
-                ) {
-                    Text(
-                        text = ui.successMessage!!,
-                        modifier = Modifier.padding(16.dp),
-                        color = Color(0xFF2E7D32),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
+            HomeScreen.PROFILE -> ProfileScreen(
+                onNavigateToFaceChange = {
+                    currentScreen = HomeScreen.HOME
+                    pendingAction = null // Clear any pending action
+                    // Trigger face registration/verification flow
+                    val store = FaceStore.getInstance(context)
+                    if (store.hasEnrollment()) {
+                        showVerify = true
+                    } else {
+                        showRegistration = true
+                    }
+                },
+                onLogout = onLogout,
+                onBack = { currentScreen = HomeScreen.HOME }
+            )
         }
     }
 
