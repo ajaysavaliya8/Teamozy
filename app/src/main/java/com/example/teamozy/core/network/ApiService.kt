@@ -9,14 +9,6 @@ data class DeviceChangeResponse(
     val detail: String
 )
 
-// Add verify token endpoint
-data class VerifyTokenResponse(
-    val status: String,
-    val message: String,
-    val face_threshold: Float? = null,
-    val face_vector: String? = null
-)
-
 interface ApiService {
 
     // ---------- AUTH ----------
@@ -101,11 +93,14 @@ interface ApiService {
     ): Response<BasicResponse>
 
     // ---------- FACE RECOGNITION ----------
+    @GET("employees/face-recognition")
+    suspend fun getFaceRecognitionData(): Response<FaceRecognitionDataResponse>
+
     @Multipart
     @POST("employees/face-recognition")
     suspend fun registerFaceRecognition(
         @Part face_image: MultipartBody.Part,
-        @Part("face_recognition_data") faceRecognitionData: RequestBody,
+        @Part("face_vector") faceVector: RequestBody,  // Changed from face_id to face_vector
         @Part("priority") priority: RequestBody,
         @Part("reason_for_change") reasonForChange: RequestBody? = null
     ): Response<BasicResponse>

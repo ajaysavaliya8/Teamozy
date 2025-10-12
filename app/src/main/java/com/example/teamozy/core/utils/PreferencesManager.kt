@@ -37,6 +37,15 @@ class PreferencesManager private constructor(context: Context) {
         get() = prefs.getString(KEY_FACE_VECTOR, null)
         set(value) = prefs.edit().putString(KEY_FACE_VECTOR, value).apply()
 
+    // New fields for face verification requirements
+    var requireFaceCheckin: Boolean
+        get() = prefs.getBoolean(KEY_REQUIRE_FACE_CHECKIN, false)
+        set(value) = prefs.edit().putBoolean(KEY_REQUIRE_FACE_CHECKIN, value).apply()
+
+    var requireFaceBreak: Boolean
+        get() = prefs.getBoolean(KEY_REQUIRE_FACE_BREAK, false)
+        set(value) = prefs.edit().putBoolean(KEY_REQUIRE_FACE_BREAK, value).apply()
+
     fun isLoggedIn(): Boolean = !authToken.isNullOrBlank()
 
     fun clearAll() {
@@ -51,6 +60,8 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_FACE_THRESHOLD = "face_threshold"
         private const val KEY_FACE_VECTOR = "face_vector"
+        private const val KEY_REQUIRE_FACE_CHECKIN = "require_face_checkin"
+        private const val KEY_REQUIRE_FACE_BREAK = "require_face_break"
 
         @Volatile private var INSTANCE: PreferencesManager? = null
 

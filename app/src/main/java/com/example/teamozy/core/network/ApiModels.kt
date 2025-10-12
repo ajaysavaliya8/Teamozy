@@ -7,8 +7,10 @@ data class BasicResponse(
     val status: String,           // "success" | "error" | "reject"
     val message: String? = null,
     val token: String? = null,    // present on verify-login success
-    val face_threshold: Float? = null,
-    val face_vector: String? = null
+    val minimum_face_recognition_quality_score: Float? = null,
+    val face_vector: String? = null,
+    val require_face_checkin: Boolean? = null,
+    val require_face_break: Boolean? = null
 )
 
 // -------- Status (/check-status) --------
@@ -24,7 +26,6 @@ data class CheckStatusData(
 )
 
 // -------- Actions (/check-in, /check-out) --------
-// Your backend returns top-level fields (not nested "data")
 data class ActionResponse(
     val status: String,               // "success"
     val message: String? = null,
@@ -36,9 +37,29 @@ data class ActionResponse(
     @SerializedName("t_token") val tToken: String? = null
 )
 
-// Face verify upload response (adjust fields to match your backend when ready)
+// Verify token endpoint response
+data class VerifyTokenResponse(
+    val status: String,
+    val message: String,
+    val minimum_face_recognition_quality_score: Float? = null,
+    val face_vector: String? = null,
+    val require_face_checkin: Boolean? = null,
+    val require_face_break: Boolean? = null
+)
+
+// Face verify upload response
 data class FaceVerifyResponse(
     val status: String? = null,
     val message: String? = null,
-    val face_token: String? = null // sometimes called "face_token" or similar
+    val face_token: String? = null
+)
+
+// Face recognition GET endpoint response
+data class FaceRecognitionDataResponse(
+    val status: String? = null,
+    val message: String,
+    val face_vector: String? = null,
+    val minimum_face_recognition_quality_score: Float? = null,
+    val require_face_checkin: Boolean? = null,
+    val require_face_break: Boolean? = null
 )

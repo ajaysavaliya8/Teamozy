@@ -123,11 +123,29 @@ class AuthRepository(private val context: Context) {
                 res.isSuccessful -> {
                     val body = res.body()
 
-                    // Update face threshold and vector if present
-                    body?.face_threshold?.let { pm.faceThreshold = it }
-                    body?.face_vector?.let { pm.faceVector = it }
+                    // Update face threshold and vector using new field names
+                    body?.minimum_face_recognition_quality_score?.let {
+                        pm.faceThreshold = it
+                        Log.d("AUTH", "Updated face threshold: $it")
+                    }
 
-                    Log.d("AUTH", "Token verified - face_threshold: ${body?.face_threshold}, has_vector: ${body?.face_vector != null}")
+                    body?.face_vector?.let {
+                        pm.faceVector = it
+                        Log.d("AUTH", "Updated face vector: ${it.take(50)}...")
+                    }
+
+                    // Update face verification requirements
+                    body?.require_face_checkin?.let {
+                        pm.requireFaceCheckin = it
+                        Log.d("AUTH", "Updated require_face_checkin: $it")
+                    }
+
+                    body?.require_face_break?.let {
+                        pm.requireFaceBreak = it
+                        Log.d("AUTH", "Updated require_face_break: $it")
+                    }
+
+                    Log.d("AUTH", "Token verified - threshold: ${body?.minimum_face_recognition_quality_score}, has_vector: ${body?.face_vector != null}, require_face_checkin: ${body?.require_face_checkin}, require_face_break: ${body?.require_face_break}")
 
                     AuthOutcome.Success(body?.message ?: "Token is valid")
                 }
@@ -194,15 +212,45 @@ class AuthRepository(private val context: Context) {
                     pm.authToken = token
                     pm.deviceId = androidId()
 
-                    // Save face threshold and vector
-                    body.face_threshold?.let { pm.faceThreshold = it }
-                    body.face_vector?.let { pm.faceVector = it }
+                    // Save face threshold and vector using new field names
+                    body.minimum_face_recognition_quality_score?.let {
+                        pm.faceThreshold = it
+                        Log.d("AUTH", "Saved face threshold: $it")
+                    } ?: run {
+                        // Set default threshold if not provided
+                        pm.faceThreshold = 0.57f
+                        Log.d("AUTH", "Using default face threshold: 0.57")
+                    }
 
-                    Log.d("AUTH", "Login successful - face_threshold: ${body.face_threshold}, has_vector: ${body.face_vector != null}")
+                    body.face_vector?.let {
+                        pm.faceVector = it
+                        Log.d("AUTH", "Saved face vector: ${it.take(50)}...")
+                    } ?: run {
+                        Log.d("AUTH", "No face vector provided")
+                    }
+
+                    // Save face verification requirements
+                    body.require_face_checkin?.let {
+                        pm.requireFaceCheckin = it
+                        Log.d("AUTH", "Saved require_face_checkin: $it")
+                    } ?: run {
+                        pm.requireFaceCheckin = false
+                        Log.d("AUTH", "Using default require_face_checkin: false")
+                    }
+
+                    body.require_face_break?.let {
+                        pm.requireFaceBreak = it
+                        Log.d("AUTH", "Saved require_face_break: $it")
+                    } ?: run {
+                        pm.requireFaceBreak = false
+                        Log.d("AUTH", "Using default require_face_break: false")
+                    }
+
+                    Log.d("AUTH", "Login successful - threshold: ${pm.faceThreshold}, has_vector: ${body.face_vector != null}, require_face_checkin: ${pm.requireFaceCheckin}, require_face_break: ${pm.requireFaceBreak}")
 
                     return AuthOutcome.Success(body.message ?: "Login successful.", token)
                 }
-                return AuthOutcome.Success(body?.message ?: "OK")
+                return AuthOutcome.Success(body.message ?: "OK")
             }
             return AuthOutcome.Error(body?.message ?: "Unknown error")
         }
