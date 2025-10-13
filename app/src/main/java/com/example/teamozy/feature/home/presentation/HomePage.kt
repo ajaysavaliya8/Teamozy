@@ -244,12 +244,15 @@ fun HomePage(
                     icon = { Icon(if (currentScreen == HomeScreen.HOME) Icons.Filled.Home else Icons.Outlined.Home, "Home") },
                     label = { Text("Home") }
                 )
+
+
                 NavigationBarItem(
                     selected = currentScreen == HomeScreen.ATTENDANCE,
                     onClick = { currentScreen = HomeScreen.ATTENDANCE },
-                    icon = { Icon(if (currentScreen == HomeScreen.ATTENDANCE) Icons.Filled.CalendarToday else Icons.Outlined.CalendarToday, "Attendance") },
+                    icon = { Icon(if (currentScreen == HomeScreen.ATTENDANCE) Icons.Filled.DateRange else Icons.Outlined.DateRange, "Attendance") },
                     label = { Text("Attendance") }
                 )
+
                 NavigationBarItem(
                     selected = currentScreen == HomeScreen.PROFILE,
                     onClick = { currentScreen = HomeScreen.PROFILE },

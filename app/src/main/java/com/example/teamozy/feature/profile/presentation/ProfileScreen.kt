@@ -439,7 +439,7 @@ private fun ProfileMenuItem(
             // Chevron
             if (showChevron) {
                 Icon(
-                    Icons.Default.ChevronRight,
+                    Icons.Default.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
