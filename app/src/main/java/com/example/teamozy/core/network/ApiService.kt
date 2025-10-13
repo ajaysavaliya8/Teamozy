@@ -96,11 +96,14 @@ interface ApiService {
     @GET("employees/face-recognition")
     suspend fun getFaceRecognitionData(): Response<FaceRecognitionDataResponse>
 
+    @GET("employees/face-recognition/pending-request")
+    suspend fun getPendingFaceRegistrationRequest(): Response<PendingFaceRegistrationResponse>
+
     @Multipart
     @POST("employees/face-recognition")
     suspend fun registerFaceRecognition(
         @Part face_image: MultipartBody.Part,
-        @Part("face_vector") faceVector: RequestBody,  // Changed from face_id to face_vector
+        @Part("face_vector") faceVector: RequestBody,
         @Part("priority") priority: RequestBody,
         @Part("reason_for_change") reasonForChange: RequestBody? = null
     ): Response<BasicResponse>

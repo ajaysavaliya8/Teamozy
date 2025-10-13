@@ -63,3 +63,10 @@ data class FaceRecognitionDataResponse(
     val require_face_checkin: Boolean? = null,
     val require_face_break: Boolean? = null
 )
+
+// Pending face registration request response
+data class PendingFaceRegistrationResponse(
+    val status: String,
+    val pending: Boolean,
+    val message: String
+)

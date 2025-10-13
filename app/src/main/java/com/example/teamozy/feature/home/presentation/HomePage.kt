@@ -148,7 +148,6 @@ fun HomePage(
                         Log.d(TAG, "✅ face_vector exists on server - attempting to parse and save...")
                         // Parse and save face vector locally
                         try {
-                            // Parse JSON array string to FloatArray
                             Log.d(TAG, "📝 Parsing JSON array (length: ${faceVector.length})...")
                             val jsonArray = org.json.JSONArray(faceVector)
                             Log.d(TAG, "📝 JSON array parsed successfully, array length: ${jsonArray.length()}")
@@ -549,23 +548,42 @@ fun HomePage(
 
             HomeScreen.PROFILE -> ProfileScreen(
                 onNavigateToFaceChange = {
+                    // When coming from Profile, ALWAYS show registration (not verification)
+                    Log.d(TAG, "📝 Profile -> Face Registration - showing REGISTRATION screen")
                     currentScreen = HomeScreen.HOME
-                    pendingAction = null // Clear any pending action
-                    // Trigger face registration/verification flow
-                    val store = FaceStore.getInstance(context)
-                    if (store.hasEnrollment()) {
-                        showVerify = true
-                    } else {
-                        showRegistration = true
+                    pendingAction = null
+                    showRegistration = true
+                },
+                onLogout = {
+                    // Clear all data including face data
+                    Log.d(TAG, "🚪 Logout - clearing all data including face data")
+                    scope.launch {
+                        try {
+                            // Clear face data
+                            withContext(Dispatchers.IO) {
+                                FaceStore.getInstance(context).clear()
+                            }
+                            Log.d(TAG, "✅ Face data cleared")
+
+                            // Clear preferences (includes auth token, etc.)
+                            prefs.clearAll()
+                            Log.d(TAG, "✅ Preferences cleared")
+
+                            // Call the logout callback
+                            onLogout()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Error during logout cleanup", e)
+                            // Still proceed with logout even if cleanup fails
+                            onLogout()
+                        }
                     }
                 },
-                onLogout = onLogout,
                 onBack = { currentScreen = HomeScreen.HOME }
             )
         }
     }
 
-    // Face Registration Screen
+    // Face Registration Screen - ONLY for registration (not verification)
     if (showRegistration) {
         FaceRegistrationScreen(
             onDismiss = {
@@ -622,7 +640,7 @@ fun HomePage(
 
                         val reasonPart = okhttp3.RequestBody.create(
                             "text/plain".toMediaTypeOrNull(),
-                            "Initial face registration"
+                            "Face registration update"
                         )
 
                         Log.d(TAG, "🌐 Sending POST /employees/face-recognition...")

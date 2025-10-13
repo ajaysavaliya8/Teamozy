@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.teamozy.BuildConfig
 import com.example.teamozy.core.utils.PreferencesManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ProfileScreen(
@@ -36,7 +39,13 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
     val prefs = remember { PreferencesManager.getInstance(context) }
+    val scope = rememberCoroutineScope()
+
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showFaceRegistrationDialog by remember { mutableStateOf(false) }
+    var showPendingDialog by remember { mutableStateOf(false) }
+    var pendingMessage by remember { mutableStateOf("") }
+    var isCheckingPending by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -74,9 +83,9 @@ fun ProfileScreen(
             SectionCard(title = "Account") {
                 ProfileMenuItem(
                     icon = Icons.Filled.Face,
-                    title = "Face Recognition",
-                    subtitle = "Manage face verification",
-                    onClick = onNavigateToFaceChange
+                    title = "Face Registration",
+                    subtitle = "Register or update your face",
+                    onClick = { showFaceRegistrationDialog = true }
                 )
             }
 
@@ -146,85 +155,190 @@ fun ProfileScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // Future Features (Commented out for now)
-            /*
-            // Personal Information Section
-            SectionCard(title = "Personal Information") {
-                ProfileMenuItem(
-                    icon = Icons.Outlined.Person,
-                    title = "Contact Details",
-                    subtitle = "Email, phone, address",
-                    onClick = { }
-                )
-                Divider(Modifier.padding(horizontal = 16.dp))
-                ProfileMenuItem(
-                    icon = Icons.Outlined.Badge,
-                    title = "Personal Info",
-                    subtitle = "Date of birth, gender, etc.",
-                    onClick = { }
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Work Information Section
-            SectionCard(title = "Work Information") {
-                ProfileMenuItem(
-                    icon = Icons.Outlined.Work,
-                    title = "Employee Details",
-                    subtitle = "Job title, department, ID",
-                    onClick = { }
-                )
-                Divider(Modifier.padding(horizontal = 16.dp))
-                ProfileMenuItem(
-                    icon = Icons.Outlined.Schedule,
-                    title = "Shift Details",
-                    subtitle = "Work schedule and timings",
-                    onClick = { }
-                )
-                Divider(Modifier.padding(horizontal = 16.dp))
-                ProfileMenuItem(
-                    icon = Icons.Outlined.WorkHistory,
-                    title = "Past Experience",
-                    subtitle = "Previous work history",
-                    onClick = { }
-                )
-                Divider(Modifier.padding(horizontal = 16.dp))
-                ProfileMenuItem(
-                    icon = Icons.Outlined.EmojiEvents,
-                    title = "Achievements",
-                    subtitle = "Awards and recognitions",
-                    onClick = { }
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Emergency Section
-            SectionCard(title = "Emergency") {
-                ProfileMenuItem(
-                    icon = Icons.Outlined.Contacts,
-                    title = "Nominees",
-                    subtitle = "Emergency contacts",
-                    onClick = { }
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Social Section
-            SectionCard(title = "Connect") {
-                ProfileMenuItem(
-                    icon = Icons.Outlined.Share,
-                    title = "Social Media",
-                    subtitle = "LinkedIn, Twitter, etc.",
-                    onClick = { }
-                )
-            }
-            */
-
             Spacer(Modifier.height(80.dp))
         }
+    }
+
+    // Face Registration Confirmation Dialog
+    if (showFaceRegistrationDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isCheckingPending) {
+                    showFaceRegistrationDialog = false
+                }
+            },
+            icon = {
+                Icon(
+                    Icons.Filled.Face,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Update Face Registration",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            },
+            text = {
+                if (isCheckingPending) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "Checking for pending requests...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    Text(
+                        "Are you sure you want to update your face registration? This will replace your current face data.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isCheckingPending = true
+                        scope.launch {
+                            try {
+                                val api = com.example.teamozy.core.network.NetworkModule.apiService
+                                val response = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                    api.getPendingFaceRegistrationRequest()
+                                }
+
+                                isCheckingPending = false
+
+                                when {
+                                    response.isSuccessful && response.code() == 200 -> {
+                                        val body = response.body()
+                                        if (body?.pending == true) {
+                                            // Show pending dialog
+                                            pendingMessage = body.message
+                                            showFaceRegistrationDialog = false
+                                            showPendingDialog = true
+                                        } else {
+                                            // No pending request, proceed with registration
+                                            showFaceRegistrationDialog = false
+                                            onNavigateToFaceChange()
+                                        }
+                                    }
+
+                                    response.code() == 401 -> {
+                                        showFaceRegistrationDialog = false
+                                        // Handle unauthorized
+                                    }
+
+                                    response.code() == 403 -> {
+                                        val errorBody = response.errorBody()?.string()
+                                        val message = try {
+                                            if (!errorBody.isNullOrBlank()) {
+                                                val json = org.json.JSONObject(errorBody)
+                                                json.optString("message", "You don't have permission to access this feature.")
+                                            } else {
+                                                "You don't have permission to access this feature."
+                                            }
+                                        } catch (e: Exception) {
+                                            "You don't have permission to access this feature."
+                                        }
+                                        pendingMessage = message
+                                        showFaceRegistrationDialog = false
+                                        showPendingDialog = true
+                                    }
+
+                                    response.code() == 404 -> {
+                                        val errorBody = response.errorBody()?.string()
+                                        val message = try {
+                                            if (!errorBody.isNullOrBlank()) {
+                                                val json = org.json.JSONObject(errorBody)
+                                                json.optString("message", "Employee not found.")
+                                            } else {
+                                                "Employee not found."
+                                            }
+                                        } catch (e: Exception) {
+                                            "Employee not found."
+                                        }
+                                        pendingMessage = message
+                                        showFaceRegistrationDialog = false
+                                        showPendingDialog = true
+                                    }
+
+                                    else -> {
+                                        val errorBody = response.errorBody()?.string()
+                                        val message = try {
+                                            if (!errorBody.isNullOrBlank()) {
+                                                val json = org.json.JSONObject(errorBody)
+                                                json.optString("message", "Failed to check pending requests. Please try again.")
+                                            } else {
+                                                "Failed to check pending requests. Please try again."
+                                            }
+                                        } catch (e: Exception) {
+                                            "Failed to check pending requests. Please try again."
+                                        }
+                                        pendingMessage = message
+                                        showFaceRegistrationDialog = false
+                                        showPendingDialog = true
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                isCheckingPending = false
+                                pendingMessage = "Network error. Please check your connection and try again."
+                                showFaceRegistrationDialog = false
+                                showPendingDialog = true
+                            }
+                        }
+                    },
+                    enabled = !isCheckingPending
+                ) {
+                    Text(if (isCheckingPending) "Checking..." else "Yes, Update")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showFaceRegistrationDialog = false },
+                    enabled = !isCheckingPending
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Pending Request Dialog
+    if (showPendingDialog) {
+        AlertDialog(
+            onDismissRequest = { showPendingDialog = false },
+            icon = {
+                Icon(
+                    Icons.Filled.Info,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    "Request Status",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            },
+            text = {
+                Text(
+                    pendingMessage,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(onClick = { showPendingDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
     }
 
     // Logout Confirmation Dialog
