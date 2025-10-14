@@ -22,14 +22,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.teamozy.BuildConfig
 import com.example.teamozy.core.utils.PreferencesManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun ProfileScreen(
@@ -39,13 +34,7 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
     val prefs = remember { PreferencesManager.getInstance(context) }
-    val scope = rememberCoroutineScope()
-
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var showFaceRegistrationDialog by remember { mutableStateOf(false) }
-    var showPendingDialog by remember { mutableStateOf(false) }
-    var pendingMessage by remember { mutableStateOf("") }
-    var isCheckingPending by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -83,9 +72,9 @@ fun ProfileScreen(
             SectionCard(title = "Account") {
                 ProfileMenuItem(
                     icon = Icons.Filled.Face,
-                    title = "Face Registration",
-                    subtitle = "Register or update your face",
-                    onClick = { showFaceRegistrationDialog = true }
+                    title = "Face Recognition",
+                    subtitle = "Manage face verification",
+                    onClick = onNavigateToFaceChange
                 )
             }
 
@@ -108,14 +97,12 @@ fun ProfileScreen(
                     title = "Rate App",
                     subtitle = "Share your feedback",
                     onClick = {
-                        // Open Play Store rating
                         val intent = Intent(Intent.ACTION_VIEW).apply {
                             data = Uri.parse("market://details?id=${context.packageName}")
                         }
                         try {
                             context.startActivity(intent)
                         } catch (e: Exception) {
-                            // Fallback to web browser
                             intent.data = Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}")
                             context.startActivity(intent)
                         }
@@ -129,7 +116,6 @@ fun ProfileScreen(
                     title = "App Support",
                     subtitle = "Get help and support",
                     onClick = {
-                        // Open email client
                         val intent = Intent(Intent.ACTION_SENDTO).apply {
                             data = Uri.parse("mailto:support@teamozy.com")
                             putExtra(Intent.EXTRA_SUBJECT, "Teamozy App Support Request")
@@ -154,191 +140,8 @@ fun ProfileScreen(
             }
 
             Spacer(Modifier.height(24.dp))
-
             Spacer(Modifier.height(80.dp))
         }
-    }
-
-    // Face Registration Confirmation Dialog
-    if (showFaceRegistrationDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!isCheckingPending) {
-                    showFaceRegistrationDialog = false
-                }
-            },
-            icon = {
-                Icon(
-                    Icons.Filled.Face,
-                    null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(48.dp)
-                )
-            },
-            title = {
-                Text(
-                    "Update Face Registration",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            },
-            text = {
-                if (isCheckingPending) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(40.dp))
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "Checking for pending requests...",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                } else {
-                    Text(
-                        "Are you sure you want to update your face registration? This will replace your current face data.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        isCheckingPending = true
-                        scope.launch {
-                            try {
-                                val api = com.example.teamozy.core.network.NetworkModule.apiService
-                                val response = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    api.getPendingFaceRegistrationRequest()
-                                }
-
-                                isCheckingPending = false
-
-                                when {
-                                    response.isSuccessful && response.code() == 200 -> {
-                                        val body = response.body()
-                                        if (body?.pending == true) {
-                                            // Show pending dialog
-                                            pendingMessage = body.message
-                                            showFaceRegistrationDialog = false
-                                            showPendingDialog = true
-                                        } else {
-                                            // No pending request, proceed with registration
-                                            showFaceRegistrationDialog = false
-                                            onNavigateToFaceChange()
-                                        }
-                                    }
-
-                                    response.code() == 401 -> {
-                                        showFaceRegistrationDialog = false
-                                        // Handle unauthorized
-                                    }
-
-                                    response.code() == 403 -> {
-                                        val errorBody = response.errorBody()?.string()
-                                        val message = try {
-                                            if (!errorBody.isNullOrBlank()) {
-                                                val json = org.json.JSONObject(errorBody)
-                                                json.optString("message", "You don't have permission to access this feature.")
-                                            } else {
-                                                "You don't have permission to access this feature."
-                                            }
-                                        } catch (e: Exception) {
-                                            "You don't have permission to access this feature."
-                                        }
-                                        pendingMessage = message
-                                        showFaceRegistrationDialog = false
-                                        showPendingDialog = true
-                                    }
-
-                                    response.code() == 404 -> {
-                                        val errorBody = response.errorBody()?.string()
-                                        val message = try {
-                                            if (!errorBody.isNullOrBlank()) {
-                                                val json = org.json.JSONObject(errorBody)
-                                                json.optString("message", "Employee not found.")
-                                            } else {
-                                                "Employee not found."
-                                            }
-                                        } catch (e: Exception) {
-                                            "Employee not found."
-                                        }
-                                        pendingMessage = message
-                                        showFaceRegistrationDialog = false
-                                        showPendingDialog = true
-                                    }
-
-                                    else -> {
-                                        val errorBody = response.errorBody()?.string()
-                                        val message = try {
-                                            if (!errorBody.isNullOrBlank()) {
-                                                val json = org.json.JSONObject(errorBody)
-                                                json.optString("message", "Failed to check pending requests. Please try again.")
-                                            } else {
-                                                "Failed to check pending requests. Please try again."
-                                            }
-                                        } catch (e: Exception) {
-                                            "Failed to check pending requests. Please try again."
-                                        }
-                                        pendingMessage = message
-                                        showFaceRegistrationDialog = false
-                                        showPendingDialog = true
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                isCheckingPending = false
-                                pendingMessage = "Network error. Please check your connection and try again."
-                                showFaceRegistrationDialog = false
-                                showPendingDialog = true
-                            }
-                        }
-                    },
-                    enabled = !isCheckingPending
-                ) {
-                    Text(if (isCheckingPending) "Checking..." else "Yes, Update")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = { showFaceRegistrationDialog = false },
-                    enabled = !isCheckingPending
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    // Pending Request Dialog
-    if (showPendingDialog) {
-        AlertDialog(
-            onDismissRequest = { showPendingDialog = false },
-            icon = {
-                Icon(
-                    Icons.Filled.Info,
-                    null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(48.dp)
-                )
-            },
-            title = {
-                Text(
-                    "Request Status",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            },
-            text = {
-                Text(
-                    pendingMessage,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                Button(onClick = { showPendingDialog = false }) {
-                    Text("OK")
-                }
-            }
-        )
     }
 
     // Logout Confirmation Dialog
@@ -386,11 +189,9 @@ private fun ProfileHeader(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Profile Picture with Edit Icon
             Box(
                 contentAlignment = Alignment.BottomEnd
             ) {
-                // Profile Picture Placeholder
                 Box(
                     modifier = Modifier
                         .size(100.dp)
@@ -406,7 +207,6 @@ private fun ProfileHeader(
                     )
                 }
 
-                // Edit Icon
                 Surface(
                     modifier = Modifier
                         .size(32.dp)
@@ -430,7 +230,6 @@ private fun ProfileHeader(
 
             Spacer(Modifier.height(16.dp))
 
-            // User Name
             Text(
                 text = userName,
                 style = MaterialTheme.typography.headlineSmall,
@@ -440,7 +239,6 @@ private fun ProfileHeader(
 
             Spacer(Modifier.height(4.dp))
 
-            // Mobile Number
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -513,7 +311,6 @@ private fun ProfileMenuItem(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon
             Surface(
                 shape = CircleShape,
                 color = iconTint.copy(alpha = 0.1f),
@@ -533,7 +330,6 @@ private fun ProfileMenuItem(
 
             Spacer(Modifier.width(16.dp))
 
-            // Title and Subtitle
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -550,7 +346,6 @@ private fun ProfileMenuItem(
                 )
             }
 
-            // Chevron
             if (showChevron) {
                 Icon(
                     Icons.Default.KeyboardArrowRight,

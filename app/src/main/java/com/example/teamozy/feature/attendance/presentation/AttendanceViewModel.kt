@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
  * - refreshStatus() with isRefreshing toggle
  * - violation bottom-sheet flow (token + message + submitReason)
  * - single source of truth for button: canCheckIn
+ * - face recognition quality score tracking
  */
 class AttendanceViewModel(
     private val repo: AttendanceRepository
@@ -48,11 +49,9 @@ class AttendanceViewModel(
                     _ui.value = _ui.value.copy(
                         isLoading = false,
                         isRefreshing = false,
-                        // open the sheet and populate its content
                         showViolationSheet = true,
                         violationToken = out.token,
                         violationMessage = out.message,
-                        // clear any toasts/banners
                         errorMessage = null,
                         successMessage = null
                     )
@@ -74,7 +73,14 @@ class AttendanceViewModel(
                 is LocationResult.Error -> postError(loc.message)
                 is LocationResult.Success -> {
                     _ui.value = _ui.value.copy(lastAccuracyMeters = loc.accuracy)
-                    when (val out = repo.checkIn(loc.latitude, loc.longitude, loc.accuracy , faceVerify = _ui.value.faceVerifyEnabled)) {
+                    when (val out = repo.checkIn(
+                        lat = loc.latitude,
+                        lng = loc.longitude,
+                        accuracy = loc.accuracy,
+                        faceRecognitionQualityScore = _ui.value.faceRecognitionQualityScore,
+                        faceRecognition = _ui.value.faceRecognitionEnabled,
+                        faceVerify = _ui.value.faceVerifyEnabled
+                    )) {
                         is AttendanceOutcome.Success -> {
                             _ui.value = _ui.value.copy(
                                 isLoading = false,
@@ -88,11 +94,9 @@ class AttendanceViewModel(
                             _ui.value = _ui.value.copy(
                                 isLoading = false,
                                 isRefreshing = false,
-                                // open the sheet and populate its content
                                 showViolationSheet = true,
                                 violationToken = out.token,
                                 violationMessage = out.message,
-                                // clear any toasts/banners
                                 errorMessage = null,
                                 successMessage = null
                             )
@@ -112,7 +116,14 @@ class AttendanceViewModel(
                 is LocationResult.Error -> postError(loc.message)
                 is LocationResult.Success -> {
                     _ui.value = _ui.value.copy(lastAccuracyMeters = loc.accuracy)
-                    when (val out = repo.checkOut(loc.latitude, loc.longitude, loc.accuracy , faceVerify = _ui.value.faceVerifyEnabled )) {
+                    when (val out = repo.checkOut(
+                        lat = loc.latitude,
+                        lng = loc.longitude,
+                        accuracy = loc.accuracy,
+                        faceRecognitionQualityScore = _ui.value.faceRecognitionQualityScore,
+                        faceRecognition = _ui.value.faceRecognitionEnabled,
+                        faceVerify = _ui.value.faceVerifyEnabled
+                    )) {
                         is AttendanceOutcome.Success -> {
                             _ui.value = _ui.value.copy(
                                 isLoading = false,
@@ -126,11 +137,9 @@ class AttendanceViewModel(
                             _ui.value = _ui.value.copy(
                                 isLoading = false,
                                 isRefreshing = false,
-                                // open the sheet and populate its content
                                 showViolationSheet = true,
                                 violationToken = out.token,
                                 violationMessage = out.message,
-                                // clear any toasts/banners
                                 errorMessage = null,
                                 successMessage = null
                             )
@@ -170,11 +179,9 @@ class AttendanceViewModel(
                     _ui.value = _ui.value.copy(
                         isLoading = false,
                         isRefreshing = false,
-                        // open the sheet and populate its content
                         showViolationSheet = true,
                         violationToken = out.token,
                         violationMessage = out.message,
-                        // clear any toasts/banners
                         errorMessage = null,
                         successMessage = null
                     )
@@ -206,6 +213,14 @@ class AttendanceViewModel(
     fun setFaceVerifyEnabled(enabled: Boolean) {
         _ui.value = _ui.value.copy(faceVerifyEnabled = enabled)
     }
+
+    fun setFaceRecognitionQualityScore(score: Float) {
+        _ui.value = _ui.value.copy(faceRecognitionQualityScore = score)
+    }
+
+    fun setFaceRecognitionEnabled(enabled: Boolean) {
+        _ui.value = _ui.value.copy(faceRecognitionEnabled = enabled)
+    }
 }
 
 data class AttendanceUiState(
@@ -216,7 +231,10 @@ data class AttendanceUiState(
     val successMessage: String? = null,
     val lastAccuracyMeters: Float? = null,
 
+    // Face verification flags
     val faceVerifyEnabled: Boolean = false,
+    val faceRecognitionEnabled: Boolean = false,
+    val faceRecognitionQualityScore: Float = 0.0f,
 
     // Violation flow
     val showViolationSheet: Boolean = false,
@@ -224,4 +242,3 @@ data class AttendanceUiState(
     val violationMessage: String? = null,
     val isSubmittingViolation: Boolean = false
 )
-

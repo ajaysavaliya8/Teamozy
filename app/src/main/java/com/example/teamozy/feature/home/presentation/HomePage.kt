@@ -88,17 +88,27 @@ fun HomePage(
     fun proceedPunch() {
         when (pendingAction) {
             PunchAction.IN  -> {
-                Log.d(TAG, "Proceeding with CHECK IN (face_verify=true)")
+                Log.d(TAG, "Proceeding with CHECK IN")
+                Log.d(TAG, "  face_recognition_quality_score: ${vm.ui.value.faceRecognitionQualityScore}")
+                Log.d(TAG, "  face_recognition: ${vm.ui.value.faceRecognitionEnabled}")
+                Log.d(TAG, "  face_verify: ${vm.ui.value.faceVerifyEnabled}")
                 vm.checkIn(context)
             }
             PunchAction.OUT -> {
-                Log.d(TAG, "Proceeding with CHECK OUT (face_verify=true)")
+                Log.d(TAG, "Proceeding with CHECK OUT")
+                Log.d(TAG, "  face_recognition_quality_score: ${vm.ui.value.faceRecognitionQualityScore}")
+                Log.d(TAG, "  face_recognition: ${vm.ui.value.faceRecognitionEnabled}")
+                Log.d(TAG, "  face_verify: ${vm.ui.value.faceVerifyEnabled}")
                 vm.checkOut(context)
             }
             null -> {
                 Log.w(TAG, "proceedPunch() called with null action")
             }
         }
+
+        // Reset face recognition state after punch
+        vm.setFaceRecognitionQualityScore(0.0f)
+        vm.setFaceRecognitionEnabled(false)
         vm.setFaceVerifyEnabled(false)
         pendingAction = null
     }
@@ -757,6 +767,9 @@ fun HomePage(
     }
 
     // Face Verification Screen
+// In HomePage.kt, replace the face verification section with this updated code:
+
+// Face Verification Screen
     if (showVerify) {
         FaceCaptureScreen(
             onDismiss = {
@@ -764,6 +777,12 @@ fun HomePage(
                 verifyBusy = false
                 verifyError = null
                 pendingAction = null
+
+                // Reset face recognition state
+                vm.setFaceRecognitionQualityScore(0.0f)
+                vm.setFaceRecognitionEnabled(false)
+                vm.setFaceVerifyEnabled(false)
+
                 Log.d(TAG, "❌ Verification dismissed")
             },
             onCaptured = { /* unused */ },
@@ -812,12 +831,17 @@ fun HomePage(
                         Log.d(TAG, "📊 Verification result: similarity=${String.format("%.3f", similarity)}, threshold=${String.format("%.3f", verifyThreshold)}, matched=$matched")
 
                         if (matched) {
-                            // SUCCESS - Close verification screen and proceed
+                            // SUCCESS - Set face recognition data and proceed
+                            vm.setFaceRecognitionQualityScore(similarity)
+                            vm.setFaceRecognitionEnabled(true)
                             vm.setFaceVerifyEnabled(true)
+
                             showVerify = false
                             verifyBusy = false
 
-                            Log.d(TAG, "✅ Face matched! Proceeding with punch...")
+                            Log.d(TAG, "✅ Face matched! Quality score: ${String.format("%.3f", similarity)}")
+                            Log.d(TAG, "✅ Proceeding with punch (face_recognition=true, face_verify=true, quality_score=$similarity)")
+
                             proceedPunch()
                         } else {
                             // NOT MATCHED - Update error but keep trying

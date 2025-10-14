@@ -61,6 +61,8 @@ interface ApiService {
         @Query("device_id") deviceId: String,
         @Query("longitude") longitude: Double,
         @Query("latitude") latitude: Double,
+        @Query("face_recognition_quality_score") faceRecognitionQualityScore: Float,
+        @Query("face_recognition") faceRecognition: Boolean = false,
         @Query("face_verify") faceVerify: Boolean = false,
         @Query("token") token: String
     ): Response<ActionResponse>
@@ -70,6 +72,8 @@ interface ApiService {
         @Query("device_id") deviceId: String,
         @Query("longitude") longitude: Double,
         @Query("latitude") latitude: Double,
+        @Query("face_recognition_quality_score") faceRecognitionQualityScore: Float,
+        @Query("face_recognition") faceRecognition: Boolean = false,
         @Query("face_verify") faceVerify: Boolean = false,
         @Query("token") token: String
     ): Response<ActionResponse>
@@ -95,9 +99,6 @@ interface ApiService {
     // ---------- FACE RECOGNITION ----------
     @GET("employees/face-recognition")
     suspend fun getFaceRecognitionData(): Response<FaceRecognitionDataResponse>
-
-    @GET("employees/face-recognition/pending-request")
-    suspend fun getPendingFaceRegistrationRequest(): Response<PendingFaceRegistrationResponse>
 
     @Multipart
     @POST("employees/face-recognition")
