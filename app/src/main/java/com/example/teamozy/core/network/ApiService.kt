@@ -56,6 +56,44 @@ interface ApiService {
         @Query("token") token: String
     ): Response<CheckStatusResponse>
 
+    @POST("check-in")
+    suspend fun checkIn(
+        @Query("device_id") deviceId: String,
+        @Query("longitude") longitude: Double,
+        @Query("latitude") latitude: Double,
+        @Query("token") token: String
+    ): Response<CheckInResponse>
+
+    @FormUrlEncoded
+    @POST("check-in-signature")
+    suspend fun checkInSignature(
+        @Field("t_token") tToken: String,
+        @Field("face_recognition_quality_score") faceRecognitionQualityScore: Float? = null,
+        @Field("face_verify") faceVerify: Boolean = false,
+        @Field("late_reason") lateReason: String? = null,
+        @Field("out_of_range_reason") outOfRangeReason: String? = null,
+        @Query("token") token: String
+    ): Response<CheckInSignatureResponse>
+
+    @POST("check-out")
+    suspend fun checkOut(
+        @Query("device_id") deviceId: String,
+        @Query("longitude") longitude: Double,
+        @Query("latitude") latitude: Double,
+        @Query("token") token: String
+    ): Response<CheckOutResponse>
+
+    @FormUrlEncoded
+    @POST("check-out-signature")
+    suspend fun checkOutSignature(
+        @Field("t_token") tToken: String,
+        @Field("face_recognition_quality_score") faceRecognitionQualityScore: Float? = null,
+        @Field("face_verify") faceVerify: Boolean = false,
+        @Field("early_reason") earlyReason: String? = null,
+        @Field("out_of_range_reason") outOfRangeReason: String? = null,
+        @Query("token") token: String
+    ): Response<CheckOutSignatureResponse>
+
     // ---------- FACE RECOGNITION ----------
     @GET("employees/face-recognition")
     suspend fun getFaceRecognitionData(): Response<FaceRecognitionDataResponse>

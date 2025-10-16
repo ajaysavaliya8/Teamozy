@@ -27,7 +27,9 @@ import com.example.teamozy.core.network.NetworkModule
 import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
 import com.example.teamozy.feature.attendance.presentation.AttendanceViewModel
+import com.example.teamozy.feature.face.data.EmbeddingExtractor
 import com.example.teamozy.feature.face.data.FaceStore
+import com.example.teamozy.feature.face.presentation.FaceCaptureScreen
 import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
 import com.example.teamozy.feature.profile.presentation.ProfileScreen
 import kotlinx.coroutines.Dispatchers
@@ -58,9 +60,12 @@ fun HomePage(
 
     // Navigation state
     var currentScreen by remember { mutableStateOf(HomeScreen.HOME) }
+    var showRegistration by remember { mutableStateOf(false) }
+    var registrationBusy by remember { mutableStateOf(false) }
 
-    // Get dynamic threshold from server (saved during login)
-    val verifyThreshold = remember { prefs.faceThreshold }
+    // Face verification state
+    var faceVerifyBusy by remember { mutableStateOf(false) }
+    var faceVerifyError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         // Refresh status when app opens
@@ -69,15 +74,11 @@ fun HomePage(
         val store = FaceStore.getInstance(context)
         if (store.hasEnrollment()) {
             val embedding = store.loadEmbedding()
-            Log.d(TAG, "Stored embedding loaded: size=${embedding?.size}, first5=${embedding?.take(5)}")
-            Log.d(TAG, "Face accuracy threshold: $verifyThreshold (from server)")
+            Log.d(TAG, "Stored embedding loaded: size=${embedding?.size}")
         } else {
             Log.d(TAG, "No face enrollment found")
         }
     }
-
-    var showRegistration by remember { mutableStateOf(false) }
-    var registrationBusy by remember { mutableStateOf(false) }
 
     // Show error messages in snackbar
     LaunchedEffect(ui.errorMessage) {
@@ -228,6 +229,39 @@ fun HomePage(
                         )
                     }
 
+                    // Check-in or check-out message (late/early/out of range)
+                    if (ui.checkInMessage != null || ui.checkOutMessage != null) {
+                        val message = ui.checkInMessage ?: ui.checkOutMessage
+                        Spacer(Modifier.height(8.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFFFF3CD)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFF856404)
+                                )
+                                Text(
+                                    text = message ?: "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF856404)
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(Modifier.height(32.dp))
 
                     // Main Action Button
@@ -242,30 +276,36 @@ fun HomePage(
                                 // Show Check In button
                                 Button(
                                     onClick = {
-                                        // TODO: Implement check-in logic
-                                        scope.launch {
-                                            snack.showSnackbar("Check-in functionality coming soon")
-                                        }
+                                        vm.startCheckIn(context)
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(56.dp),
+                                    enabled = !ui.isLoading,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = Color(0xFF00C896)
                                     ),
                                     shape = RoundedCornerShape(16.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        "Check In",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    if (ui.isLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Filled.CheckCircle,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "Check In",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
 
@@ -273,30 +313,36 @@ fun HomePage(
                                 // Show Check Out button
                                 Button(
                                     onClick = {
-                                        // TODO: Implement check-out logic
-                                        scope.launch {
-                                            snack.showSnackbar("Check-out functionality coming soon")
-                                        }
+                                        vm.startCheckOut(context)
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(56.dp),
+                                    enabled = !ui.isLoading,
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = Color(0xFFFF6B6B)
                                     ),
                                     shape = RoundedCornerShape(16.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Filled.ExitToApp,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        "Check Out",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    if (ui.isLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Filled.ExitToApp,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "Check Out",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
 
@@ -397,7 +443,6 @@ fun HomePage(
             }
 
             HomeScreen.ATTENDANCE -> {
-                // Placeholder for future Attendance screen
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -418,19 +463,13 @@ fun HomePage(
                     Log.d(TAG, "🚪 Logout - clearing all data")
                     scope.launch {
                         try {
-                            // Clear face data
                             withContext(Dispatchers.IO) {
                                 FaceStore.getInstance(context).clear()
                             }
-                            Log.d(TAG, "✅ Face data cleared")
-
-                            // Clear preferences
                             prefs.clearAll()
-                            Log.d(TAG, "✅ Preferences cleared")
-
                             onLogout()
                         } catch (e: Exception) {
-                            Log.e(TAG, "❌ Error during logout cleanup", e)
+                            Log.e(TAG, "❌ Error during logout", e)
                             onLogout()
                         }
                     }
@@ -440,39 +479,138 @@ fun HomePage(
         }
     }
 
+    // Face Verification Screen (for check-in OR check-out)
+    if (ui.showFaceVerification) {
+        val minimumScore = ui.checkInMinimumQualityScore ?: ui.checkOutMinimumQualityScore ?: 0.57f
+
+        FaceCaptureScreen(
+            onDismiss = {
+                vm.onFaceVerificationCancelled()
+                faceVerifyBusy = false
+                faceVerifyError = null
+            },
+            onCaptured = { /* unused */ },
+            onBitmapCaptured = { bitmap ->
+                if (faceVerifyBusy) {
+                    bitmap.recycle()
+                    return@FaceCaptureScreen
+                }
+
+                faceVerifyBusy = true
+                faceVerifyError = null
+
+                scope.launch {
+                    try {
+                        val store = FaceStore.getInstance(context)
+                        val storedEmbedding = withContext(Dispatchers.IO) {
+                            store.loadEmbedding()
+                        }
+
+                        if (storedEmbedding == null) {
+                            faceVerifyError = "Face data not found. Please register first."
+                            faceVerifyBusy = false
+                            bitmap.recycle()
+                            return@launch
+                        }
+
+                        val extractor = EmbeddingExtractor.getInstance(context)
+                        val liveEmbedding = withContext(Dispatchers.Default) {
+                            extractor.extractOrNull(bitmap)
+                        }
+
+                        bitmap.recycle()
+
+                        if (liveEmbedding == null) {
+                            faceVerifyError = "No face detected. Please try again."
+                            faceVerifyBusy = false
+                            return@launch
+                        }
+
+                        val similarityScore = EmbeddingExtractor.cosineSimilarity(
+                            storedEmbedding,
+                            liveEmbedding
+                        )
+
+                        Log.d(TAG, "Face verification score: $similarityScore (threshold: $minimumScore)")
+
+                        if (similarityScore >= minimumScore) {
+                            // Face verified successfully
+                            vm.onFaceVerificationComplete(
+                                qualityScore = similarityScore,
+                                verified = true
+                            )
+                        } else {
+                            faceVerifyError = "Face verification failed. Score: ${String.format("%.2f", similarityScore)} (need: ${String.format("%.2f", minimumScore)})"
+                            faceVerifyBusy = false
+                        }
+
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Face verification error", e)
+                        faceVerifyError = "Verification failed: ${e.message}"
+                        faceVerifyBusy = false
+                        bitmap.recycle()
+                    }
+                }
+            },
+            showReasonField = false,
+            reasonMessage = null,
+            isSubmitting = faceVerifyBusy,
+            onSubmit = { },
+            serverError = faceVerifyError
+        )
+    }
+
+    // Reason Dialog (for late/early or out of range violations)
+    if (ui.showReasonDialog) {
+        // Determine if this is check-in or check-out
+        val isCheckIn = ui.checkInTToken != null
+        val isLateOrEarly = if (isCheckIn) ui.checkInIsLate else ui.checkOutIsEarly
+        val isOutOfRange = if (isCheckIn) ui.checkInIsOutOfRange else ui.checkOutIsOutOfRange
+        val lateOrEarlyReasonRequired = if (isCheckIn) ui.checkInLateReasonRequired else ui.checkOutEarlyReasonRequired
+        val outOfRangeReasonRequired = if (isCheckIn) ui.checkInOutOfRangeReasonRequired else ui.checkOutOutOfRangeReasonRequired
+
+        ReasonDialog(
+            isCheckIn = isCheckIn,
+            isLateOrEarly = isLateOrEarly,
+            isOutOfRange = isOutOfRange,
+            lateOrEarlyReasonRequired = lateOrEarlyReasonRequired,
+            outOfRangeReasonRequired = outOfRangeReasonRequired,
+            onDismiss = { vm.onReasonDialogDismissed() },
+            onSubmit = { lateOrEarlyReason, outOfRangeReason ->
+                if (isCheckIn) {
+                    vm.completeCheckIn(lateOrEarlyReason, outOfRangeReason)
+                } else {
+                    vm.completeCheckOut(lateOrEarlyReason, outOfRangeReason)
+                }
+            }
+        )
+    }
+
     // Face Registration Screen
     if (showRegistration) {
         FaceRegistrationScreen(
             onDismiss = {
                 showRegistration = false
-                Log.d(TAG, "❌ Registration dismissed")
             },
             onEnrolled = { embedding, bitmap ->
                 registrationBusy = true
-                Log.d(TAG, "📸 Face registration complete - sending to API")
 
                 scope.launch {
                     try {
                         val api = NetworkModule.apiService
 
-                        // Convert bitmap to JPEG
                         val imageBytes = withContext(Dispatchers.Default) {
                             val outputStream = java.io.ByteArrayOutputStream()
                             bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
                             outputStream.toByteArray()
                         }
 
-                        // Convert embedding to JSON
                         val embeddingJson = com.google.gson.Gson().toJson(embedding.toList())
 
-                        // Create multipart request
                         val imagePart = okhttp3.MultipartBody.Part.createFormData(
                             "face_image",
                             "face_${System.currentTimeMillis()}.jpg",
-                            okhttp3.RequestBody.create(
-                                "image/jpeg".toMediaTypeOrNull(),
-                                imageBytes
-                            )
+                            okhttp3.RequestBody.create("image/jpeg".toMediaTypeOrNull(), imageBytes)
                         )
 
                         val faceDataPart = okhttp3.RequestBody.create(
@@ -490,7 +628,6 @@ fun HomePage(
                             "Face registration from mobile app"
                         )
 
-                        // Send to API
                         val response = withContext(Dispatchers.IO) {
                             api.registerFaceRecognition(
                                 face_image = imagePart,
@@ -504,17 +641,11 @@ fun HomePage(
                         showRegistration = false
 
                         if (response.isSuccessful) {
-                            Log.d(TAG, "✅ Face registration successful!")
                             snack.showSnackbar("Face registered successfully!")
-
-                            // Save locally after success
                             withContext(Dispatchers.IO) {
                                 FaceStore.getInstance(context).saveEmbedding(embedding)
                             }
-
-                            // Refresh status to get updated face_vector
                             vm.refreshStatus()
-
                             bitmap.recycle()
                         } else {
                             val message = try {
@@ -522,12 +653,11 @@ fun HomePage(
                             } catch (e: Exception) {
                                 "Failed to register face"
                             }
-                            Log.e(TAG, "❌ Registration failed: $message")
                             snack.showSnackbar(message)
                         }
 
                     } catch (e: Exception) {
-                        Log.e(TAG, "❌ Exception in face registration", e)
+                        Log.e(TAG, "Registration error", e)
                         registrationBusy = false
                         showRegistration = false
                         bitmap.recycle()
@@ -537,4 +667,111 @@ fun HomePage(
             }
         )
     }
+}
+
+@Composable
+fun ReasonDialog(
+    isCheckIn: Boolean,
+    isLateOrEarly: Boolean,
+    isOutOfRange: Boolean,
+    lateOrEarlyReasonRequired: Boolean,
+    outOfRangeReasonRequired: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (lateOrEarlyReason: String?, outOfRangeReason: String?) -> Unit
+) {
+    var lateOrEarlyReason by remember { mutableStateOf("") }
+    var outOfRangeReason by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Attendance Note") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (isLateOrEarly) {
+                    Text(
+                        text = if (isCheckIn) {
+                            "You are checking in late"
+                        } else {
+                            "You are checking out early"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFFF9800)
+                    )
+                }
+
+                if (isOutOfRange) {
+                    Text(
+                        text = "You are outside the designated area",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFFFF9800)
+                    )
+                }
+
+                if (lateOrEarlyReasonRequired) {
+                    OutlinedTextField(
+                        value = lateOrEarlyReason,
+                        onValueChange = { lateOrEarlyReason = it },
+                        label = {
+                            Text(
+                                if (isCheckIn) "Late Reason *" else "Early Check-Out Reason *"
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4
+                    )
+                }
+
+                if (outOfRangeReasonRequired) {
+                    OutlinedTextField(
+                        value = outOfRangeReason,
+                        onValueChange = { outOfRangeReason = it },
+                        label = { Text("Out of Range Reason *") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4
+                    )
+                }
+
+                if (!lateOrEarlyReasonRequired && !outOfRangeReasonRequired) {
+                    Text(
+                        text = if (isCheckIn) {
+                            "Tap Continue to complete check-in"
+                        } else {
+                            "Tap Continue to complete check-out"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val lateOrEarly = if (lateOrEarlyReasonRequired && lateOrEarlyReason.isNotBlank())
+                        lateOrEarlyReason else null
+                    val outRange = if (outOfRangeReasonRequired && outOfRangeReason.isNotBlank())
+                        outOfRangeReason else null
+
+                    // Validate required fields
+                    if (lateOrEarlyReasonRequired && lateOrEarlyReason.isBlank()) return@Button
+                    if (outOfRangeReasonRequired && outOfRangeReason.isBlank()) return@Button
+
+                    onSubmit(lateOrEarly, outRange)
+                },
+                enabled = (!lateOrEarlyReasonRequired || lateOrEarlyReason.isNotBlank()) &&
+                        (!outOfRangeReasonRequired || outOfRangeReason.isNotBlank())
+            ) {
+                Text("Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

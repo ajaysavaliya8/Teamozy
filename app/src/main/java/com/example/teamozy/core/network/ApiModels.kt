@@ -11,7 +11,7 @@ data class BasicResponse(
     val require_face_break: Boolean? = null
 )
 
-// -------- New Check Status Response --------
+// -------- Check Status Response --------
 data class CheckStatusResponse(
     val status: String,           // "success" | "error"
     val message: String? = null,
@@ -26,6 +26,53 @@ data class CheckStatusData(
     val message: String,
     val attendance_status: String? = null,
     val is_complete: Boolean? = null
+)
+
+// -------- Check-In Response --------
+data class CheckInResponse(
+    val status: String,           // "success" | "error"
+    val message: String? = null,
+    val face_verification_required: Boolean? = null,
+    val minimum_quality_score: Float? = null,
+    val t_token: String? = null,
+    val is_late: Boolean? = null,
+    val is_out_of_range: Boolean? = null,
+    val late_reason_required: Boolean? = null,
+    val out_of_range_reason_required: Boolean? = null
+)
+
+// -------- Check-In Signature Response --------
+data class CheckInSignatureResponse(
+    val status: String,           // "success" | "error"
+    val message: String,
+    val attendance_record_id: Int? = null,
+    val check_in_time: String? = null
+)
+
+// -------- Check-Out Response --------
+data class CheckOutResponse(
+    val status: String,           // "success" | "error"
+    val message: String? = null,
+    val face_verification_required: Boolean? = null,
+    val minimum_quality_score: Float? = null,
+    val t_token: String? = null,
+    val work_hours: Float? = null,
+    val is_early: Boolean? = null,
+    val is_out_of_range: Boolean? = null,
+    val early_reason_required: Boolean? = null,
+    val out_of_range_reason_required: Boolean? = null
+)
+
+// -------- Check-Out Signature Response --------
+data class CheckOutSignatureResponse(
+    val status: String,           // "success" | "error"
+    val message: String,
+    val check_out_time: String? = null,
+    val work_hours: Float? = null,
+    val work_minutes: Int? = null,
+    val attendance_status: String? = null,
+    val early_leave_minutes: Int? = null,
+    val location_violation: Boolean? = null
 )
 
 // Verify token endpoint response
