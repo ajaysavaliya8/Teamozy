@@ -1,10 +1,7 @@
 package com.example.teamozy.feature.attendance.presentation
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.teamozy.core.utils.LocationHelper
-import com.example.teamozy.core.utils.LocationResult
 import com.example.teamozy.feature.attendance.data.AttendanceOutcome
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
 import kotlinx.coroutines.delay
@@ -14,11 +11,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Adds:
- * - refreshStatus() with isRefreshing toggle
- * - violation bottom-sheet flow (token + message + submitReason)
- * - single source of truth for button: canCheckIn
- * - face recognition quality score tracking
+ * AttendanceViewModel
+ * Handles checking attendance status and UI state management
  */
 class AttendanceViewModel(
     private val repo: AttendanceRepository
@@ -27,182 +21,57 @@ class AttendanceViewModel(
     private val _ui = MutableStateFlow(AttendanceUiState())
     val ui: StateFlow<AttendanceUiState> = _ui.asStateFlow()
 
+    /**
+     * Refresh the current attendance status from server
+     */
     fun refreshStatus() {
         if (_ui.value.isRefreshing) return
+
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(isRefreshing = true, errorMessage = null)
-            when (val out = repo.getStatus()) {
+            _ui.value = _ui.value.copy(
+                isRefreshing = true,
+                errorMessage = null
+            )
+
+            when (val outcome = repo.getStatus()) {
                 is AttendanceOutcome.Success -> {
                     _ui.value = _ui.value.copy(
                         isRefreshing = false,
-                        canCheckIn = out.canCheckIn
+                        currentState = outcome.currentState,
+                        faceRecognitionEnabled = outcome.faceRecognitionEnabled,
+                        faceVector = outcome.faceVector,
+                        minimumQualityScore = outcome.minimumQualityScore,
+                        statusMessage = outcome.message,
+                        attendanceStatus = outcome.attendanceStatus,
+                        isComplete = outcome.isComplete,
+                        errorMessage = null
                     )
                 }
+
                 is AttendanceOutcome.Error -> {
                     _ui.value = _ui.value.copy(
                         isRefreshing = false,
-                        errorMessage = out.message
+                        errorMessage = outcome.message
                     )
                     autoClearMessages()
-                }
-                is AttendanceOutcome.Violation -> {
-                    _ui.value = _ui.value.copy(
-                        isLoading = false,
-                        isRefreshing = false,
-                        showViolationSheet = true,
-                        violationToken = out.token,
-                        violationMessage = out.message,
-                        errorMessage = null,
-                        successMessage = null
-                    )
                 }
             }
         }
     }
 
+    /**
+     * Clear success and error messages
+     */
     fun clearMessages() {
-        _ui.value = _ui.value.copy(successMessage = null, errorMessage = null)
-    }
-
-    fun checkIn(context: Context) {
-        if (_ui.value.isLoading) return
-        viewModelScope.launch {
-            _ui.value = _ui.value.copy(isLoading = true, errorMessage = null, successMessage = null)
-
-            when (val loc = LocationHelper(context).getCurrentLocation()) {
-                is LocationResult.Error -> postError(loc.message)
-                is LocationResult.Success -> {
-                    _ui.value = _ui.value.copy(lastAccuracyMeters = loc.accuracy)
-                    when (val out = repo.checkIn(
-                        lat = loc.latitude,
-                        lng = loc.longitude,
-                        accuracy = loc.accuracy,
-                        faceRecognitionQualityScore = _ui.value.faceRecognitionQualityScore,
-                        faceRecognition = _ui.value.faceRecognitionEnabled,
-                        faceVerify = _ui.value.faceVerifyEnabled
-                    )) {
-                        is AttendanceOutcome.Success -> {
-                            _ui.value = _ui.value.copy(
-                                isLoading = false,
-                                canCheckIn = out.canCheckIn,
-                                successMessage = "Checked in successfully."
-                            )
-                            autoClearMessages()
-                        }
-                        is AttendanceOutcome.Error -> postError(out.message)
-                        is AttendanceOutcome.Violation -> {
-                            _ui.value = _ui.value.copy(
-                                isLoading = false,
-                                isRefreshing = false,
-                                showViolationSheet = true,
-                                violationToken = out.token,
-                                violationMessage = out.message,
-                                errorMessage = null,
-                                successMessage = null
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fun checkOut(context: Context) {
-        if (_ui.value.isLoading) return
-        viewModelScope.launch {
-            _ui.value = _ui.value.copy(isLoading = true, errorMessage = null, successMessage = null)
-
-            when (val loc = LocationHelper(context).getCurrentLocation()) {
-                is LocationResult.Error -> postError(loc.message)
-                is LocationResult.Success -> {
-                    _ui.value = _ui.value.copy(lastAccuracyMeters = loc.accuracy)
-                    when (val out = repo.checkOut(
-                        lat = loc.latitude,
-                        lng = loc.longitude,
-                        accuracy = loc.accuracy,
-                        faceRecognitionQualityScore = _ui.value.faceRecognitionQualityScore,
-                        faceRecognition = _ui.value.faceRecognitionEnabled,
-                        faceVerify = _ui.value.faceVerifyEnabled
-                    )) {
-                        is AttendanceOutcome.Success -> {
-                            _ui.value = _ui.value.copy(
-                                isLoading = false,
-                                canCheckIn = out.canCheckIn,
-                                successMessage = "Checked out successfully."
-                            )
-                            autoClearMessages()
-                        }
-                        is AttendanceOutcome.Error -> postError(out.message)
-                        is AttendanceOutcome.Violation -> {
-                            _ui.value = _ui.value.copy(
-                                isLoading = false,
-                                isRefreshing = false,
-                                showViolationSheet = true,
-                                violationToken = out.token,
-                                violationMessage = out.message,
-                                errorMessage = null,
-                                successMessage = null
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fun submitViolation(reason: String) {
-        val token = _ui.value.violationToken ?: return
-        if (reason.isBlank() || _ui.value.isSubmittingViolation) return
-
-        viewModelScope.launch {
-            _ui.value = _ui.value.copy(isSubmittingViolation = true, errorMessage = null)
-            when (val out = repo.submitViolation(token, reason)) {
-                is AttendanceOutcome.Success -> {
-                    _ui.value = _ui.value.copy(
-                        isSubmittingViolation = false,
-                        showViolationSheet = false,
-                        violationToken = null,
-                        violationMessage = null,
-                        canCheckIn = out.canCheckIn,
-                        successMessage = "Submitted reason. You're good to go."
-                    )
-                    autoClearMessages()
-                }
-                is AttendanceOutcome.Error -> {
-                    _ui.value = _ui.value.copy(
-                        isSubmittingViolation = false,
-                        errorMessage = out.message
-                    )
-                    autoClearMessages()
-                }
-                is AttendanceOutcome.Violation -> {
-                    _ui.value = _ui.value.copy(
-                        isLoading = false,
-                        isRefreshing = false,
-                        showViolationSheet = true,
-                        violationToken = out.token,
-                        violationMessage = out.message,
-                        errorMessage = null,
-                        successMessage = null
-                    )
-                }
-            }
-        }
-    }
-
-    fun dismissViolationSheet() {
         _ui.value = _ui.value.copy(
-            showViolationSheet = false,
-            violationToken = null,
-            violationMessage = null
+            successMessage = null,
+            errorMessage = null
         )
     }
 
-    private fun postError(msg: String) {
-        _ui.value = _ui.value.copy(isLoading = false, errorMessage = msg)
-        autoClearMessages()
-    }
-
+    /**
+     * Auto-clear messages after a delay
+     */
     private fun autoClearMessages() {
         viewModelScope.launch {
             delay(4500)
@@ -210,35 +79,42 @@ class AttendanceViewModel(
         }
     }
 
-    fun setFaceVerifyEnabled(enabled: Boolean) {
-        _ui.value = _ui.value.copy(faceVerifyEnabled = enabled)
+    /**
+     * Helper to determine if user can check in based on current state
+     */
+    fun canCheckIn(): Boolean {
+        return _ui.value.currentState == "CHECK_IN_NEEDED"
     }
 
-    fun setFaceRecognitionQualityScore(score: Float) {
-        _ui.value = _ui.value.copy(faceRecognitionQualityScore = score)
+    /**
+     * Helper to determine if user can check out based on current state
+     */
+    fun canCheckOut(): Boolean {
+        return _ui.value.currentState == "CHECK_OUT_NEEDED"
     }
 
-    fun setFaceRecognitionEnabled(enabled: Boolean) {
-        _ui.value = _ui.value.copy(faceRecognitionEnabled = enabled)
+    /**
+     * Helper to determine if attendance is complete for today
+     */
+    fun isComplete(): Boolean {
+        return _ui.value.currentState == "COMPLETED"
     }
 }
 
+/**
+ * UI State for Attendance
+ */
 data class AttendanceUiState(
-    val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
-    val canCheckIn: Boolean = true,
     val errorMessage: String? = null,
     val successMessage: String? = null,
-    val lastAccuracyMeters: Float? = null,
 
-    // Face verification flags
-    val faceVerifyEnabled: Boolean = false,
+    // Status data from API
+    val currentState: String = "CHECK_IN_NEEDED", // "CHECK_IN_NEEDED" | "CHECK_OUT_NEEDED" | "COMPLETED"
     val faceRecognitionEnabled: Boolean = false,
-    val faceRecognitionQualityScore: Float = 0.0f,
-
-    // Violation flow
-    val showViolationSheet: Boolean = false,
-    val violationToken: String? = null,
-    val violationMessage: String? = null,
-    val isSubmittingViolation: Boolean = false
+    val faceVector: String? = null,
+    val minimumQualityScore: Float = 0.57f,
+    val statusMessage: String = "",
+    val attendanceStatus: String? = null,
+    val isComplete: Boolean? = null
 )

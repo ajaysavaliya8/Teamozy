@@ -27,21 +27,23 @@ import com.example.teamozy.core.network.NetworkModule
 import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
 import com.example.teamozy.feature.attendance.presentation.AttendanceViewModel
-import com.example.teamozy.feature.face.data.EmbeddingExtractor
 import com.example.teamozy.feature.face.data.FaceStore
-import com.example.teamozy.feature.face.domain.FaceVerifier
-import com.example.teamozy.feature.face.presentation.FaceCaptureScreen
 import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
 import com.example.teamozy.feature.profile.presentation.ProfileScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import org.json.JSONObject
 
 private const val TAG = "HomePage"
-private enum class PunchAction { IN, OUT }
 private enum class HomeScreen { HOME, ATTENDANCE, PROFILE }
+
+@Composable
+fun rememberAttendanceViewModel(context: android.content.Context): AttendanceViewModel {
+    return remember {
+        AttendanceViewModel(AttendanceRepository(context))
+    }
+}
 
 @Composable
 fun HomePage(
@@ -61,6 +63,7 @@ fun HomePage(
     val verifyThreshold = remember { prefs.faceThreshold }
 
     LaunchedEffect(Unit) {
+        // Refresh status when app opens
         vm.refreshStatus()
 
         val store = FaceStore.getInstance(context)
@@ -71,172 +74,22 @@ fun HomePage(
         } else {
             Log.d(TAG, "No face enrollment found")
         }
-
-        // Log face verification requirements
-        Log.d(TAG, "🎭 require_face_checkin: ${prefs.requireFaceCheckin}")
-        Log.d(TAG, "🎭 require_face_break: ${prefs.requireFaceBreak}")
     }
 
-    var pendingAction by remember { mutableStateOf<PunchAction?>(null) }
     var showRegistration by remember { mutableStateOf(false) }
-    var showVerify by remember { mutableStateOf(false) }
-    var verifyBusy by remember { mutableStateOf(false) }
-    var verifyError by remember { mutableStateOf<String?>(null) }
     var registrationBusy by remember { mutableStateOf(false) }
-    var checkingFaceData by remember { mutableStateOf(false) }
 
-    fun proceedPunch() {
-        when (pendingAction) {
-            PunchAction.IN  -> {
-                Log.d(TAG, "Proceeding with CHECK IN")
-                Log.d(TAG, "  face_recognition_quality_score: ${vm.ui.value.faceRecognitionQualityScore}")
-                Log.d(TAG, "  face_recognition: ${vm.ui.value.faceRecognitionEnabled}")
-                Log.d(TAG, "  face_verify: ${vm.ui.value.faceVerifyEnabled}")
-                vm.checkIn(context)
-            }
-            PunchAction.OUT -> {
-                Log.d(TAG, "Proceeding with CHECK OUT")
-                Log.d(TAG, "  face_recognition_quality_score: ${vm.ui.value.faceRecognitionQualityScore}")
-                Log.d(TAG, "  face_recognition: ${vm.ui.value.faceRecognitionEnabled}")
-                Log.d(TAG, "  face_verify: ${vm.ui.value.faceVerifyEnabled}")
-                vm.checkOut(context)
-            }
-            null -> {
-                Log.w(TAG, "proceedPunch() called with null action")
-            }
+    // Show error messages in snackbar
+    LaunchedEffect(ui.errorMessage) {
+        ui.errorMessage?.let { error ->
+            snack.showSnackbar(error)
         }
-
-        // Reset face recognition state after punch
-        vm.setFaceRecognitionQualityScore(0.0f)
-        vm.setFaceRecognitionEnabled(false)
-        vm.setFaceVerifyEnabled(false)
-        pendingAction = null
     }
 
-    // Function to check face data from server
-    suspend fun checkFaceDataFromServer(): Boolean? {
-        Log.d(TAG, "🔍 checkFaceDataFromServer() - Starting...")
-        return try {
-            val api = NetworkModule.apiService
-            Log.d(TAG, "🌐 Calling GET /employees/face-recognition...")
-
-            val response = withContext(Dispatchers.IO) {
-                api.getFaceRecognitionData()
-            }
-
-            Log.d(TAG, "📥 GET response received: code=${response.code()}, isSuccessful=${response.isSuccessful}")
-
-            when {
-                response.isSuccessful && response.code() == 200 -> {
-                    val body = response.body()
-                    Log.d(TAG, "📦 Response body: status=${body?.status}, message=${body?.message}")
-                    Log.d(TAG, "📦 face_vector present: ${body?.face_vector != null}, length: ${body?.face_vector?.length ?: 0}")
-                    Log.d(TAG, "📦 threshold: ${body?.minimum_face_recognition_quality_score}")
-                    Log.d(TAG, "📦 require_face_checkin: ${body?.require_face_checkin}")
-                    Log.d(TAG, "📦 require_face_break: ${body?.require_face_break}")
-
-                    // Update threshold if provided
-                    body?.minimum_face_recognition_quality_score?.let { threshold ->
-                        prefs.faceThreshold = threshold
-                        Log.d(TAG, "✅ Updated face threshold from server: $threshold")
-                    }
-
-                    // Update face verification requirements if provided
-                    body?.require_face_checkin?.let { requireCheckin ->
-                        prefs.requireFaceCheckin = requireCheckin
-                        Log.d(TAG, "✅ Updated require_face_checkin from server: $requireCheckin")
-                    }
-
-                    body?.require_face_break?.let { requireBreak ->
-                        prefs.requireFaceBreak = requireBreak
-                        Log.d(TAG, "✅ Updated require_face_break from server: $requireBreak")
-                    }
-
-                    // Check if face_vector exists
-                    val faceVector = body?.face_vector
-                    if (!faceVector.isNullOrBlank()) {
-                        Log.d(TAG, "✅ face_vector exists on server - attempting to parse and save...")
-                        // Parse and save face vector locally
-                        try {
-                            Log.d(TAG, "📝 Parsing JSON array (length: ${faceVector.length})...")
-                            val jsonArray = org.json.JSONArray(faceVector)
-                            Log.d(TAG, "📝 JSON array parsed successfully, array length: ${jsonArray.length()}")
-
-                            val embedding = FloatArray(jsonArray.length()) { i ->
-                                jsonArray.getDouble(i).toFloat()
-                            }
-                            Log.d(TAG, "📝 FloatArray created: size=${embedding.size}, first 5 values: ${embedding.take(5)}")
-
-                            // Save to local storage
-                            Log.d(TAG, "💾 Saving embedding to local storage...")
-                            withContext(Dispatchers.IO) {
-                                FaceStore.getInstance(context).saveEmbedding(embedding)
-                            }
-
-                            Log.d(TAG, "✅ Face vector saved locally from server (size: ${embedding.size})")
-                            snack.showSnackbar("Face data synced from server")
-
-                            // Face data exists - proceed to verification
-                            Log.d(TAG, "✅ Returning TRUE - will proceed to VERIFICATION")
-                            true
-                        } catch (e: Exception) {
-                            Log.e(TAG, "❌ Failed to parse face vector from server", e)
-                            Log.e(TAG, "❌ Error type: ${e.javaClass.simpleName}, message: ${e.message}")
-                            snack.showSnackbar("Failed to sync face data")
-                            false
-                        }
-                    } else {
-                        // Face data doesn't exist - need registration
-                        Log.d(TAG, "⚠️ face_vector is null or blank on server")
-                        Log.d(TAG, "✅ Returning FALSE - will proceed to REGISTRATION")
-                        false
-                    }
-                }
-
-                response.code() == 403 -> {
-                    val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "❌ 403 Forbidden - errorBody: $errorBody")
-                    val message = extractErrorMessage(errorBody)
-                        ?: "Face recognition is not enabled for your account. Contact HR/Admin."
-
-                    Log.e(TAG, "❌ Face data access forbidden: $message")
-                    snack.showSnackbar(message)
-                    Log.d(TAG, "⚠️ Returning NULL - will stop flow")
-                    null
-                }
-
-                response.code() == 404 -> {
-                    val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "❌ 404 Not Found - errorBody: $errorBody")
-                    val message = extractErrorMessage(errorBody) ?: "Employee not found."
-
-                    Log.e(TAG, "❌ Employee not found: $message")
-                    snack.showSnackbar(message)
-                    Log.d(TAG, "⚠️ Returning NULL - will stop flow")
-                    null
-                }
-
-                else -> {
-                    val errorBody = response.errorBody()?.string()
-                    Log.e(TAG, "❌ Unexpected response code: ${response.code()}")
-                    Log.e(TAG, "❌ errorBody: $errorBody")
-                    val message = extractErrorMessage(errorBody)
-                        ?: "Failed to check face data. Please try again."
-
-                    Log.e(TAG, "❌ Get face data failed: code=${response.code()}, message=$message")
-                    snack.showSnackbar(message)
-                    Log.d(TAG, "⚠️ Returning NULL - will stop flow")
-                    null
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Exception in checkFaceDataFromServer", e)
-            Log.e(TAG, "❌ Exception type: ${e.javaClass.simpleName}, message: ${e.message}")
-            e.printStackTrace()
-            snack.showSnackbar("Network error. Please check your connection.")
-            Log.d(TAG, "⚠️ Returning NULL - will stop flow")
-            null
+    // Show success messages in snackbar
+    LaunchedEffect(ui.successMessage) {
+        ui.successMessage?.let { success ->
+            snack.showSnackbar(success)
         }
     }
 
@@ -253,7 +106,6 @@ fun HomePage(
                     icon = { Icon(if (currentScreen == HomeScreen.HOME) Icons.Filled.Home else Icons.Outlined.Home, "Home") },
                     label = { Text("Home") }
                 )
-
 
                 NavigationBarItem(
                     selected = currentScreen == HomeScreen.ATTENDANCE,
@@ -308,235 +160,235 @@ fun HomePage(
                                 )
                             }
 
-                            IconButton(
-                                onClick = { currentScreen = HomeScreen.PROFILE },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Filled.Person,
-                                    contentDescription = "Profile",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                                // Refresh button
+                                IconButton(
+                                    onClick = { vm.refreshStatus() },
+                                    enabled = !ui.isRefreshing
+                                ) {
+                                    if (ui.isRefreshing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Filled.Refresh,
+                                            contentDescription = "Refresh Status",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+
+                                IconButton(
+                                    onClick = { currentScreen = HomeScreen.PROFILE },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Person,
+                                        contentDescription = "Profile",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
                             }
                         }
                     }
 
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.height(24.dp))
 
                     // Greeting
                     Text(
                         text = "Hello, ${prefs.userName ?: "User"}",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 20.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
                         textAlign = TextAlign.Center
                     )
 
+                    Spacer(Modifier.height(8.dp))
+
+                    // Status message from server
+                    if (ui.statusMessage.isNotEmpty()) {
+                        Text(
+                            text = ui.statusMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
                     Spacer(Modifier.height(32.dp))
 
-                    // Main Punch Button
+                    // Main Action Button
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        val buttonText = if (ui.canCheckIn) "Check In" else "Check Out"
-                        val buttonColor = if (ui.canCheckIn) Color(0xFF00C896) else Color(0xFFFF6B6B)
-
-                        Button(
-                            onClick = {
-                                pendingAction = if (ui.canCheckIn) PunchAction.IN else PunchAction.OUT
-                                verifyError = null
-
-                                Log.d(TAG, "🔘 Check In/Out button clicked")
-                                Log.d(TAG, "📍 Pending action: $pendingAction")
-
-                                // Check if face verification is required
-                                val requireFaceCheckin = prefs.requireFaceCheckin
-                                Log.d(TAG, "🎭 require_face_checkin: $requireFaceCheckin")
-
-                                if (!requireFaceCheckin) {
-                                    // Face verification NOT required - proceed directly to check-in/check-out
-                                    Log.d(TAG, "✅ Face verification NOT required - proceeding directly to punch")
-                                    vm.setFaceVerifyEnabled(false)
-                                    proceedPunch()
-                                    return@Button
-                                }
-
-                                // Face verification IS required - check face data
-                                Log.d(TAG, "🎭 Face verification REQUIRED - checking face data...")
-                                checkingFaceData = true
-
-                                scope.launch {
-                                    try {
-                                        val store = FaceStore.getInstance(context)
-
-                                        // Check if face vector exists locally
-                                        val hasLocalEnrollment = store.hasEnrollment()
-                                        Log.d(TAG, "💾 Local enrollment exists: $hasLocalEnrollment")
-
-                                        if (!hasLocalEnrollment) {
-                                            Log.d(TAG, "⚠️ No local face data - checking server...")
-
-                                            // Call GET API to check server
-                                            val hasServerData = checkFaceDataFromServer()
-
-                                            checkingFaceData = false
-                                            Log.d(TAG, "🔄 Server check result: $hasServerData")
-
-                                            when (hasServerData) {
-                                                true -> {
-                                                    // Server has face data and it's now saved locally
-                                                    // Proceed to verification
-                                                    Log.d(TAG, "✅ Face data synced from server - showing VERIFICATION screen")
-                                                    showVerify = true
-                                                }
-                                                false -> {
-                                                    // Server confirmed no face data exists
-                                                    // Proceed to registration
-                                                    Log.d(TAG, "📝 No face data on server - showing REGISTRATION screen")
-                                                    showRegistration = true
-                                                }
-                                                null -> {
-                                                    // Error occurred (already shown to user via snackbar)
-                                                    Log.d(TAG, "❌ Error checking face data - STOPPING flow")
-                                                    pendingAction = null
-                                                }
-                                            }
-                                        } else {
-                                            // Local face data exists - proceed to verification
-                                            Log.d(TAG, "✅ Local face data exists - showing VERIFICATION screen")
-                                            checkingFaceData = false
-                                            showVerify = true
+                        when (ui.currentState) {
+                            "CHECK_IN_NEEDED" -> {
+                                // Show Check In button
+                                Button(
+                                    onClick = {
+                                        // TODO: Implement check-in logic
+                                        scope.launch {
+                                            snack.showSnackbar("Check-in functionality coming soon")
                                         }
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "❌ Error in button click handler", e)
-                                        Log.e(TAG, "❌ Exception type: ${e.javaClass.simpleName}, message: ${e.message}")
-                                        e.printStackTrace()
-                                        checkingFaceData = false
-                                        snack.showSnackbar("An error occurred. Please try again.")
-                                        pendingAction = null
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF00C896)
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Check In",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            "CHECK_OUT_NEEDED" -> {
+                                // Show Check Out button
+                                Button(
+                                    onClick = {
+                                        // TODO: Implement check-out logic
+                                        scope.launch {
+                                            snack.showSnackbar("Check-out functionality coming soon")
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFFF6B6B)
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.ExitToApp,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Check Out",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            "COMPLETED" -> {
+                                // Show completed status
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.CheckCircle,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(48.dp),
+                                            tint = Color(0xFF00C896)
+                                        )
+                                        Spacer(Modifier.height(16.dp))
+                                        Text(
+                                            text = "Attendance Complete",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            text = "You've completed your attendance for today",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            textAlign = TextAlign.Center,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
-                            },
-                            enabled = !ui.isLoading && !ui.isRefreshing && !registrationBusy && !checkingFaceData,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = buttonColor,
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(28.dp)
-                        ) {
-                            if (checkingFaceData) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color.White
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    text = "Checking face data...",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            } else if (registrationBusy) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color.White
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    text = "Registering face...",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            } else {
-                                Icon(
-                                    if (ui.canCheckIn) Icons.Filled.CheckCircle else Icons.Filled.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Text(
-                                    text = buttonText,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
                         }
 
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = if (checkingFaceData) "Checking face data..."
-                            else if (registrationBusy) "Registering face with server..."
-                            else if (ui.isLoading) "Processing..."
-                            else if (ui.isRefreshing) "Refreshing status..."
-                            else "Ready",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        // Show current threshold
-                        Text(
-                            text = "Face threshold: ${String.format("%.2f", verifyThreshold)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        // Show face verification requirement status
-                        val requireFace = prefs.requireFaceCheckin
-                        Text(
-                            text = "Face verification: ${if (requireFace) "Required" else "Not required"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (requireFace) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(Modifier.weight(1f))
-                    Spacer(Modifier.height(24.dp))
-
-                    // Error/Success Messages
-                    if (!ui.errorMessage.isNullOrBlank()) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        ) {
-                            Text(
-                                text = ui.errorMessage!!,
-                                modifier = Modifier.padding(16.dp),
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-
-                    if (!ui.successMessage.isNullOrBlank()) {
-                        Spacer(Modifier.height(12.dp))
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFE8F5E9)
-                            )
-                        ) {
-                            Text(
-                                text = ui.successMessage!!,
-                                modifier = Modifier.padding(16.dp),
-                                color = Color(0xFF2E7D32),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                        // Face recognition info if enabled
+                        if (ui.faceRecognitionEnabled) {
+                            Spacer(Modifier.height(16.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Face,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Face Recognition Enabled",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        Text(
+                                            text = "Required for attendance",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    if (ui.faceVector != null) {
+                                        Icon(
+                                            Icons.Filled.CheckCircle,
+                                            contentDescription = "Enrolled",
+                                            tint = Color(0xFF00C896),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Filled.Warning,
+                                            contentDescription = "Not Enrolled",
+                                            tint = Color(0xFFFF9800),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -558,15 +410,12 @@ fun HomePage(
 
             HomeScreen.PROFILE -> ProfileScreen(
                 onNavigateToFaceChange = {
-                    // When coming from Profile, ALWAYS show registration (not verification)
-                    Log.d(TAG, "📝 Profile -> Face Registration - showing REGISTRATION screen")
+                    Log.d(TAG, "📝 Profile -> Face Registration")
                     currentScreen = HomeScreen.HOME
-                    pendingAction = null
                     showRegistration = true
                 },
                 onLogout = {
-                    // Clear all data including face data
-                    Log.d(TAG, "🚪 Logout - clearing all data including face data")
+                    Log.d(TAG, "🚪 Logout - clearing all data")
                     scope.launch {
                         try {
                             // Clear face data
@@ -575,15 +424,13 @@ fun HomePage(
                             }
                             Log.d(TAG, "✅ Face data cleared")
 
-                            // Clear preferences (includes auth token, etc.)
+                            // Clear preferences
                             prefs.clearAll()
                             Log.d(TAG, "✅ Preferences cleared")
 
-                            // Call the logout callback
                             onLogout()
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Error during logout cleanup", e)
-                            // Still proceed with logout even if cleanup fails
                             onLogout()
                         }
                     }
@@ -593,42 +440,32 @@ fun HomePage(
         }
     }
 
-    // Face Registration Screen - ONLY for registration (not verification)
+    // Face Registration Screen
     if (showRegistration) {
         FaceRegistrationScreen(
             onDismiss = {
                 showRegistration = false
-                pendingAction = null
                 Log.d(TAG, "❌ Registration dismissed")
             },
             onEnrolled = { embedding, bitmap ->
-                // Don't close screen yet - send to API first
                 registrationBusy = true
-                Log.d(TAG, "📸 Face registration complete - preparing to send to API")
-                Log.d(TAG, "📊 Embedding size: ${embedding.size}, bitmap: ${bitmap.width}x${bitmap.height}")
+                Log.d(TAG, "📸 Face registration complete - sending to API")
 
                 scope.launch {
                     try {
-                        Log.d(TAG, "📤 Starting API upload process...")
-
                         val api = NetworkModule.apiService
 
-                        // Convert bitmap to JPEG bytes
-                        Log.d(TAG, "🖼️ Converting bitmap to JPEG...")
+                        // Convert bitmap to JPEG
                         val imageBytes = withContext(Dispatchers.Default) {
                             val outputStream = java.io.ByteArrayOutputStream()
                             bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
                             outputStream.toByteArray()
                         }
-                        Log.d(TAG, "✅ JPEG conversion complete: ${imageBytes.size} bytes")
 
-                        // Convert embedding to JSON string
-                        Log.d(TAG, "📝 Converting embedding to JSON...")
+                        // Convert embedding to JSON
                         val embeddingJson = com.google.gson.Gson().toJson(embedding.toList())
-                        Log.d(TAG, "✅ JSON conversion complete: length=${embeddingJson.length}")
 
-                        // Create multipart request parts
-                        Log.d(TAG, "📦 Creating multipart request...")
+                        // Create multipart request
                         val imagePart = okhttp3.MultipartBody.Part.createFormData(
                             "face_image",
                             "face_${System.currentTimeMillis()}.jpg",
@@ -650,10 +487,10 @@ fun HomePage(
 
                         val reasonPart = okhttp3.RequestBody.create(
                             "text/plain".toMediaTypeOrNull(),
-                            "Face registration update"
+                            "Face registration from mobile app"
                         )
 
-                        Log.d(TAG, "🌐 Sending POST /employees/face-recognition...")
+                        // Send to API
                         val response = withContext(Dispatchers.IO) {
                             api.registerFaceRecognition(
                                 face_image = imagePart,
@@ -663,243 +500,41 @@ fun HomePage(
                             )
                         }
 
-                        Log.d(TAG, "📥 POST response received: code=${response.code()}, isSuccessful=${response.isSuccessful}")
-
                         registrationBusy = false
                         showRegistration = false
-                        pendingAction = null
 
-                        // Clean up bitmap
-                        bitmap.recycle()
-                        Log.d(TAG, "🧹 Bitmap recycled")
+                        if (response.isSuccessful) {
+                            Log.d(TAG, "✅ Face registration successful!")
+                            snack.showSnackbar("Face registered successfully!")
 
-                        when {
-                            response.isSuccessful && response.code() == 200 -> {
-                                Log.d(TAG, "✅ Face registration API SUCCESS")
-
-                                // Success - now save to local storage
-                                Log.d(TAG, "💾 Saving embedding to local storage...")
-                                withContext(Dispatchers.IO) {
-                                    FaceStore.getInstance(context).saveEmbedding(embedding)
-                                }
-                                Log.d(TAG, "✅ Embedding saved locally")
-
-                                val message = response.body()?.message
-                                    ?: "Face registered successfully! Your face recognition is now active."
-
-                                Log.d(TAG, "✅ Registration complete: $message")
-
-                                vm.setFaceVerifyEnabled(false)
-                                snack.showSnackbar(message)
+                            // Save locally after success
+                            withContext(Dispatchers.IO) {
+                                FaceStore.getInstance(context).saveEmbedding(embedding)
                             }
 
-                            response.code() == 403 -> {
-                                val errorBody = response.errorBody()?.string()
-                                Log.e(TAG, "❌ 403 Forbidden - errorBody: $errorBody")
-                                val message = extractErrorMessage(errorBody)
-                                    ?: "Face registration not enabled for your account. Contact HR/Admin."
+                            // Refresh status to get updated face_vector
+                            vm.refreshStatus()
 
-                                Log.e(TAG, "❌ Registration forbidden: $message")
-                                snack.showSnackbar(message)
+                            bitmap.recycle()
+                        } else {
+                            val message = try {
+                                response.errorBody()?.string() ?: response.message()
+                            } catch (e: Exception) {
+                                "Failed to register face"
                             }
-
-                            response.code() == 409 -> {
-                                val errorBody = response.errorBody()?.string()
-                                Log.w(TAG, "⚠️ 409 Conflict - errorBody: $errorBody")
-                                val message = extractErrorMessage(errorBody)
-                                    ?: "You have a pending face recognition request."
-
-                                Log.w(TAG, "⚠️ Pending request: $message")
-                                snack.showSnackbar(message)
-                            }
-
-                            response.code() == 404 -> {
-                                val errorBody = response.errorBody()?.string()
-                                Log.e(TAG, "❌ 404 Not Found - errorBody: $errorBody")
-                                val message = extractErrorMessage(errorBody)
-                                    ?: "Employee not found."
-
-                                Log.e(TAG, "❌ Employee not found: $message")
-                                snack.showSnackbar(message)
-                            }
-
-                            response.code() == 400 -> {
-                                val errorBody = response.errorBody()?.string()
-                                Log.e(TAG, "❌ 400 Bad Request - errorBody: $errorBody")
-                                val message = extractErrorMessage(errorBody)
-                                    ?: "Invalid face data. Please try again."
-
-                                Log.e(TAG, "❌ Bad request: $message")
-                                snack.showSnackbar(message)
-                            }
-
-                            else -> {
-                                val errorBody = response.errorBody()?.string()
-                                Log.e(TAG, "❌ Unexpected response code: ${response.code()}")
-                                Log.e(TAG, "❌ errorBody: $errorBody")
-                                val message = extractErrorMessage(errorBody)
-                                    ?: "Failed to register face. Please try again."
-
-                                Log.e(TAG, "❌ Registration failed: code=${response.code()}, message=$message")
-                                snack.showSnackbar(message)
-                            }
+                            Log.e(TAG, "❌ Registration failed: $message")
+                            snack.showSnackbar(message)
                         }
 
                     } catch (e: Exception) {
                         Log.e(TAG, "❌ Exception in face registration", e)
-                        Log.e(TAG, "❌ Exception type: ${e.javaClass.simpleName}, message: ${e.message}")
-                        e.printStackTrace()
                         registrationBusy = false
                         showRegistration = false
-                        pendingAction = null
-
-                        // Clean up bitmap on error
-                        try {
-                            bitmap.recycle()
-                            Log.d(TAG, "🧹 Bitmap recycled after error")
-                        } catch (_: Exception) {}
-
-                        snack.showSnackbar("Network error. Please check your connection and try again.")
+                        bitmap.recycle()
+                        snack.showSnackbar("Network error. Please try again.")
                     }
                 }
             }
         )
     }
-
-    // Face Verification Screen
-// In HomePage.kt, replace the face verification section with this updated code:
-
-// Face Verification Screen
-    if (showVerify) {
-        FaceCaptureScreen(
-            onDismiss = {
-                showVerify = false
-                verifyBusy = false
-                verifyError = null
-                pendingAction = null
-
-                // Reset face recognition state
-                vm.setFaceRecognitionQualityScore(0.0f)
-                vm.setFaceRecognitionEnabled(false)
-                vm.setFaceVerifyEnabled(false)
-
-                Log.d(TAG, "❌ Verification dismissed")
-            },
-            onCaptured = { /* unused */ },
-            onBitmapCaptured = { bmp: Bitmap ->
-                if (verifyBusy) {
-                    bmp.recycle()
-                    return@FaceCaptureScreen
-                }
-
-                verifyBusy = true
-                verifyError = null
-
-                val store = FaceStore.getInstance(context)
-                val stored = store.loadEmbedding()
-                if (stored == null) {
-                    verifyError = "Face data missing. Please enroll again."
-                    verifyBusy = false
-                    bmp.recycle()
-                    Log.e(TAG, "❌ Stored embedding is null - enrollment data missing!")
-                    return@FaceCaptureScreen
-                }
-
-                Log.d(TAG, "✅ Stored embedding loaded successfully (size: ${stored.size})")
-
-                scope.launch {
-                    try {
-                        Log.d(TAG, "🔍 Starting face verification with threshold: $verifyThreshold")
-
-                        val extractor = EmbeddingExtractor.getInstance(
-                            context = context,
-                            numThreads = 4,
-                            debugLogging = false
-                        )
-
-                        val live = withContext(Dispatchers.Default) {
-                            extractor.extractNoRetry(bmp, 0)
-                        }
-
-                        val similarity = withContext(Dispatchers.Default) {
-                            FaceVerifier.cosineSim(stored, live)
-                        }
-
-                        // Use dynamic threshold from server
-                        val matched = similarity >= verifyThreshold
-
-                        Log.d(TAG, "📊 Verification result: similarity=${String.format("%.3f", similarity)}, threshold=${String.format("%.3f", verifyThreshold)}, matched=$matched")
-
-                        if (matched) {
-                            // SUCCESS - Set face recognition data and proceed
-                            vm.setFaceRecognitionQualityScore(similarity)
-                            vm.setFaceRecognitionEnabled(true)
-                            vm.setFaceVerifyEnabled(true)
-
-                            showVerify = false
-                            verifyBusy = false
-
-                            Log.d(TAG, "✅ Face matched! Quality score: ${String.format("%.3f", similarity)}")
-                            Log.d(TAG, "✅ Proceeding with punch (face_recognition=true, face_verify=true, quality_score=$similarity)")
-
-                            proceedPunch()
-                        } else {
-                            // NOT MATCHED - Update error but keep trying
-                            verifyError = "Similarity: ${String.format("%.2f", similarity)} (need ≥ ${String.format("%.2f", verifyThreshold)}). Keep trying..."
-                            verifyBusy = false
-                            Log.d(TAG, "❌ No match yet, will retry automatically")
-                        }
-                    } catch (e: IllegalStateException) {
-                        verifyError = e.message ?: "Face quality issue - keep trying..."
-                        verifyBusy = false
-                        Log.d(TAG, "Quality issue: ${e.message}")
-                    } catch (t: Throwable) {
-                        verifyError = t.message ?: "Error - keep trying..."
-                        verifyBusy = false
-                        Log.e(TAG, "Verification error", t)
-                    } finally {
-                        bmp.recycle()
-                    }
-                }
-            },
-            showReasonField = false,
-            reasonMessage = null,
-            isSubmitting = verifyBusy,
-            onSubmit = { /* unused */ },
-            serverError = verifyError
-        )
-    }
-
-    LaunchedEffect(ui.errorMessage) {
-        ui.errorMessage?.let {
-            snack.showSnackbar(it)
-            Log.d(TAG, "Error: $it")
-        }
-    }
-
-    LaunchedEffect(ui.successMessage) {
-        ui.successMessage?.let {
-            snack.showSnackbar(it)
-            Log.d(TAG, "Success: $it")
-        }
-    }
-}
-
-// Helper function to extract error message from response
-private fun extractErrorMessage(errorBody: String?): String? {
-    return try {
-        if (errorBody.isNullOrBlank()) return null
-        val json = JSONObject(errorBody)
-        json.optString("message").ifBlank {
-            json.optString("detail").ifBlank { null }
-        }
-    } catch (e: Exception) {
-        null
-    }
-}
-
-@Composable
-private fun rememberAttendanceViewModel(context: android.content.Context): AttendanceViewModel {
-    val repo = remember(context) { AttendanceRepository(context) }
-    return remember { AttendanceViewModel(repo) }
 }
