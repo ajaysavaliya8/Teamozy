@@ -12,9 +12,9 @@ import org.json.JSONObject
 sealed class AttendanceOutcome {
     data class Success(
         val currentState: String,
-        val faceRecognitionEnabled: Boolean,
-        val faceVector: String?,
-        val minimumQualityScore: Float,
+//        val faceRecognitionEnabled: Boolean,
+//        val faceVector: String?,
+//        val minimumQualityScore: Float,
         val message: String,
         val attendanceStatus: String?,
         val isComplete: Boolean?
@@ -111,16 +111,8 @@ class AttendanceRepository(context: Context) {
                     if (data != null) {
                         Log.d("NET", "Status: ${data.current_state}, Message: ${data.message}")
 
-                        // Save face recognition settings if provided
-                        if (data.face_recognition_enabled && data.face_vector != null) {
-                            pm.faceThreshold = data.minimum_quality_score
-                        }
-
                         AttendanceOutcome.Success(
                             currentState = data.current_state,
-                            faceRecognitionEnabled = data.face_recognition_enabled,
-                            faceVector = data.face_vector,
-                            minimumQualityScore = data.minimum_quality_score,
                             message = data.message,
                             attendanceStatus = data.attendance_status,
                             isComplete = data.is_complete
@@ -138,11 +130,10 @@ class AttendanceRepository(context: Context) {
                 else -> AttendanceOutcome.Error(extractError(res))
             }
         } catch (e: Exception) {
-            Log.e("NET", "Exception in checkStatus", e)
+            Log.e("NET", "Exception in getStatus", e)
             AttendanceOutcome.Error(friendlyNetError(e))
         }
     }
-
     /**
      * Initial check-in request
      * Returns whether face verification is required and violation flags

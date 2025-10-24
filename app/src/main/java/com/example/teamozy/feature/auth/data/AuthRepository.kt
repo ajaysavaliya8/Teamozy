@@ -122,38 +122,16 @@ class AuthRepository(private val context: Context) {
             when {
                 res.isSuccessful -> {
                     val body = res.body()
-
-                    // Update face threshold and vector using new field names
-                    body?.minimum_face_recognition_quality_score?.let {
-                        pm.faceThreshold = it
-                        Log.d("AUTH", "Updated face threshold: $it")
-                    }
-
-                    body?.face_vector?.let {
-                        pm.faceVector = it
-                        Log.d("AUTH", "Updated face vector: ${it.take(50)}...")
-                    }
-
-                    // Update face verification requirements
-                    body?.require_face_checkin?.let {
-                        pm.requireFaceCheckin = it
-                        Log.d("AUTH", "Updated require_face_checkin: $it")
-                    }
-
-                    body?.require_face_break?.let {
-                        pm.requireFaceBreak = it
-                        Log.d("AUTH", "Updated require_face_break: $it")
-                    }
-
-                    Log.d("AUTH", "Token verified - threshold: ${body?.minimum_face_recognition_quality_score}, has_vector: ${body?.face_vector != null}, require_face_checkin: ${body?.require_face_checkin}, require_face_break: ${body?.require_face_break}")
-
+                    Log.d("AUTH", "Token verified successfully")
                     AuthOutcome.Success(body?.message ?: "Token is valid")
                 }
                 res.code() == 401 -> {
+                    Log.d("AUTH", "Token expired or invalid (401)")
                     AuthOutcome.Error("Token expired or invalid")
                 }
                 else -> {
                     val msg = extractMessage(res)
+                    Log.d("AUTH", "Token verification failed: $msg")
                     AuthOutcome.Error(msg.ifBlank { "Token verification failed" })
                 }
             }
@@ -212,48 +190,15 @@ class AuthRepository(private val context: Context) {
                     pm.authToken = token
                     pm.deviceId = androidId()
 
-                    // Save face threshold and vector using new field names
-                    body.minimum_face_recognition_quality_score?.let {
-                        pm.faceThreshold = it
-                        Log.d("AUTH", "Saved face threshold: $it")
-                    } ?: run {
-                        // Set default threshold if not provided
-                        pm.faceThreshold = 0.57f
-                        Log.d("AUTH", "Using default face threshold: 0.57")
-                    }
-
-                    body.face_vector?.let {
-                        pm.faceVector = it
-                        Log.d("AUTH", "Saved face vector: ${it.take(50)}...")
-                    } ?: run {
-                        Log.d("AUTH", "No face vector provided")
-                    }
-
-                    // Save face verification requirements
-                    body.require_face_checkin?.let {
-                        pm.requireFaceCheckin = it
-                        Log.d("AUTH", "Saved require_face_checkin: $it")
-                    } ?: run {
-                        pm.requireFaceCheckin = false
-                        Log.d("AUTH", "Using default require_face_checkin: false")
-                    }
-
-                    body.require_face_break?.let {
-                        pm.requireFaceBreak = it
-                        Log.d("AUTH", "Saved require_face_break: $it")
-                    } ?: run {
-                        pm.requireFaceBreak = false
-                        Log.d("AUTH", "Using default require_face_break: false")
-                    }
-
-                    Log.d("AUTH", "Login successful - threshold: ${pm.faceThreshold}, has_vector: ${body.face_vector != null}, require_face_checkin: ${pm.requireFaceCheckin}, require_face_break: ${pm.requireFaceBreak}")
-
                     return AuthOutcome.Success(body.message ?: "Login successful.", token)
                 }
+
                 return AuthOutcome.Success(body.message ?: "OK")
             }
+
             return AuthOutcome.Error(body?.message ?: "Unknown error")
         }
+
         val msg = extractMessage(res)
         return AuthOutcome.Error(msg.ifBlank { "Request failed with ${res.code()}" })
     }

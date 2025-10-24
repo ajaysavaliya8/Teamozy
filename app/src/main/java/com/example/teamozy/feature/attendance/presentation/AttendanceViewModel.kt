@@ -30,6 +30,9 @@ class AttendanceViewModel(
     /**
      * Refresh the current attendance status from server
      */
+    /**
+     * Refresh the current attendance status from server
+     */
     fun refreshStatus() {
         if (_ui.value.isRefreshing) return
 
@@ -44,9 +47,6 @@ class AttendanceViewModel(
                     _ui.value = _ui.value.copy(
                         isRefreshing = false,
                         currentState = outcome.currentState,
-                        faceRecognitionEnabled = outcome.faceRecognitionEnabled,
-                        faceVector = outcome.faceVector,
-                        minimumQualityScore = outcome.minimumQualityScore,
                         statusMessage = outcome.message,
                         attendanceStatus = outcome.attendanceStatus,
                         isComplete = outcome.isComplete,
@@ -444,6 +444,9 @@ class AttendanceViewModel(
 /**
  * UI State for Attendance
  */
+/**
+ * UI State for Attendance
+ */
 data class AttendanceUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
@@ -452,9 +455,6 @@ data class AttendanceUiState(
 
     // Status data from check-status API
     val currentState: String = "CHECK_IN_NEEDED",
-    val faceRecognitionEnabled: Boolean = false,
-    val faceVector: String? = null,
-    val minimumQualityScore: Float = 0.57f,
     val statusMessage: String = "",
     val attendanceStatus: String? = null,
     val isComplete: Boolean? = null,

@@ -5,10 +5,10 @@ data class BasicResponse(
     val status: String,           // "success" | "error" | "reject"
     val message: String? = null,
     val token: String? = null,    // present on verify-login success
-    val minimum_face_recognition_quality_score: Float? = null,
-    val face_vector: String? = null,
-    val require_face_checkin: Boolean? = null,
-    val require_face_break: Boolean? = null
+//    val minimum_face_recognition_quality_score: Float? = null,
+//    val face_vector: String? = null,
+//    val require_face_checkin: Boolean? = null,
+//    val require_face_break: Boolean? = null
 )
 
 // -------- Check Status Response --------
@@ -20,9 +20,9 @@ data class CheckStatusResponse(
 
 data class CheckStatusData(
     val current_state: String,    // "CHECK_IN_NEEDED" | "CHECK_OUT_NEEDED" | "COMPLETED"
-    val face_recognition_enabled: Boolean,
-    val face_vector: String? = null,
-    val minimum_quality_score: Float,
+//    val face_recognition_enabled: Boolean,
+//    val face_vector: String? = null,
+//    val minimum_quality_score: Float,
     val message: String,
     val attendance_status: String? = null,
     val is_complete: Boolean? = null
@@ -79,10 +79,10 @@ data class CheckOutSignatureResponse(
 data class VerifyTokenResponse(
     val status: String,
     val message: String,
-    val minimum_face_recognition_quality_score: Float? = null,
-    val face_vector: String? = null,
-    val require_face_checkin: Boolean? = null,
-    val require_face_break: Boolean? = null
+//    val minimum_face_recognition_quality_score: Float? = null,
+//    val face_vector: String? = null,
+//    val require_face_checkin: Boolean? = null,
+//    val require_face_break: Boolean? = null
 )
 
 // Face verify upload response

@@ -384,58 +384,7 @@ fun HomePage(
                             }
                         }
 
-                        // Face recognition info if enabled
-                        if (ui.faceRecognitionEnabled) {
-                            Spacer(Modifier.height(16.dp))
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Face,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Face Recognition Enabled",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
-                                        Text(
-                                            text = "Required for attendance",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                    if (ui.faceVector != null) {
-                                        Icon(
-                                            Icons.Filled.CheckCircle,
-                                            contentDescription = "Enrolled",
-                                            tint = Color(0xFF00C896),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    } else {
-                                        Icon(
-                                            Icons.Filled.Warning,
-                                            contentDescription = "Not Enrolled",
-                                            tint = Color(0xFFFF9800),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
+
                     }
 
                     Spacer(Modifier.height(24.dp))
