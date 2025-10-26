@@ -23,6 +23,7 @@ data class CheckStatusData(
 //    val face_recognition_enabled: Boolean,
 //    val face_vector: String? = null,
 //    val minimum_quality_score: Float,
+    val last_check_in_time: String? = null,
     val message: String,
     val attendance_status: String? = null,
     val is_complete: Boolean? = null

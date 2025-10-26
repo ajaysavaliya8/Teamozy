@@ -6,8 +6,10 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
 import android.util.Size
+import androidx.activity.compose.BackHandler
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -32,10 +34,11 @@ import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
 
 private const val TAG = "FaceCapture"
-private const val RETRY_INTERVAL_MS = 800L  // Try every 800ms
+private const val RETRY_INTERVAL_MS = 800L
 
 @Composable
 fun FaceCaptureScreen(
+    generation: Int = 0,
     onDismiss: () -> Unit,
     onCaptured: (jpeg: ByteArray) -> Unit,
     onBitmapCaptured: (Bitmap) -> Unit,
@@ -53,35 +56,50 @@ fun FaceCaptureScreen(
     var isProcessing by remember { mutableStateOf(false) }
     var attemptCount by remember { mutableIntStateOf(0) }
 
-    // Camera references for cleanup
+    // Camera references
     val cameraProviderRef = remember { mutableStateOf<ProcessCameraProvider?>(null) }
     val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
 
-    fun cleanupCamera() {
-        Log.d(TAG, "Cleaning up camera")
+    // ✨ Cleanup function - defined BEFORE use
+    fun cleanupCameraSync() {
+        Log.d(TAG, "🧹 Starting camera cleanup (generation=$generation)")
         try {
             analysisRef.value?.clearAnalyzer()
             analysisRef.value = null
             cameraProviderRef.value?.unbindAll()
             cameraProviderRef.value = null
+            Log.d(TAG, "✅ Camera cleanup completed (generation=$generation)")
         } catch (e: Exception) {
-            Log.e(TAG, "Cleanup error", e)
+            Log.e(TAG, "❌ Cleanup error (generation=$generation)", e)
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { cleanupCamera() }
+    // ✨ Handle system back button
+    BackHandler {
+        Log.d(TAG, "⬅️ System back button pressed (generation=$generation)")
+        cleanupCameraSync()
+        onDismiss()
     }
 
-    // 60-second timeout with auto-close
+    // ✨ DisposableEffect tied to generation
+    DisposableEffect(generation) {
+        Log.d(TAG, "🟢 FaceCaptureScreen ENTERED (generation=$generation)")
+
+        onDispose {
+            Log.d(TAG, "🔴 FaceCaptureScreen DISPOSING (generation=$generation)")
+            cleanupCameraSync()
+        }
+    }
+
+    // 60-second timeout
     var secondsLeft by remember { mutableIntStateOf(60) }
     LaunchedEffect(Unit) {
         while (secondsLeft > 0) {
             delay(1000)
             secondsLeft--
         }
-        Log.d(TAG, "Timeout reached - closing")
-        cleanupCamera()
+        Log.d(TAG, "⏱️ Timeout reached (generation=$generation)")
+        cleanupCameraSync()
         onDismiss()
     }
 
@@ -93,7 +111,8 @@ fun FaceCaptureScreen(
                 title = { Text("Face Verification") },
                 navigationIcon = {
                     IconButton(onClick = {
-                        cleanupCamera()
+                        Log.d(TAG, "⬅️ TopBar back button pressed (generation=$generation)")
+                        cleanupCameraSync()
                         onDismiss()
                     }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
@@ -133,6 +152,13 @@ fun FaceCaptureScreen(
                                 val cameraProvider = cameraProviderFuture.get()
                                 cameraProviderRef.value = cameraProvider
 
+                                // Clean slate
+                                Log.d(TAG, "📷 Unbinding previous use cases (generation=$generation)")
+                                cameraProvider.unbindAll()
+                                Thread.sleep(100)
+
+                                Log.d(TAG, "📷 Initializing camera (generation=$generation)")
+
                                 val preview = Preview.Builder()
                                     .setTargetResolution(Size(720, 1280))
                                     .build()
@@ -147,74 +173,45 @@ fun FaceCaptureScreen(
 
                                 analysis.setAnalyzer(executor) { imageProxy ->
                                     try {
-                                        val now = System.currentTimeMillis()
-
-                                        // CRITICAL: Check if HomePage is busy FIRST
-                                        // This syncs with HomePage's faceVerifyBusy state
-                                        if (isSubmitting) {
-                                            imageProxy.close()
-                                            return@setAnalyzer
-                                        }
-
-                                        // Skip if already processing locally
-                                        if (isProcessing) {
-                                            imageProxy.close()
-                                            return@setAnalyzer
-                                        }
-
-                                        // Rate limit: only attempt every RETRY_INTERVAL_MS
-                                        if (now - lastAttemptTime < RETRY_INTERVAL_MS) {
-                                            imageProxy.close()
-                                            return@setAnalyzer
-                                        }
-
-                                        lastAttemptTime = now
-                                        isProcessing = true
-                                        attemptCount++
-                                        statusText = "Verifying... (attempt $attemptCount)"
-
-                                        val rotation = imageProxy.imageInfo.rotationDegrees
-                                        val bitmap = imageProxy.toBitmap()
-                                            .rotateAndMirror(rotation, mirror = true)
-                                            .copy(Bitmap.Config.ARGB_8888, false)
-
-                                        imageProxy.close()
-
-                                        Log.d(TAG, "Attempt $attemptCount - capturing frame")
-
-                                        // Pass bitmap to HomePage for verification
-                                        onBitmapCaptured(bitmap)
-
-                                        // Reset local processing flag immediately
-                                        // HomePage's isSubmitting will prevent further captures until it's ready
-                                        isProcessing = false
-
+                                        processFrame(
+                                            imageProxy = imageProxy,
+                                            isSubmitting = isSubmitting,
+                                            isProcessing = isProcessing,
+                                            lastAttemptTime = lastAttemptTime,
+                                            onUpdateLastAttemptTime = { lastAttemptTime = it },
+                                            onUpdateProcessing = { isProcessing = it },
+                                            onUpdateAttemptCount = { attemptCount++ },
+                                            onUpdateStatus = { statusText = it },
+                                            onBitmapCaptured = onBitmapCaptured,
+                                            onError = { errorText = it },
+                                            generation = generation
+                                        )
                                     } catch (e: Exception) {
-                                        Log.e(TAG, "Frame processing error", e)
-                                        errorText = e.message
-                                        isProcessing = false
+                                        Log.e(TAG, "❌ Analyzer error (generation=$generation)", e)
+                                        errorText = "Camera error: ${e.message}"
                                         try {
                                             imageProxy.close()
                                         } catch (e2: Exception) {
-                                            Log.e(TAG, "Error closing imageProxy", e2)
+                                            Log.e(TAG, "❌ Error closing imageProxy", e2)
                                         }
                                     }
                                 }
 
                                 try {
-                                    cameraProvider.unbindAll()
                                     cameraProvider.bindToLifecycle(
                                         lifecycleOwner,
                                         CameraSelector.DEFAULT_FRONT_CAMERA,
                                         preview,
                                         analysis
                                     )
-                                    Log.d(TAG, "Camera started - continuous verification mode")
+                                    Log.d(TAG, "✅ Camera started successfully (generation=$generation)")
                                 } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Failed to bind camera (generation=$generation)", e)
                                     errorText = e.message ?: "Failed to start camera"
                                 }
 
                             } catch (e: Exception) {
+                                Log.e(TAG, "❌ Camera initialization failed (generation=$generation)", e)
                                 errorText = e.message ?: "Camera initialization failed"
                             }
                         }, ContextCompat.getMainExecutor(ctx))
@@ -315,7 +312,7 @@ fun FaceCaptureScreen(
                 }
             }
 
-            // Reason field (for violation flow - not used in normal verification)
+            // Reason field
             if (showReasonField) {
                 if (!reasonMessage.isNullOrBlank()) {
                     Text(reasonMessage!!, style = MaterialTheme.typography.labelLarge)
@@ -337,7 +334,7 @@ fun FaceCaptureScreen(
                         modifier = Modifier.weight(1f),
                         enabled = !isSubmitting,
                         onClick = {
-                            cleanupCamera()
+                            cleanupCameraSync()
                             onDismiss()
                         }
                     ) { Text("Cancel") }
@@ -349,6 +346,68 @@ fun FaceCaptureScreen(
                     ) { Text(if (isSubmitting) "Submitting…" else "Submit") }
                 }
             }
+        }
+    }
+}
+
+private fun processFrame(
+    imageProxy: ImageProxy,
+    isSubmitting: Boolean,
+    isProcessing: Boolean,
+    lastAttemptTime: Long,
+    onUpdateLastAttemptTime: (Long) -> Unit,
+    onUpdateProcessing: (Boolean) -> Unit,
+    onUpdateAttemptCount: () -> Unit,
+    onUpdateStatus: (String) -> Unit,
+    onBitmapCaptured: (Bitmap) -> Unit,
+    onError: (String) -> Unit,
+    generation: Int
+) {
+    val now = System.currentTimeMillis()
+
+    if (isSubmitting) {
+        imageProxy.close()
+        return
+    }
+
+    if (isProcessing) {
+        imageProxy.close()
+        return
+    }
+
+    if (now - lastAttemptTime < RETRY_INTERVAL_MS) {
+        imageProxy.close()
+        return
+    }
+
+    onUpdateLastAttemptTime(now)
+    onUpdateProcessing(true)
+    onUpdateAttemptCount()
+
+    val currentAttempt = ((now - lastAttemptTime) / RETRY_INTERVAL_MS).toInt() + 1
+    onUpdateStatus("Verifying... (attempt $currentAttempt)")
+
+    try {
+        val rotation = imageProxy.imageInfo.rotationDegrees
+        val bitmap = imageProxy.toBitmap()
+            .rotateAndMirror(rotation, mirror = true)
+            .copy(Bitmap.Config.ARGB_8888, false)
+
+        imageProxy.close()
+
+        Log.d(TAG, "📸 Attempt $currentAttempt - capturing frame (generation=$generation)")
+
+        onBitmapCaptured(bitmap)
+        onUpdateProcessing(false)
+
+    } catch (e: Exception) {
+        Log.e(TAG, "❌ Frame processing error (generation=$generation)", e)
+        onError(e.message ?: "Processing error")
+        onUpdateProcessing(false)
+        try {
+            imageProxy.close()
+        } catch (e2: Exception) {
+            Log.e(TAG, "❌ Error closing imageProxy", e2)
         }
     }
 }

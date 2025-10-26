@@ -16,6 +16,7 @@ sealed class AttendanceOutcome {
 //        val faceVector: String?,
 //        val minimumQualityScore: Float,
         val message: String,
+        val lastCheckInTime: String?,
         val attendanceStatus: String?,
         val isComplete: Boolean?
     ) : AttendanceOutcome()
@@ -114,6 +115,7 @@ class AttendanceRepository(context: Context) {
                         AttendanceOutcome.Success(
                             currentState = data.current_state,
                             message = data.message,
+                            lastCheckInTime = data.last_check_in_time,  // ← ADD THIS LINE
                             attendanceStatus = data.attendance_status,
                             isComplete = data.is_complete
                         )

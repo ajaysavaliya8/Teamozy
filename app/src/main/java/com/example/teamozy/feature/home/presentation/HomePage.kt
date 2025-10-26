@@ -1,9 +1,9 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.example.teamozy.feature.home.presentation
 
 import android.graphics.Bitmap
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -33,12 +33,60 @@ import com.example.teamozy.feature.face.presentation.FaceCaptureScreen
 import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
 import com.example.teamozy.feature.profile.presentation.ProfileScreen
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 
 private const val TAG = "HomePage"
+
 private enum class HomeScreen { HOME, ATTENDANCE, PROFILE }
+
+/**
+ * Calculate elapsed seconds from last check-in time to now
+ * @param lastCheckInTime Format: "2025-10-26 17:45:00"
+ * @return Elapsed seconds, or 0 if parsing fails
+ */
+private fun calculateElapsedSeconds(lastCheckInTime: String?): Int {
+    if (lastCheckInTime.isNullOrBlank()) return 0
+
+    try {
+        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+        val checkInDate = formatter.parse(lastCheckInTime) ?: return 0
+        val now = java.util.Date()
+        val elapsedMillis = now.time - checkInDate.time
+        val elapsedSeconds = (elapsedMillis / 1000).toInt()
+
+        // Return elapsed seconds, minimum 0
+        return if (elapsedSeconds >= 0) elapsedSeconds else 0
+    } catch (e: Exception) {
+        android.util.Log.e(TAG, "Error parsing last_check_in_time: $lastCheckInTime", e)
+        return 0
+    }
+}
+
+/**
+ * Calculate cosine similarity between two embeddings
+ * Returns a value between 0 and 1, where 1 means identical faces
+ */
+private fun calculateCosineSimilarity(embedding1: FloatArray, embedding2: FloatArray): Float {
+    if (embedding1.size != embedding2.size) {
+        throw IllegalArgumentException("Embeddings must have same size")
+    }
+
+    var dotProduct = 0.0
+    var norm1 = 0.0
+    var norm2 = 0.0
+
+    for (i in embedding1.indices) {
+        dotProduct += embedding1[i] * embedding2[i]
+        norm1 += embedding1[i] * embedding1[i]
+        norm2 += embedding2[i] * embedding2[i]
+    }
+
+    val similarity = dotProduct / (kotlin.math.sqrt(norm1) * kotlin.math.sqrt(norm2))
+    return similarity.toFloat()
+}
 
 @Composable
 fun rememberAttendanceViewModel(context: android.content.Context): AttendanceViewModel {
@@ -63,26 +111,62 @@ fun HomePage(
     var showRegistration by remember { mutableStateOf(false) }
     var registrationBusy by remember { mutableStateOf(false) }
 
-    // Face verification state
+    // ✨ Face verification state with generation counter
     var faceVerifyBusy by remember { mutableStateOf(false) }
     var faceVerifyError by remember { mutableStateOf<String?>(null) }
-    var faceVerificationKey by remember { mutableStateOf(0) }
-    var isFaceCaptureActive by remember { mutableStateOf(false) }
+    var faceVerificationGeneration by remember { mutableIntStateOf(0) }
 
-    // Log state changes
-    LaunchedEffect(ui.showFaceVerification) {
-        Log.d(TAG, "════════════════════════════════════════")
-        Log.d(TAG, "UI State Changed: showFaceVerification = ${ui.showFaceVerification}")
-        Log.d(TAG, "faceVerifyBusy = $faceVerifyBusy")
-        Log.d(TAG, "faceVerifyError = $faceVerifyError")
-        Log.d(TAG, "isFaceCaptureActive = $isFaceCaptureActive")
-        Log.d(TAG, "════════════════════════════════════════")
+    // ✨ Timer state for tracking work hours
+    var elapsedSeconds by remember { mutableIntStateOf(0) }
+    var isTimerRunning by remember { mutableStateOf(false) }
+
+    // ✨ Start/Continue timer based on check-in state
+    LaunchedEffect(ui.currentState) {
+        if (ui.currentState == "CHECK_OUT_NEEDED") {
+            if (!isTimerRunning) {
+                // Try to get last check-in time if field exists
+                val lastCheckInTime = try {
+                    // Use reflection to check if field exists
+                    ui::class.java.getDeclaredField("lastCheckInTime").let { field ->
+                        field.isAccessible = true
+                        field.get(ui) as? String
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+
+                // Calculate elapsed time from last check-in if available
+                val elapsed = calculateElapsedSeconds(lastCheckInTime)
+                elapsedSeconds = elapsed
+                isTimerRunning = true
+
+                if (lastCheckInTime != null) {
+                    Log.d(TAG, "✅ Continuing timer from last_check_in_time: $lastCheckInTime")
+                    Log.d(TAG, "⏱️ Elapsed time: ${elapsed}s (${elapsed/3600}h ${(elapsed%3600)/60}m)")
+                } else {
+                    Log.d(TAG, "✅ Timer started (lastCheckInTime not available yet)")
+                }
+            }
+        } else {
+            // Stop timer when not in CHECK_OUT_NEEDED state
+            if (isTimerRunning) {
+                isTimerRunning = false
+                elapsedSeconds = 0
+                Log.d(TAG, "⏹️ Timer stopped")
+            }
+        }
+    }
+
+    // ✨ Timer tick effect - runs every second when active
+    LaunchedEffect(isTimerRunning) {
+        while (isTimerRunning) {
+            delay(1000)
+            elapsedSeconds++
+        }
     }
 
     LaunchedEffect(Unit) {
-        // Refresh status when app opens
         vm.refreshStatus()
-
         val store = FaceStore.getInstance(context)
         if (store.hasEnrollment()) {
             val embedding = store.loadEmbedding()
@@ -92,14 +176,12 @@ fun HomePage(
         }
     }
 
-    // Show error messages in snackbar
     LaunchedEffect(ui.errorMessage) {
         ui.errorMessage?.let { error ->
             snack.showSnackbar(error)
         }
     }
 
-    // Show success messages in snackbar
     LaunchedEffect(ui.successMessage) {
         ui.successMessage?.let { success ->
             snack.showSnackbar(success)
@@ -119,14 +201,12 @@ fun HomePage(
                     icon = { Icon(if (currentScreen == HomeScreen.HOME) Icons.Filled.Home else Icons.Outlined.Home, "Home") },
                     label = { Text("Home") }
                 )
-
                 NavigationBarItem(
                     selected = currentScreen == HomeScreen.ATTENDANCE,
                     onClick = { currentScreen = HomeScreen.ATTENDANCE },
                     icon = { Icon(if (currentScreen == HomeScreen.ATTENDANCE) Icons.Filled.DateRange else Icons.Outlined.DateRange, "Attendance") },
                     label = { Text("Attendance") }
                 )
-
                 NavigationBarItem(
                     selected = currentScreen == HomeScreen.PROFILE,
                     onClick = { currentScreen = HomeScreen.PROFILE },
@@ -172,12 +252,10 @@ fun HomePage(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
-
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Refresh button
                                 IconButton(
                                     onClick = { vm.refreshStatus() },
                                     enabled = !ui.isRefreshing
@@ -195,7 +273,6 @@ fun HomePage(
                                         )
                                     }
                                 }
-
                                 IconButton(
                                     onClick = { currentScreen = HomeScreen.PROFILE },
                                     modifier = Modifier
@@ -215,7 +292,6 @@ fun HomePage(
 
                     Spacer(Modifier.height(24.dp))
 
-                    // Greeting
                     Text(
                         text = "Hello, ${prefs.userName ?: "User"}",
                         style = MaterialTheme.typography.headlineMedium,
@@ -228,7 +304,6 @@ fun HomePage(
 
                     Spacer(Modifier.height(8.dp))
 
-                    // Status message from server
                     if (ui.statusMessage.isNotEmpty()) {
                         Text(
                             text = ui.statusMessage,
@@ -241,7 +316,6 @@ fun HomePage(
                         )
                     }
 
-                    // Check-in or check-out message (late/early/out of range)
                     if (ui.checkInMessage != null || ui.checkOutMessage != null) {
                         val message = ui.checkInMessage ?: ui.checkOutMessage
                         Spacer(Modifier.height(8.dp))
@@ -276,7 +350,6 @@ fun HomePage(
 
                     Spacer(Modifier.height(32.dp))
 
-                    // Timer and Check In/Check Out Card
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -294,21 +367,25 @@ fun HomePage(
                             horizontalArrangement = Arrangement.spacedBy(20.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Circular Timer
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier.size(130.dp)
                             ) {
-                                // Outer circular progress segments
+                                // ✨ Calculate progress based on 8-hour workday (28800 seconds)
+                                val workdaySeconds = 8 * 60 * 60 // 8 hours
+                                val progress = if (isTimerRunning) {
+                                    (elapsedSeconds.toFloat() / workdaySeconds).coerceIn(0f, 1f)
+                                } else {
+                                    0f
+                                }
+
                                 CircularProgressIndicator(
-                                    progress = { 0.75f },
+                                    progress = { progress },
                                     modifier = Modifier.size(130.dp),
-                                    color = Color(0xFF4DD0B8),
+                                    color = if (isTimerRunning) Color(0xFF00C896) else Color(0xFF4DD0B8),
                                     strokeWidth = 10.dp,
                                     trackColor = Color(0xFFE0F2F1),
                                 )
-
-                                // Inner circle background
                                 Box(
                                     modifier = Modifier
                                         .size(100.dp)
@@ -316,41 +393,37 @@ fun HomePage(
                                         .background(MaterialTheme.colorScheme.surface),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    // Timer Text
+                                    // ✨ Display actual elapsed time
+                                    val hours = elapsedSeconds / 3600
+                                    val minutes = (elapsedSeconds % 3600) / 60
+                                    val seconds = elapsedSeconds % 60
+
                                     Text(
-                                        text = "00:00:00",
+                                        text = "%02d:%02d:%02d".format(hours, minutes, seconds),
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = if (isTimerRunning) {
+                                            Color(0xFF00C896)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        }
                                     )
                                 }
                             }
 
-                            // Check In/Check Out Button
                             when (ui.currentState) {
                                 "CHECK_IN_NEEDED" -> {
                                     Button(
                                         onClick = {
-                                            Log.d(TAG, "╔═══════════════════════════════════════╗")
-                                            Log.d(TAG, "║   CHECK IN BUTTON CLICKED             ║")
-                                            Log.d(TAG, "╠═══════════════════════════════════════╣")
-                                            Log.d(TAG, "║ UI State:                             ║")
-                                            Log.d(TAG, "║   showFaceVerification: ${ui.showFaceVerification}        ║")
-                                            Log.d(TAG, "║   isLoading: ${ui.isLoading}                  ║")
-                                            Log.d(TAG, "║ Local State:                          ║")
-                                            Log.d(TAG, "║   faceVerifyBusy: $faceVerifyBusy           ║")
-                                            Log.d(TAG, "║   faceVerifyError: $faceVerifyError         ║")
-                                            Log.d(TAG, "║   faceVerificationKey: $faceVerificationKey      ║")
-                                            Log.d(TAG, "║   isFaceCaptureActive: $isFaceCaptureActive      ║")
-                                            Log.d(TAG, "╠═══════════════════════════════════════╣")
-                                            Log.d(TAG, "║ Calling vm.startCheckIn(context)      ║")
-                                            Log.d(TAG, "╚═══════════════════════════════════════╝")
+                                            Log.d(TAG, "CHECK IN BUTTON CLICKED")
+                                            faceVerificationGeneration++
+                                            Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
                                             vm.startCheckIn(context)
                                         },
                                         modifier = Modifier
                                             .weight(1f)
                                             .height(56.dp),
-                                        enabled = !ui.isLoading,
+                                        enabled = !ui.isLoading && !faceVerifyBusy,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = Color(0xFF00C896)
                                         ),
@@ -371,30 +444,18 @@ fun HomePage(
                                         }
                                     }
                                 }
-
                                 "CHECK_OUT_NEEDED" -> {
                                     Button(
                                         onClick = {
-                                            Log.d(TAG, "╔═══════════════════════════════════════╗")
-                                            Log.d(TAG, "║   CHECK OUT BUTTON CLICKED            ║")
-                                            Log.d(TAG, "╠═══════════════════════════════════════╣")
-                                            Log.d(TAG, "║ UI State:                             ║")
-                                            Log.d(TAG, "║   showFaceVerification: ${ui.showFaceVerification}        ║")
-                                            Log.d(TAG, "║   isLoading: ${ui.isLoading}                  ║")
-                                            Log.d(TAG, "║ Local State:                          ║")
-                                            Log.d(TAG, "║   faceVerifyBusy: $faceVerifyBusy           ║")
-                                            Log.d(TAG, "║   faceVerifyError: $faceVerifyError         ║")
-                                            Log.d(TAG, "║   faceVerificationKey: $faceVerificationKey      ║")
-                                            Log.d(TAG, "║   isFaceCaptureActive: $isFaceCaptureActive      ║")
-                                            Log.d(TAG, "╠═══════════════════════════════════════╣")
-                                            Log.d(TAG, "║ Calling vm.startCheckOut(context)     ║")
-                                            Log.d(TAG, "╚═══════════════════════════════════════╝")
+                                            Log.d(TAG, "CHECK OUT BUTTON CLICKED")
+                                            faceVerificationGeneration++
+                                            Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
                                             vm.startCheckOut(context)
                                         },
                                         modifier = Modifier
                                             .weight(1f)
                                             .height(56.dp),
-                                        enabled = !ui.isLoading,
+                                        enabled = !ui.isLoading && !faceVerifyBusy,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = Color(0xFFFF6B6B)
                                         ),
@@ -415,9 +476,7 @@ fun HomePage(
                                         }
                                     }
                                 }
-
                                 "COMPLETED" -> {
-                                    // Show completed status in the button area
                                     Column(
                                         modifier = Modifier.weight(1f),
                                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -442,11 +501,9 @@ fun HomePage(
                         }
                     }
 
-
                     Spacer(Modifier.height(24.dp))
                 }
             }
-
             HomeScreen.ATTENDANCE -> {
                 Box(
                     modifier = Modifier
@@ -457,15 +514,14 @@ fun HomePage(
                     Text("Attendance Screen\n(Coming Soon)", textAlign = TextAlign.Center)
                 }
             }
-
             HomeScreen.PROFILE -> ProfileScreen(
                 onNavigateToFaceChange = {
-                    Log.d(TAG, "📝 Profile -> Face Registration")
+                    Log.d(TAG, "Profile -> Face Registration")
                     currentScreen = HomeScreen.HOME
                     showRegistration = true
                 },
                 onLogout = {
-                    Log.d(TAG, "🚪 Logout - clearing all data")
+                    Log.d(TAG, "Logout - clearing all data")
                     scope.launch {
                         try {
                             withContext(Dispatchers.IO) {
@@ -474,7 +530,7 @@ fun HomePage(
                             prefs.clearAll()
                             onLogout()
                         } catch (e: Exception) {
-                            Log.e(TAG, "❌ Error during logout", e)
+                            Log.e(TAG, "Error during logout", e)
                             onLogout()
                         }
                     }
@@ -484,126 +540,91 @@ fun HomePage(
         }
     }
 
-    // Face Verification Screen (for check-in OR check-out)
-    // Increment key when screen is dismissed to force fresh instance next time
-
-    LaunchedEffect(ui.showFaceVerification) {
-        if (!ui.showFaceVerification && faceVerificationKey > 0) {
-            // Screen was dismissed - reset state and increment key for next time
-            Log.d(TAG, "┌─────────────────────────────────────────┐")
-            Log.d(TAG, "│ FACE VERIFICATION DISMISSED             │")
-            Log.d(TAG, "│ Resetting state for next launch         │")
-            Log.d(TAG, "│ Key: $faceVerificationKey → ${faceVerificationKey + 1}         │")
-            Log.d(TAG, "└─────────────────────────────────────────┘")
+    // ✨ Reset busy state when screens are dismissed
+    LaunchedEffect(ui.showFaceVerification, ui.showReasonDialog) {
+        // When face verification screen is dismissed
+        if (!ui.showFaceVerification && !ui.showReasonDialog && faceVerifyBusy) {
+            Log.d(TAG, "✅ Screens dismissed, resetting faceVerifyBusy = false")
             faceVerifyBusy = false
             faceVerifyError = null
-            faceVerificationKey++
         }
     }
 
+    // ✨ Face Verification Screen
     if (ui.showFaceVerification) {
-        val minimumScore = ui.checkInMinimumQualityScore ?: ui.checkOutMinimumQualityScore ?: 0.57f
-
-        LaunchedEffect(Unit) {
-            Log.d(TAG, "🟢 Setting isFaceCaptureActive = true")
-            isFaceCaptureActive = true
-        }
-
-        DisposableEffect(Unit) {
-            onDispose {
-                Log.d(TAG, "🔴 Disposing face capture - setting isFaceCaptureActive = false")
-                isFaceCaptureActive = false
-            }
-        }
-
-        Log.d(TAG, "▶ Creating FaceCaptureScreen with key=$faceVerificationKey, minimumScore=$minimumScore")
-
-        key(faceVerificationKey) {
-            Log.d(TAG, "▶▶ Inside key($faceVerificationKey) block - FaceCaptureScreen composing")
-
-            DisposableEffect(Unit) {
-                Log.d(TAG, "🟢 FaceCaptureScreen ENTERED (key=$faceVerificationKey)")
-                onDispose {
-                    Log.d(TAG, "🔴 FaceCaptureScreen DISPOSED (key=$faceVerificationKey)")
-                    Log.d(TAG, "   - faceVerifyBusy=$faceVerifyBusy, faceVerifyError=$faceVerifyError")
-                }
-            }
-
+        key(faceVerificationGeneration) {
             FaceCaptureScreen(
+                generation = faceVerificationGeneration,
                 onDismiss = {
-                    Log.d(TAG, "🔙 FaceCaptureScreen onDismiss called")
-                    Log.d(TAG, "   - Calling vm.onFaceVerificationCancelled()")
+                    Log.d(TAG, "🔙 Face capture dismissed (generation=$faceVerificationGeneration)")
+                    // ✨ Reset state IMMEDIATELY - no delay
                     vm.onFaceVerificationCancelled()
-                    Log.d(TAG, "   - Resetting faceVerifyBusy to false")
                     faceVerifyBusy = false
-                    Log.d(TAG, "   - Resetting faceVerifyError to null")
                     faceVerifyError = null
-                    Log.d(TAG, "   - Setting isFaceCaptureActive to false")
-                    isFaceCaptureActive = false
+                    Log.d(TAG, "✅ Button re-enabled: faceVerifyBusy = false")
                 },
                 onCaptured = { /* unused */ },
                 onBitmapCaptured = { bitmap ->
-                    Log.d(TAG, "📸 onBitmapCaptured called")
-                    Log.d(TAG, "   - faceVerifyBusy = $faceVerifyBusy")
-                    Log.d(TAG, "   - isFaceCaptureActive = $isFaceCaptureActive")
-
-                    if (!isFaceCaptureActive) {
-                        Log.d(TAG, "   ⚠️ Screen no longer active, ignoring late frame")
-                        bitmap.recycle()
-                        return@FaceCaptureScreen
-                    }
-
                     if (faceVerifyBusy) {
-                        Log.d(TAG, "   ⚠️ Already busy, recycling bitmap and returning")
                         bitmap.recycle()
                         return@FaceCaptureScreen
                     }
 
-                    Log.d(TAG, "   - Setting faceVerifyBusy = true")
                     faceVerifyBusy = true
                     faceVerifyError = null
 
                     scope.launch {
                         try {
-                            Log.d(TAG, "   - Starting face extraction in coroutine")
-                            // Extract face embedding to get quality score
+                            // Extract live face embedding
                             val extractor = EmbeddingExtractor.getInstance(context)
-                            Log.d(TAG, "   - Got EmbeddingExtractor instance")
-
                             val liveEmbedding = withContext(Dispatchers.Default) {
-                                Log.d(TAG, "   - Extracting embedding from bitmap...")
                                 extractor.extractOrNull(bitmap)
                             }
-
                             bitmap.recycle()
-                            Log.d(TAG, "   - Bitmap recycled")
 
                             if (liveEmbedding == null) {
-                                Log.e(TAG, "   ❌ No face detected in bitmap")
+                                Log.e(TAG, "No face detected")
                                 faceVerifyError = "No face detected. Please try again."
                                 faceVerifyBusy = false
                                 return@launch
                             }
 
-                            Log.d(TAG, "   ✅ Face embedding extracted successfully (size=${liveEmbedding.size})")
+                            // ✨ Load stored face embedding for comparison
+                            val store = FaceStore.getInstance(context)
+                            val storedEmbedding = withContext(Dispatchers.IO) {
+                                store.loadEmbedding()
+                            }
 
-                            // Calculate a basic quality score (you can adjust this logic)
-                            val qualityScore = 0.85f // Or calculate based on face detection confidence
+                            if (storedEmbedding == null) {
+                                Log.e(TAG, "❌ No stored face found - user needs to register")
+                                faceVerifyError = "No registered face found. Please register your face first."
+                                faceVerifyBusy = false
+                                return@launch
+                            }
 
-                            Log.d(TAG, "   ✅ Face captured with quality score: $qualityScore")
-                            Log.d(TAG, "   - Calling vm.onFaceVerificationComplete()")
+                            // ✨ Calculate similarity between live and stored embeddings
+                            val similarity = calculateCosineSimilarity(liveEmbedding, storedEmbedding)
+                            Log.d(TAG, "📊 Face similarity score: $similarity")
 
-                            // Let the server do the verification
-                            // Just send that face was captured successfully
-                            vm.onFaceVerificationComplete(
-                                qualityScore = qualityScore,
-                                verified = true // Server will do actual verification
-                            )
+                            // ✨ Get minimum threshold from server
+                            val minimumThreshold = ui.checkInMinimumQualityScore ?: ui.checkOutMinimumQualityScore ?: 0.55f
 
-                            Log.d(TAG, "   ✅ Face verification complete callback sent")
+                            // ✨ Verify if similarity meets threshold
+                            val isVerified = similarity >= minimumThreshold
 
+                            if (isVerified) {
+                                Log.d(TAG, "✅ Face VERIFIED! Similarity: $similarity >= $minimumThreshold")
+                                vm.onFaceVerificationComplete(
+                                    qualityScore = similarity,
+                                    verified = true
+                                )
+                            } else {
+                                Log.e(TAG, "❌ Face NOT verified! Similarity: $similarity < $minimumThreshold")
+                                faceVerifyError = "Face does not match (${String.format("%.2f", similarity * 100)}% match). Please try again."
+                                faceVerifyBusy = false
+                            }
                         } catch (e: Exception) {
-                            Log.e(TAG, "   ❌ Face capture error: ${e.message}", e)
+                            Log.e(TAG, "Face capture error: ${e.message}", e)
                             faceVerifyError = "Face capture failed: ${e.message}"
                             faceVerifyBusy = false
                             bitmap.recycle()
@@ -619,9 +640,7 @@ fun HomePage(
         }
     }
 
-    // Reason Dialog (for late/early or out of range violations)
     if (ui.showReasonDialog) {
-        // Determine if this is check-in or check-out
         val isCheckIn = ui.checkInTToken != null
         val isLateOrEarly = if (isCheckIn) ui.checkInIsLate else ui.checkOutIsEarly
         val isOutOfRange = if (isCheckIn) ui.checkInIsOutOfRange else ui.checkOutIsOutOfRange
@@ -645,25 +664,19 @@ fun HomePage(
         )
     }
 
-    // Face Registration Screen
     if (showRegistration) {
         FaceRegistrationScreen(
-            onDismiss = {
-                showRegistration = false
-            },
+            onDismiss = { showRegistration = false },
             onEnrolled = { embedding, bitmap ->
                 registrationBusy = true
-
                 scope.launch {
                     try {
                         val api = NetworkModule.apiService
-
                         val imageBytes = withContext(Dispatchers.Default) {
                             val outputStream = java.io.ByteArrayOutputStream()
                             bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
                             outputStream.toByteArray()
                         }
-
                         val embeddingJson = com.google.gson.Gson().toJson(embedding.toList())
 
                         val imagePart = okhttp3.MultipartBody.Part.createFormData(
@@ -671,21 +684,9 @@ fun HomePage(
                             "face_${System.currentTimeMillis()}.jpg",
                             okhttp3.RequestBody.create("image/jpeg".toMediaTypeOrNull(), imageBytes)
                         )
-
-                        val faceDataPart = okhttp3.RequestBody.create(
-                            "text/plain".toMediaTypeOrNull(),
-                            embeddingJson
-                        )
-
-                        val priorityPart = okhttp3.RequestBody.create(
-                            "text/plain".toMediaTypeOrNull(),
-                            "normal"
-                        )
-
-                        val reasonPart = okhttp3.RequestBody.create(
-                            "text/plain".toMediaTypeOrNull(),
-                            "Face registration from mobile app"
-                        )
+                        val faceDataPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), embeddingJson)
+                        val priorityPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), "normal")
+                        val reasonPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), "Face registration from mobile app")
 
                         val response = withContext(Dispatchers.IO) {
                             api.registerFaceRecognition(
@@ -714,7 +715,6 @@ fun HomePage(
                             }
                             snack.showSnackbar(message)
                         }
-
                     } catch (e: Exception) {
                         Log.e(TAG, "Registration error", e)
                         registrationBusy = false
@@ -745,21 +745,14 @@ fun ReasonDialog(
         onDismissRequest = onDismiss,
         title = { Text("Attendance Note") },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (isLateOrEarly) {
                     Text(
-                        text = if (isCheckIn) {
-                            "You are checking in late"
-                        } else {
-                            "You are checking out early"
-                        },
+                        text = if (isCheckIn) "You are checking in late" else "You are checking out early",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFFFF9800)
                     )
                 }
-
                 if (isOutOfRange) {
                     Text(
                         text = "You are outside the designated area",
@@ -767,22 +760,16 @@ fun ReasonDialog(
                         color = Color(0xFFFF9800)
                     )
                 }
-
                 if (lateOrEarlyReasonRequired) {
                     OutlinedTextField(
                         value = lateOrEarlyReason,
                         onValueChange = { lateOrEarlyReason = it },
-                        label = {
-                            Text(
-                                if (isCheckIn) "Late Reason *" else "Early Check-Out Reason *"
-                            )
-                        },
+                        label = { Text(if (isCheckIn) "Late Reason *" else "Early Check-Out Reason *") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                         maxLines = 4
                     )
                 }
-
                 if (outOfRangeReasonRequired) {
                     OutlinedTextField(
                         value = outOfRangeReason,
@@ -793,14 +780,9 @@ fun ReasonDialog(
                         maxLines = 4
                     )
                 }
-
                 if (!lateOrEarlyReasonRequired && !outOfRangeReasonRequired) {
                     Text(
-                        text = if (isCheckIn) {
-                            "Tap Continue to complete check-in"
-                        } else {
-                            "Tap Continue to complete check-out"
-                        },
+                        text = if (isCheckIn) "Tap Continue to complete check-in" else "Tap Continue to complete check-out",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -810,15 +792,10 @@ fun ReasonDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val lateOrEarly = if (lateOrEarlyReasonRequired && lateOrEarlyReason.isNotBlank())
-                        lateOrEarlyReason else null
-                    val outRange = if (outOfRangeReasonRequired && outOfRangeReason.isNotBlank())
-                        outOfRangeReason else null
-
-                    // Validate required fields
+                    val lateOrEarly = if (lateOrEarlyReasonRequired && lateOrEarlyReason.isNotBlank()) lateOrEarlyReason else null
+                    val outRange = if (outOfRangeReasonRequired && outOfRangeReason.isNotBlank()) outOfRangeReason else null
                     if (lateOrEarlyReasonRequired && lateOrEarlyReason.isBlank()) return@Button
                     if (outOfRangeReasonRequired && outOfRangeReason.isBlank()) return@Button
-
                     onSubmit(lateOrEarly, outRange)
                 },
                 enabled = (!lateOrEarlyReasonRequired || lateOrEarlyReason.isNotBlank()) &&

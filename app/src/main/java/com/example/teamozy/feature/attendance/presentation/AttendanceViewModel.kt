@@ -48,6 +48,7 @@ class AttendanceViewModel(
                         isRefreshing = false,
                         currentState = outcome.currentState,
                         statusMessage = outcome.message,
+                        lastCheckInTime = outcome.lastCheckInTime,
                         attendanceStatus = outcome.attendanceStatus,
                         isComplete = outcome.isComplete,
                         errorMessage = null
@@ -456,6 +457,7 @@ data class AttendanceUiState(
     // Status data from check-status API
     val currentState: String = "CHECK_IN_NEEDED",
     val statusMessage: String = "",
+    val lastCheckInTime: String? = null,
     val attendanceStatus: String? = null,
     val isComplete: Boolean? = null,
 
