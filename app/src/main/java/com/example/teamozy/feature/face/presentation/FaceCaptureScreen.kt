@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 
 private const val TAG = "FaceCapture"
@@ -150,7 +149,14 @@ fun FaceCaptureScreen(
                                     try {
                                         val now = System.currentTimeMillis()
 
-                                        // Skip if already processing
+                                        // CRITICAL: Check if HomePage is busy FIRST
+                                        // This syncs with HomePage's faceVerifyBusy state
+                                        if (isSubmitting) {
+                                            imageProxy.close()
+                                            return@setAnalyzer
+                                        }
+
+                                        // Skip if already processing locally
                                         if (isProcessing) {
                                             imageProxy.close()
                                             return@setAnalyzer
@@ -179,19 +185,19 @@ fun FaceCaptureScreen(
                                         // Pass bitmap to HomePage for verification
                                         onBitmapCaptured(bitmap)
 
-                                        // Reset processing flag after a short delay
-                                        // HomePage will handle success/failure and close screen if matched
-                                        kotlinx.coroutines.GlobalScope.launch {
-                                            kotlinx.coroutines.delay(500)
-                                            isProcessing = false
-                                        }
+                                        // Reset local processing flag immediately
+                                        // HomePage's isSubmitting will prevent further captures until it's ready
+                                        isProcessing = false
 
                                     } catch (e: Exception) {
                                         Log.e(TAG, "Frame processing error", e)
                                         errorText = e.message
                                         isProcessing = false
-                                    } finally {
-                                        imageProxy.close()
+                                        try {
+                                            imageProxy.close()
+                                        } catch (e2: Exception) {
+                                            Log.e(TAG, "Error closing imageProxy", e2)
+                                        }
                                     }
                                 }
 

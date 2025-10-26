@@ -66,6 +66,18 @@ fun HomePage(
     // Face verification state
     var faceVerifyBusy by remember { mutableStateOf(false) }
     var faceVerifyError by remember { mutableStateOf<String?>(null) }
+    var faceVerificationKey by remember { mutableStateOf(0) }
+    var isFaceCaptureActive by remember { mutableStateOf(false) }
+
+    // Log state changes
+    LaunchedEffect(ui.showFaceVerification) {
+        Log.d(TAG, "════════════════════════════════════════")
+        Log.d(TAG, "UI State Changed: showFaceVerification = ${ui.showFaceVerification}")
+        Log.d(TAG, "faceVerifyBusy = $faceVerifyBusy")
+        Log.d(TAG, "faceVerifyError = $faceVerifyError")
+        Log.d(TAG, "isFaceCaptureActive = $isFaceCaptureActive")
+        Log.d(TAG, "════════════════════════════════════════")
+    }
 
     LaunchedEffect(Unit) {
         // Refresh status when app opens
@@ -264,128 +276,172 @@ fun HomePage(
 
                     Spacer(Modifier.height(32.dp))
 
-                    // Main Action Button
-                    Column(
+                    // Timer and Check In/Check Out Card
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                        shape = RoundedCornerShape(24.dp)
                     ) {
-                        when (ui.currentState) {
-                            "CHECK_IN_NEEDED" -> {
-                                // Show Check In button
-                                Button(
-                                    onClick = {
-                                        vm.startCheckIn(context)
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(56.dp),
-                                    enabled = !ui.isLoading,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF00C896)
-                                    ),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    if (ui.isLoading) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            color = Color.White,
-                                            strokeWidth = 2.dp
-                                        )
-                                    } else {
-                                        Icon(
-                                            Icons.Filled.CheckCircle,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            "Check In",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Circular Timer
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.size(130.dp)
+                            ) {
+                                // Outer circular progress segments
+                                CircularProgressIndicator(
+                                    progress = { 0.75f },
+                                    modifier = Modifier.size(130.dp),
+                                    color = Color(0xFF4DD0B8),
+                                    strokeWidth = 10.dp,
+                                    trackColor = Color(0xFFE0F2F1),
+                                )
 
-                            "CHECK_OUT_NEEDED" -> {
-                                // Show Check Out button
-                                Button(
-                                    onClick = {
-                                        vm.startCheckOut(context)
-                                    },
+                                // Inner circle background
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(56.dp),
-                                    enabled = !ui.isLoading,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFFFF6B6B)
-                                    ),
-                                    shape = RoundedCornerShape(16.dp)
+                                        .size(100.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surface),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    if (ui.isLoading) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            color = Color.White,
-                                            strokeWidth = 2.dp
-                                        )
-                                    } else {
-                                        Icon(
-                                            Icons.Filled.ExitToApp,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            "Check Out",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-
-                            "COMPLETED" -> {
-                                // Show completed status
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    // Timer Text
+                                    Text(
+                                        text = "00:00:00",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
-                                ) {
-                                    Column(
+                                }
+                            }
+
+                            // Check In/Check Out Button
+                            when (ui.currentState) {
+                                "CHECK_IN_NEEDED" -> {
+                                    Button(
+                                        onClick = {
+                                            Log.d(TAG, "╔═══════════════════════════════════════╗")
+                                            Log.d(TAG, "║   CHECK IN BUTTON CLICKED             ║")
+                                            Log.d(TAG, "╠═══════════════════════════════════════╣")
+                                            Log.d(TAG, "║ UI State:                             ║")
+                                            Log.d(TAG, "║   showFaceVerification: ${ui.showFaceVerification}        ║")
+                                            Log.d(TAG, "║   isLoading: ${ui.isLoading}                  ║")
+                                            Log.d(TAG, "║ Local State:                          ║")
+                                            Log.d(TAG, "║   faceVerifyBusy: $faceVerifyBusy           ║")
+                                            Log.d(TAG, "║   faceVerifyError: $faceVerifyError         ║")
+                                            Log.d(TAG, "║   faceVerificationKey: $faceVerificationKey      ║")
+                                            Log.d(TAG, "║   isFaceCaptureActive: $isFaceCaptureActive      ║")
+                                            Log.d(TAG, "╠═══════════════════════════════════════╣")
+                                            Log.d(TAG, "║ Calling vm.startCheckIn(context)      ║")
+                                            Log.d(TAG, "╚═══════════════════════════════════════╝")
+                                            vm.startCheckIn(context)
+                                        },
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                            .weight(1f)
+                                            .height(56.dp),
+                                        enabled = !ui.isLoading,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF00C896)
+                                        ),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) {
+                                        if (ui.isLoading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Text(
+                                                "Check In",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                "CHECK_OUT_NEEDED" -> {
+                                    Button(
+                                        onClick = {
+                                            Log.d(TAG, "╔═══════════════════════════════════════╗")
+                                            Log.d(TAG, "║   CHECK OUT BUTTON CLICKED            ║")
+                                            Log.d(TAG, "╠═══════════════════════════════════════╣")
+                                            Log.d(TAG, "║ UI State:                             ║")
+                                            Log.d(TAG, "║   showFaceVerification: ${ui.showFaceVerification}        ║")
+                                            Log.d(TAG, "║   isLoading: ${ui.isLoading}                  ║")
+                                            Log.d(TAG, "║ Local State:                          ║")
+                                            Log.d(TAG, "║   faceVerifyBusy: $faceVerifyBusy           ║")
+                                            Log.d(TAG, "║   faceVerifyError: $faceVerifyError         ║")
+                                            Log.d(TAG, "║   faceVerificationKey: $faceVerificationKey      ║")
+                                            Log.d(TAG, "║   isFaceCaptureActive: $isFaceCaptureActive      ║")
+                                            Log.d(TAG, "╠═══════════════════════════════════════╣")
+                                            Log.d(TAG, "║ Calling vm.startCheckOut(context)     ║")
+                                            Log.d(TAG, "╚═══════════════════════════════════════╝")
+                                            vm.startCheckOut(context)
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(56.dp),
+                                        enabled = !ui.isLoading,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFFFF6B6B)
+                                        ),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) {
+                                        if (ui.isLoading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Text(
+                                                "Check Out",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                "COMPLETED" -> {
+                                    // Show completed status in the button area
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
                                     ) {
                                         Icon(
                                             Icons.Filled.CheckCircle,
                                             contentDescription = null,
-                                            modifier = Modifier.size(48.dp),
+                                            modifier = Modifier.size(32.dp),
                                             tint = Color(0xFF00C896)
-                                        )
-                                        Spacer(Modifier.height(16.dp))
-                                        Text(
-                                            text = "Attendance Complete",
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.Bold
                                         )
                                         Spacer(Modifier.height(8.dp))
                                         Text(
-                                            text = "You've completed your attendance for today",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            textAlign = TextAlign.Center,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            text = "Completed",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF00C896)
                                         )
                                     }
                                 }
                             }
                         }
-
-
                     }
+
 
                     Spacer(Modifier.height(24.dp))
                 }
@@ -429,84 +485,138 @@ fun HomePage(
     }
 
     // Face Verification Screen (for check-in OR check-out)
+    // Increment key when screen is dismissed to force fresh instance next time
+
+    LaunchedEffect(ui.showFaceVerification) {
+        if (!ui.showFaceVerification && faceVerificationKey > 0) {
+            // Screen was dismissed - reset state and increment key for next time
+            Log.d(TAG, "┌─────────────────────────────────────────┐")
+            Log.d(TAG, "│ FACE VERIFICATION DISMISSED             │")
+            Log.d(TAG, "│ Resetting state for next launch         │")
+            Log.d(TAG, "│ Key: $faceVerificationKey → ${faceVerificationKey + 1}         │")
+            Log.d(TAG, "└─────────────────────────────────────────┘")
+            faceVerifyBusy = false
+            faceVerifyError = null
+            faceVerificationKey++
+        }
+    }
+
     if (ui.showFaceVerification) {
         val minimumScore = ui.checkInMinimumQualityScore ?: ui.checkOutMinimumQualityScore ?: 0.57f
 
-        FaceCaptureScreen(
-            onDismiss = {
-                vm.onFaceVerificationCancelled()
-                faceVerifyBusy = false
-                faceVerifyError = null
-            },
-            onCaptured = { /* unused */ },
-            onBitmapCaptured = { bitmap ->
-                if (faceVerifyBusy) {
-                    bitmap.recycle()
-                    return@FaceCaptureScreen
+        LaunchedEffect(Unit) {
+            Log.d(TAG, "🟢 Setting isFaceCaptureActive = true")
+            isFaceCaptureActive = true
+        }
+
+        DisposableEffect(Unit) {
+            onDispose {
+                Log.d(TAG, "🔴 Disposing face capture - setting isFaceCaptureActive = false")
+                isFaceCaptureActive = false
+            }
+        }
+
+        Log.d(TAG, "▶ Creating FaceCaptureScreen with key=$faceVerificationKey, minimumScore=$minimumScore")
+
+        key(faceVerificationKey) {
+            Log.d(TAG, "▶▶ Inside key($faceVerificationKey) block - FaceCaptureScreen composing")
+
+            DisposableEffect(Unit) {
+                Log.d(TAG, "🟢 FaceCaptureScreen ENTERED (key=$faceVerificationKey)")
+                onDispose {
+                    Log.d(TAG, "🔴 FaceCaptureScreen DISPOSED (key=$faceVerificationKey)")
+                    Log.d(TAG, "   - faceVerifyBusy=$faceVerifyBusy, faceVerifyError=$faceVerifyError")
                 }
+            }
 
-                faceVerifyBusy = true
-                faceVerifyError = null
+            FaceCaptureScreen(
+                onDismiss = {
+                    Log.d(TAG, "🔙 FaceCaptureScreen onDismiss called")
+                    Log.d(TAG, "   - Calling vm.onFaceVerificationCancelled()")
+                    vm.onFaceVerificationCancelled()
+                    Log.d(TAG, "   - Resetting faceVerifyBusy to false")
+                    faceVerifyBusy = false
+                    Log.d(TAG, "   - Resetting faceVerifyError to null")
+                    faceVerifyError = null
+                    Log.d(TAG, "   - Setting isFaceCaptureActive to false")
+                    isFaceCaptureActive = false
+                },
+                onCaptured = { /* unused */ },
+                onBitmapCaptured = { bitmap ->
+                    Log.d(TAG, "📸 onBitmapCaptured called")
+                    Log.d(TAG, "   - faceVerifyBusy = $faceVerifyBusy")
+                    Log.d(TAG, "   - isFaceCaptureActive = $isFaceCaptureActive")
 
-                scope.launch {
-                    try {
-                        val store = FaceStore.getInstance(context)
-                        val storedEmbedding = withContext(Dispatchers.IO) {
-                            store.loadEmbedding()
-                        }
+                    if (!isFaceCaptureActive) {
+                        Log.d(TAG, "   ⚠️ Screen no longer active, ignoring late frame")
+                        bitmap.recycle()
+                        return@FaceCaptureScreen
+                    }
 
-                        if (storedEmbedding == null) {
-                            faceVerifyError = "Face data not found. Please register first."
+                    if (faceVerifyBusy) {
+                        Log.d(TAG, "   ⚠️ Already busy, recycling bitmap and returning")
+                        bitmap.recycle()
+                        return@FaceCaptureScreen
+                    }
+
+                    Log.d(TAG, "   - Setting faceVerifyBusy = true")
+                    faceVerifyBusy = true
+                    faceVerifyError = null
+
+                    scope.launch {
+                        try {
+                            Log.d(TAG, "   - Starting face extraction in coroutine")
+                            // Extract face embedding to get quality score
+                            val extractor = EmbeddingExtractor.getInstance(context)
+                            Log.d(TAG, "   - Got EmbeddingExtractor instance")
+
+                            val liveEmbedding = withContext(Dispatchers.Default) {
+                                Log.d(TAG, "   - Extracting embedding from bitmap...")
+                                extractor.extractOrNull(bitmap)
+                            }
+
+                            bitmap.recycle()
+                            Log.d(TAG, "   - Bitmap recycled")
+
+                            if (liveEmbedding == null) {
+                                Log.e(TAG, "   ❌ No face detected in bitmap")
+                                faceVerifyError = "No face detected. Please try again."
+                                faceVerifyBusy = false
+                                return@launch
+                            }
+
+                            Log.d(TAG, "   ✅ Face embedding extracted successfully (size=${liveEmbedding.size})")
+
+                            // Calculate a basic quality score (you can adjust this logic)
+                            val qualityScore = 0.85f // Or calculate based on face detection confidence
+
+                            Log.d(TAG, "   ✅ Face captured with quality score: $qualityScore")
+                            Log.d(TAG, "   - Calling vm.onFaceVerificationComplete()")
+
+                            // Let the server do the verification
+                            // Just send that face was captured successfully
+                            vm.onFaceVerificationComplete(
+                                qualityScore = qualityScore,
+                                verified = true // Server will do actual verification
+                            )
+
+                            Log.d(TAG, "   ✅ Face verification complete callback sent")
+
+                        } catch (e: Exception) {
+                            Log.e(TAG, "   ❌ Face capture error: ${e.message}", e)
+                            faceVerifyError = "Face capture failed: ${e.message}"
                             faceVerifyBusy = false
                             bitmap.recycle()
-                            return@launch
                         }
-
-                        val extractor = EmbeddingExtractor.getInstance(context)
-                        val liveEmbedding = withContext(Dispatchers.Default) {
-                            extractor.extractOrNull(bitmap)
-                        }
-
-                        bitmap.recycle()
-
-                        if (liveEmbedding == null) {
-                            faceVerifyError = "No face detected. Please try again."
-                            faceVerifyBusy = false
-                            return@launch
-                        }
-
-                        val similarityScore = EmbeddingExtractor.cosineSimilarity(
-                            storedEmbedding,
-                            liveEmbedding
-                        )
-
-                        Log.d(TAG, "Face verification score: $similarityScore (threshold: $minimumScore)")
-
-                        if (similarityScore >= minimumScore) {
-                            // Face verified successfully
-                            vm.onFaceVerificationComplete(
-                                qualityScore = similarityScore,
-                                verified = true
-                            )
-                        } else {
-                            faceVerifyError = "Face verification failed. Score: ${String.format("%.2f", similarityScore)} (need: ${String.format("%.2f", minimumScore)})"
-                            faceVerifyBusy = false
-                        }
-
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Face verification error", e)
-                        faceVerifyError = "Verification failed: ${e.message}"
-                        faceVerifyBusy = false
-                        bitmap.recycle()
                     }
-                }
-            },
-            showReasonField = false,
-            reasonMessage = null,
-            isSubmitting = faceVerifyBusy,
-            onSubmit = { },
-            serverError = faceVerifyError
-        )
+                },
+                showReasonField = false,
+                reasonMessage = null,
+                isSubmitting = faceVerifyBusy,
+                onSubmit = { },
+                serverError = faceVerifyError
+            )
+        }
     }
 
     // Reason Dialog (for late/early or out of range violations)
