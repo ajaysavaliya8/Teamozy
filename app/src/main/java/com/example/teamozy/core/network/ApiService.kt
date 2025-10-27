@@ -117,4 +117,13 @@ interface ApiService {
         @Field("instagram") instagram: String? = null,
         @Field("snapchat") snapchat: String? = null
     ): Response<SocialMediaUpdateResponse>
+
+    @Multipart
+    @POST("profile/update-picture")
+    suspend fun updateProfilePicture(
+        @Part profile_image: MultipartBody.Part
+    ): Response<ProfilePictureUpdateResponse>
+
+    @DELETE("profile/remove-picture")
+    suspend fun removeProfilePicture(): Response<BasicResponse>
 }

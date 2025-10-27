@@ -46,9 +46,6 @@ data class CheckStatusResponse(
 
 data class CheckStatusData(
     val current_state: String,    // "CHECK_IN_NEEDED" | "CHECK_OUT_NEEDED" | "COMPLETED"
-//    val face_recognition_enabled: Boolean,
-//    val face_vector: String? = null,
-//    val minimum_quality_score: Float,
     val last_check_in_time: String? = null,
     val message: String,
     val attendance_status: String? = null,
@@ -105,11 +102,7 @@ data class CheckOutSignatureResponse(
 // Verify token endpoint response
 data class VerifyTokenResponse(
     val status: String,
-    val message: String,
-//    val minimum_face_recognition_quality_score: Float? = null,
-//    val face_vector: String? = null,
-//    val require_face_checkin: Boolean? = null,
-//    val require_face_break: Boolean? = null
+    val message: String
 )
 
 // Face verify upload response
@@ -149,4 +142,12 @@ data class SocialMediaData(
     val x: String?,
     val instagram: String?,
     val snapchat: String?
+)
+
+// -------- Profile Picture Update Response --------
+data class ProfilePictureUpdateResponse(
+    val status: String,
+    val message: String,
+    val profile_url: String? = null,
+    val filename: String? = null
 )

@@ -114,7 +114,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
-
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
     // Core dependencies from libs
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

@@ -216,12 +216,13 @@ class AuthRepository(private val context: Context) {
                 data.department_name?.let { pm.departmentName = it }
                 data.shift_name?.let { pm.shiftName = it }
 
-                // Social media
-                data.facebook?.let { pm.facebook = it }
-                data.linkedin?.let { pm.linkedin = it }
-                data.x?.let { pm.x = it }
-                data.instagram?.let { pm.instagram = it }
-                data.snapchat?.let { pm.snapchat = it }
+                // ===== FIXED: Social media - explicitly handle null values =====
+                // This ensures that when API returns null, it properly clears the stored values
+                pm.facebook = data.facebook
+                pm.linkedin = data.linkedin
+                pm.x = data.x
+                pm.instagram = data.instagram
+                pm.snapchat = data.snapchat
 
                 // Company info
                 data.company_name?.let { pm.companyName = it }
@@ -242,6 +243,11 @@ class AuthRepository(private val context: Context) {
                 Log.d("AUTH", "   Department: ${pm.departmentName}")
                 Log.d("AUTH", "   Shift: ${pm.shiftName}")
                 Log.d("AUTH", "   Company: ${pm.companyName}")
+                Log.d("AUTH", "   Social Media - Facebook: ${pm.facebook ?: "null"}")
+                Log.d("AUTH", "   Social Media - LinkedIn: ${pm.linkedin ?: "null"}")
+                Log.d("AUTH", "   Social Media - X: ${pm.x ?: "null"}")
+                Log.d("AUTH", "   Social Media - Instagram: ${pm.instagram ?: "null"}")
+                Log.d("AUTH", "   Social Media - Snapchat: ${pm.snapchat ?: "null"}")
             }
 
             AuthOutcome.Success(msg, body?.token)
