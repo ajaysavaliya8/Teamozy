@@ -514,11 +514,21 @@ fun HomePage(
                     Text("Attendance Screen\n(Coming Soon)", textAlign = TextAlign.Center)
                 }
             }
+
             HomeScreen.PROFILE -> ProfileScreen(
                 onNavigateToFaceChange = {
                     Log.d(TAG, "Profile -> Face Registration")
                     currentScreen = HomeScreen.HOME
                     showRegistration = true
+                },
+                onNavigateToEditSocialMedia = {
+                    // You can either:
+                    // Option 1: Navigate to a separate screen (if using full navigation)
+                    // navController.navigate("edit_social_media")
+
+                    // Option 2: Handle it inline (simple approach for now)
+                    Log.d(TAG, "Navigate to Edit Social Media - Coming Soon")
+                    // For now, you can leave this empty or show a toast
                 },
                 onLogout = {
                     Log.d(TAG, "Logout - clearing all data")
@@ -535,7 +545,9 @@ fun HomePage(
                         }
                     }
                 },
-                onBack = { currentScreen = HomeScreen.HOME }
+                onBack = {
+                    currentScreen = HomeScreen.HOME
+                }
             )
         }
     }

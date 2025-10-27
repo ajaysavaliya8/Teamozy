@@ -106,4 +106,15 @@ interface ApiService {
         @Part("priority") priority: RequestBody,
         @Part("reason_for_change") reasonForChange: RequestBody? = null
     ): Response<BasicResponse>
+
+    // ---------- PROFILE ----------
+    @FormUrlEncoded
+    @PUT("profile/update-social-media")
+    suspend fun updateSocialMedia(
+        @Field("facebook") facebook: String? = null,
+        @Field("linkedin") linkedin: String? = null,
+        @Field("x") x: String? = null,
+        @Field("instagram") instagram: String? = null,
+        @Field("snapchat") snapchat: String? = null
+    ): Response<SocialMediaUpdateResponse>
 }

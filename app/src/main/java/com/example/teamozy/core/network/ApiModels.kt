@@ -135,3 +135,18 @@ data class PendingFaceRegistrationResponse(
     val pending: Boolean,
     val message: String
 )
+
+// -------- Social Media Update Response --------
+data class SocialMediaUpdateResponse(
+    val status: String,
+    val message: String,
+    val social_media: SocialMediaData? = null
+)
+
+data class SocialMediaData(
+    val facebook: String?,
+    val linkedin: String?,
+    val x: String?,
+    val instagram: String?,
+    val snapchat: String?
+)

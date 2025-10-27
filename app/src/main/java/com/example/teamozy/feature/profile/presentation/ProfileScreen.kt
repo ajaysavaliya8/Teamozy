@@ -4,6 +4,7 @@ package com.example.teamozy.feature.profile.presentation
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,20 +20,27 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.teamozy.BuildConfig
+import com.example.teamozy.R
 import com.example.teamozy.core.utils.PreferencesManager
 
 @Composable
 fun ProfileScreen(
     onNavigateToFaceChange: () -> Unit,
+    onNavigateToEditSocialMedia: () -> Unit,
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -46,13 +54,12 @@ fun ProfileScreen(
                 title = { Text("My Profile", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    // Settings Icon
                     IconButton(
-                        onClick = { /* TODO: Navigate to settings */ },
+                        onClick = { /* TODO */ },
                         modifier = Modifier
                             .padding(end = 4.dp)
                             .size(40.dp)
@@ -65,8 +72,6 @@ fun ProfileScreen(
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
-
-                    // Share Icon
                     IconButton(
                         onClick = { shareProfile(context, prefs) },
                         modifier = Modifier
@@ -81,8 +86,6 @@ fun ProfileScreen(
                             tint = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
-
-                    // Logout Icon
                     IconButton(
                         onClick = { showLogoutDialog = true },
                         modifier = Modifier
@@ -94,14 +97,12 @@ fun ProfileScreen(
                         Icon(
                             Icons.Outlined.ExitToApp,
                             contentDescription = "Logout",
-                            tint = MaterialTheme.colorScheme.error
+                            tint = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
         }
@@ -115,7 +116,6 @@ fun ProfileScreen(
         ) {
             Spacer(Modifier.height(16.dp))
 
-            // Profile Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -125,7 +125,7 @@ fun ProfileScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column {
-                    // Company Header with Gradient
+                    // Header
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -139,54 +139,102 @@ fun ProfileScreen(
                             )
                             .padding(16.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = prefs.companyName?.uppercase() ?: "COMPANY NAME",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = prefs.companyAddress ?: "Company Address",
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
-                                lineHeight = 18.sp
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!prefs.companyLogoUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = prefs.companyLogoUrl,
+                                    contentDescription = "Company Logo",
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surface),
+                                    contentScale = ContentScale.Fit
+                                )
+                                Spacer(Modifier.width(12.dp))
+                            }
+
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = prefs.companyName?.uppercase() ?: "COMPANY NAME",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                if (!prefs.companyWebsite.isNullOrBlank()) {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = prefs.companyWebsite!!,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
+                                        textDecoration = TextDecoration.Underline,
+                                        modifier = Modifier.clickable {
+                                            openUrl(
+                                                context,
+                                                if (prefs.companyWebsite!!.startsWith("http"))
+                                                    prefs.companyWebsite!!
+                                                else "https://${prefs.companyWebsite}"
+                                            )
+                                        }
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = prefs.companyAddress ?: "Company Address",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                                )
+                            }
                         }
                     }
 
-                    // Profile Content
-                    Column(
-                        modifier = Modifier.padding(20.dp)
-                    ) {
+                    // Profile
+                    Column(Modifier.padding(20.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            // Profile Image with Camera Icon
+                            // Avatar
                             Box(
                                 modifier = Modifier.size(120.dp),
                                 contentAlignment = Alignment.BottomEnd
                             ) {
-                                // Profile Image Placeholder
-                                Box(
-                                    modifier = Modifier
-                                        .size(120.dp)
-                                        .clip(CircleShape)
-                                        .border(3.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Person,
+                                if (!prefs.profileUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = prefs.profileUrl,
                                         contentDescription = "Profile Picture",
-                                        modifier = Modifier.size(60.dp),
-                                        tint = MaterialTheme.colorScheme.primary
+                                        modifier = Modifier
+                                            .size(120.dp)
+                                            .clip(CircleShape)
+                                            .border(
+                                                3.dp,
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                                                CircleShape
+                                            ),
+                                        contentScale = ContentScale.Crop
                                     )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(120.dp)
+                                            .clip(CircleShape)
+                                            .border(
+                                                3.dp,
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                                                CircleShape
+                                            )
+                                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Person,
+                                            contentDescription = "Profile Picture",
+                                            modifier = Modifier.size(60.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
 
-                                // Camera Icon
+                                // small add on avatar
                                 Surface(
                                     modifier = Modifier
                                         .size(36.dp)
@@ -203,7 +251,7 @@ fun ProfileScreen(
                                 }
                             }
 
-                            // User Info
+                            // Name + completion
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
@@ -211,206 +259,124 @@ fun ProfileScreen(
                             ) {
                                 Text(
                                     text = prefs.fullName ?: prefs.userName ?: "User Name",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.SemiBold
                                 )
-
                                 Spacer(Modifier.height(4.dp))
-
-                                if (!prefs.shiftName.isNullOrBlank()) {
-                                    Text(
-                                        text = prefs.shiftName!!.uppercase(),
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                }
-
-                                // Department Info (Branch - Department)
-                                val departmentInfo = buildString {
-                                    if (!prefs.branchName.isNullOrBlank()) {
-                                        append(prefs.branchName!!.uppercase())
-                                    }
-                                    if (!prefs.departmentName.isNullOrBlank()) {
-                                        if (isNotEmpty()) append(" - ")
-                                        append(prefs.departmentName!!.uppercase())
-                                    }
-                                }
-
-                                if (departmentInfo.isNotEmpty()) {
-                                    Text(
-                                        text = departmentInfo,
-                                        fontSize = 14.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                        lineHeight = 18.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(24.dp))
-
-                        // Profile Completion Section
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            // Calculate profile completion
-                            val completion = calculateProfileCompletion(prefs)
-
-                            // Completion Badge
-                            Box(
-                                modifier = Modifier
-                                    .size(60.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary),
-                                contentAlignment = Alignment.Center
-                            ) {
                                 Text(
-                                    text = "$completion%",
-                                    fontSize = 14.sp, // Made smaller as requested
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimary
+                                    text = listOfNotNull(prefs.branchName, prefs.departmentName)
+                                        .joinToString(" • ")
+                                        .ifBlank { "Department N/A" },
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Spacer(Modifier.height(8.dp))
+
+                                val completion = calculateProfileCompletion(prefs)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(fraction = (completion / 100f).coerceIn(0f, 1f))
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(MaterialTheme.colorScheme.primary)
+                                        )
+                                    }
+                                    Text(
+                                        text = "$completion%",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
-
-                            Spacer(Modifier.height(16.dp))
-
-                            // Progress Bar
-                            LinearProgressIndicator(
-                                progress = completion / 100f,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-
-                            Spacer(Modifier.height(8.dp))
-
-                            Text(
-                                text = "Profile Completion",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
                         }
                     }
 
-                    // Divider
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 20.dp),
                         color = MaterialTheme.colorScheme.outlineVariant
                     )
 
-                    // Phone Number Section
+                    // Phone
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                val phone = prefs.mobileNumber
-                                if (phone != 0L) {
-                                    dialPhoneNumber(context, phone.toString())
-                                } else if (!prefs.userId.isNullOrBlank()) {
-                                    dialPhoneNumber(context, prefs.userId!!)
-                                }
-                            }
-                            .padding(20.dp),
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.Phone,
                             contentDescription = "Phone",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
                             text = formatPhoneNumber(prefs),
-                            fontSize = 16.sp, // Made smaller as requested
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    // Social Media Section (Under Phone Number)
-                    val hasSocialMedia = !prefs.facebook.isNullOrBlank() ||
-                            !prefs.linkedin.isNullOrBlank() ||
-                            !prefs.x.isNullOrBlank() ||
-                            !prefs.instagram.isNullOrBlank() ||
-                            !prefs.snapchat.isNullOrBlank()
+                    // Social Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SocialMediaIconStatic(
+                            iconRes = R.drawable.ic_facebook,
+                            hasLink = !prefs.facebook.isNullOrBlank(),
+                            onClick = { prefs.facebook?.let { openUrl(context, it) } }
+                        )
+                        SocialMediaIconStatic(
+                            iconRes = R.drawable.ic_linkedin,
+                            hasLink = !prefs.linkedin.isNullOrBlank(),
+                            onClick = { prefs.linkedin?.let { openUrl(context, it) } }
+                        )
+                        SocialMediaIconStatic(
+                            iconRes = R.drawable.ic_x,
+                            hasLink = !prefs.x.isNullOrBlank(),
+                            onClick = { prefs.x?.let { openUrl(context, it) } }
+                        )
+                        SocialMediaIconStatic(
+                            iconRes = R.drawable.ic_instagram,
+                            hasLink = !prefs.instagram.isNullOrBlank(),
+                            onClick = { prefs.instagram?.let { openUrl(context, it) } }
+                        )
+                        SocialMediaIconStatic(
+                            iconRes = R.drawable.ic_snapchat,
+                            hasLink = !prefs.snapchat.isNullOrBlank(),
+                            onClick = { prefs.snapchat?.let { openUrl(context, it) } }
+                        )
 
-                    if (hasSocialMedia) {
-                        Row(
+                        // Edit button: IconButton for reliable clicks
+                        IconButton(
+                            onClick = onNavigateToEditSocialMedia,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f))
                         ) {
-                            // Facebook
-                            if (!prefs.facebook.isNullOrBlank()) {
-                                SocialMediaIcon(
-                                    icon = Icons.Default.Face,
-                                    contentDescription = "Facebook",
-                                    onClick = { openUrl(context, prefs.facebook!!) }
-                                )
-                            }
-
-                            // LinkedIn
-                            if (!prefs.linkedin.isNullOrBlank()) {
-                                SocialMediaIcon(
-                                    icon = Icons.Default.AccountCircle,
-                                    contentDescription = "LinkedIn",
-                                    onClick = { openUrl(context, prefs.linkedin!!) }
-                                )
-                            }
-
-                            // X (Twitter)
-                            if (!prefs.x.isNullOrBlank()) {
-                                SocialMediaIcon(
-                                    icon = Icons.Default.Star,
-                                    contentDescription = "X",
-                                    onClick = { openUrl(context, prefs.x!!) }
-                                )
-                            }
-
-                            // Instagram
-                            if (!prefs.instagram.isNullOrBlank()) {
-                                SocialMediaIcon(
-                                    icon = Icons.Default.Favorite,
-                                    contentDescription = "Instagram",
-                                    onClick = { openUrl(context, prefs.instagram!!) }
-                                )
-                            }
-
-                            // Snapchat/WhatsApp
-                            if (!prefs.snapchat.isNullOrBlank()) {
-                                SocialMediaIcon(
-                                    icon = Icons.Outlined.Email,
-                                    contentDescription = "WhatsApp",
-                                    onClick = { openUrl(context, prefs.snapchat!!) }
-                                )
-                            }
-
-                            Spacer(Modifier.weight(1f))
-
-                            // Edit Social Media Button
-                            IconButton(
-                                onClick = { /* TODO: Edit social media */ },
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
-                            ) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Edit Social Media",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Social Media",
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
                         }
                     }
                 }
@@ -418,317 +384,178 @@ fun ProfileScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Company Information Card
-            if (!prefs.companyEmail.isNullOrBlank() ||
-                !prefs.companyContact.isNullOrBlank() ||
-                !prefs.companyWebsite.isNullOrBlank()) {
+            val hasHRInfo = !prefs.hrEmail.isNullOrBlank() || !prefs.companyContact.isNullOrBlank()
 
-                SectionCard(title = "Company Information") {
-                    // Company Email
-                    if (!prefs.companyEmail.isNullOrBlank()) {
-                        ContactInfoItem(
-                            icon = Icons.Default.Email,
-                            title = "Company Email",
-                            value = prefs.companyEmail!!,
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("mailto:${prefs.companyEmail}")
-                                }
-                                context.startActivity(intent)
-                            }
-                        )
-                        if (!prefs.companyContact.isNullOrBlank() || !prefs.companyWebsite.isNullOrBlank()) {
-                            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                        }
-                    }
-
-                    // Company Contact
+            if (hasHRInfo) {
+                SectionCard(title = "HR Contact") {
                     if (!prefs.companyContact.isNullOrBlank()) {
-                        ContactInfoItem(
+                        ContactItem(
                             icon = Icons.Default.Phone,
-                            title = "Company Phone",
+                            title = "HR Mobile",
                             value = prefs.companyContact!!,
                             onClick = { dialPhoneNumber(context, prefs.companyContact!!) }
                         )
-                        if (!prefs.companyWebsite.isNullOrBlank()) {
-                            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                        if (!prefs.hrEmail.isNullOrBlank()) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         }
                     }
-
-                    // Company Website
-                    if (!prefs.companyWebsite.isNullOrBlank()) {
-                        ContactInfoItem(
-                            icon = Icons.Default.Info,
-                            title = "Company Website",
-                            value = prefs.companyWebsite!!,
-                            onClick = { openUrl(context, prefs.companyWebsite!!) }
+                    if (!prefs.hrEmail.isNullOrBlank()) {
+                        ContactItem(
+                            icon = Icons.Default.Email,
+                            title = "HR Email",
+                            value = prefs.hrEmail!!,
+                            onClick = { sendEmail(context, prefs.hrEmail!!) }
                         )
                     }
                 }
-
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
             }
 
-            // HR Contact Card
-            if (!prefs.hrEmail.isNullOrBlank()) {
-                SectionCard(title = "HR Contact") {
-                    ContactInfoItem(
-                        icon = Icons.Outlined.Person,
-                        title = "HR Email",
-                        value = prefs.hrEmail!!,
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                data = Uri.parse("mailto:${prefs.hrEmail}")
-                                putExtra(Intent.EXTRA_SUBJECT, "HR Inquiry")
-                            }
-                            context.startActivity(intent)
-                        }
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
+            SectionCard(title = "Face Recognition") {
+                ProfileMenuItem(
+                    icon = Icons.Outlined.Face,
+                    title = "Update Face",
+                    subtitle = "Update your face for recognition",
+                    onClick = onNavigateToFaceChange,
+                    iconTint = MaterialTheme.colorScheme.secondary
+                )
             }
 
-            // Technical Support Card
-            if (!prefs.technicalSupportNumber.isNullOrBlank() || !prefs.technicalSupportEmail.isNullOrBlank()) {
-                SectionCard(title = "Technical Support") {
-                    // Tech Support Number
+            Spacer(Modifier.height(16.dp))
+
+            SectionCard(title = "Account") {
+                ProfileMenuItem(
+                    icon = Icons.Outlined.Person,
+                    title = "Personal Information",
+                    subtitle = "View and edit your personal details",
+                    onClick = { /* TODO */ }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ProfileMenuItem(
+                    icon = Icons.Outlined.Lock,
+                    title = "Privacy & Security",
+                    subtitle = "Manage your privacy settings",
+                    onClick = { /* TODO */ }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ProfileMenuItem(
+                    icon = Icons.Outlined.Notifications,
+                    title = "Notifications",
+                    subtitle = "Configure notification preferences",
+                    onClick = { /* TODO */ }
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            SectionCard(title = "Support") {
+                val hasTechnicalInfo = !prefs.technicalSupportNumber.isNullOrBlank() ||
+                        !prefs.technicalSupportEmail.isNullOrBlank()
+
+                if (hasTechnicalInfo) {
                     if (!prefs.technicalSupportNumber.isNullOrBlank()) {
-                        ContactInfoItem(
+                        ContactItem(
                             icon = Icons.Default.Phone,
-                            title = "Support Phone",
+                            title = "Technical Support",
                             value = prefs.technicalSupportNumber!!,
                             onClick = { dialPhoneNumber(context, prefs.technicalSupportNumber!!) }
                         )
                         if (!prefs.technicalSupportEmail.isNullOrBlank()) {
-                            HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         }
                     }
-
-                    // Tech Support Email
                     if (!prefs.technicalSupportEmail.isNullOrBlank()) {
-                        ContactInfoItem(
+                        ContactItem(
                             icon = Icons.Default.Email,
-                            title = "Support Email",
+                            title = "Tech Support Email",
                             value = prefs.technicalSupportEmail!!,
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                                    data = Uri.parse("mailto:${prefs.technicalSupportEmail}")
-                                    putExtra(Intent.EXTRA_SUBJECT, "Technical Support Request")
-                                }
-                                context.startActivity(intent)
-                            }
+                            onClick = { sendEmail(context, prefs.technicalSupportEmail!!) }
                         )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // Account Section
-            SectionCard(title = "Account") {
-                ProfileMenuItem(
-                    icon = Icons.Filled.Face,
-                    title = "Face Recognition",
-                    subtitle = "Manage face verification",
-                    onClick = onNavigateToFaceChange
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // App Section
-            SectionCard(title = "About") {
                 ProfileMenuItem(
                     icon = Icons.Outlined.Info,
-                    title = "App Version",
-                    subtitle = getAppVersion(),
-                    onClick = { /* No action */ },
-                    showChevron = false
+                    title = "Help & Support",
+                    subtitle = "Get help or contact support",
+                    onClick = { /* TODO */ }
                 )
-
-                HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ProfileMenuItem(
-                    icon = Icons.Outlined.Star,
-                    title = "Rate App",
-                    subtitle = "Share your feedback",
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            data = Uri.parse("market://details?id=${context.packageName}")
-                        }
-                        try {
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            intent.data = Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}")
-                            context.startActivity(intent)
-                        }
-                    }
+                    icon = Icons.Outlined.Info,
+                    title = "About",
+                    subtitle = "App version ${getAppVersion()}",
+                    onClick = { /* TODO */ }
                 )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // Logout Section
-            SectionCard(title = "Session") {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ProfileMenuItem(
                     icon = Icons.Outlined.ExitToApp,
                     title = "Logout",
-                    subtitle = "Sign out of your account",
+                    subtitle = "Sign out from your account",
                     onClick = { showLogoutDialog = true },
                     iconTint = MaterialTheme.colorScheme.error,
                     titleColor = MaterialTheme.colorScheme.error
                 )
             }
 
-            Spacer(Modifier.height(24.dp))
-            Spacer(Modifier.height(80.dp))
+            Spacer(Modifier.height(100.dp))
         }
-    }
 
-    // Logout Confirmation Dialog
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            icon = { Icon(Icons.Outlined.ExitToApp, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Logout") },
-            text = { Text("Are you sure you want to logout from your account?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showLogoutDialog = false
-                        onLogout()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Logout")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun ContactInfoItem(
-    icon: ImageVector,
-    title: String,
-    value: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        color = Color.Transparent
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
+        if (showLogoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                icon = {
                     Icon(
-                        icon,
+                        Icons.Outlined.ExitToApp,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
+                        tint = MaterialTheme.colorScheme.error
                     )
+                },
+                title = { Text("Logout", fontWeight = FontWeight.Bold) },
+                text = { Text("Are you sure you want to logout from your account?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showLogoutDialog = false
+                            onLogout()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) { Text("Logout") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") }
                 }
-            }
-
-            Spacer(Modifier.width(16.dp))
-
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            Icon(
-                Icons.Default.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
-@Composable
-private fun SocialMediaIcon(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .padding(end = 8.dp)
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Icon(
-            icon,
-            contentDescription = contentDescription,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(24.dp)
-        )
-    }
-}
+/* ---------------- Helpers & UI components ---------------- */
 
 @Composable
 private fun SectionCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(16.dp)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column {
-                content()
-            }
+        Column(Modifier.padding(vertical = 8.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            )
+            content()
         }
     }
 }
@@ -739,14 +566,10 @@ private fun ProfileMenuItem(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
-    showChevron: Boolean = true,
     iconTint: Color = MaterialTheme.colorScheme.primary,
     titleColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    Surface(
-        onClick = onClick,
-        color = Color.Transparent
-    ) {
+    Surface(onClick = onClick, color = Color.Transparent) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -758,107 +581,131 @@ private fun ProfileMenuItem(
                 color = iconTint.copy(alpha = 0.1f),
                 modifier = Modifier.size(40.dp)
             ) {
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(22.dp)
-                    )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(22.dp))
                 }
             }
-
             Spacer(Modifier.width(16.dp))
-
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = titleColor
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Column(Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = titleColor)
+                Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            if (showChevron) {
-                Icon(
-                    Icons.Default.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-// Helper Functions
+@Composable
+private fun ContactItem(
+    icon: ImageVector,
+    title: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Surface(onClick = onClick, color = Color.Transparent) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            }
+            Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Neutral chip so PNG colors remain intact; dims when link is missing. */
+@Composable
+private fun SocialMediaIconStatic(
+    iconRes: Int,
+    hasLink: Boolean,
+    onClick: () -> Unit,
+    iconSizeDp: Int = 22
+) {
+    val chipBg = MaterialTheme.colorScheme.surface
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
+    val alpha = if (hasLink) 1f else 0.45f
+    val clickable = if (hasLink) Modifier.clickable { onClick() } else Modifier
+
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .then(clickable)
+            .alpha(alpha)
+            .clip(CircleShape)
+            .background(chipBg)
+            .border(1.dp, borderColor, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(iconSizeDp.dp),
+            contentScale = ContentScale.Fit
+        )
+    }
+}
+
+/* ---------------- Helpers ---------------- */
+
 private fun calculateProfileCompletion(prefs: PreferencesManager): Int {
-    var totalFields = 10
-    var filledFields = 0
-
-    if (!prefs.fullName.isNullOrBlank() || !prefs.userName.isNullOrBlank()) filledFields++
-    if (!prefs.profileUrl.isNullOrBlank()) filledFields++
-    if (!prefs.branchName.isNullOrBlank()) filledFields++
-    if (!prefs.departmentName.isNullOrBlank()) filledFields++
-    if (!prefs.shiftName.isNullOrBlank()) filledFields++
-    if (!prefs.facebook.isNullOrBlank()) filledFields++
-    if (!prefs.linkedin.isNullOrBlank()) filledFields++
-    if (!prefs.x.isNullOrBlank()) filledFields++
-    if (!prefs.instagram.isNullOrBlank()) filledFields++
-    if (!prefs.snapchat.isNullOrBlank()) filledFields++
-
-    return (filledFields * 100) / totalFields
+    var filled = 0
+    // count: name, branch, dept, profile, facebook, linkedin, x, instagram, snapchat = 9
+    val total = 9
+    if (!prefs.fullName.isNullOrBlank() || !prefs.userName.isNullOrBlank()) filled++
+    if (!prefs.branchName.isNullOrBlank()) filled++
+    if (!prefs.departmentName.isNullOrBlank()) filled++
+    if (!prefs.profileUrl.isNullOrBlank()) filled++
+    if (!prefs.facebook.isNullOrBlank()) filled++
+    if (!prefs.linkedin.isNullOrBlank()) filled++
+    if (!prefs.x.isNullOrBlank()) filled++
+    if (!prefs.instagram.isNullOrBlank()) filled++
+    if (!prefs.snapchat.isNullOrBlank()) filled++
+    return (filled * 100) / total
 }
 
 private fun formatPhoneNumber(prefs: PreferencesManager): String {
-    // Try new mobile number field first
     if (prefs.mobileNumber != 0L) {
-        val numStr = prefs.mobileNumber.toString()
-        return if (numStr.length == 10) {
-            "+91-$numStr"
-        } else {
-            numStr
-        }
+        val s = prefs.mobileNumber.toString()
+        return if (s.length == 10) "+91-$s" else s
     }
-
-    // Fall back to old userId field
     val userId = prefs.userId
-    if (!userId.isNullOrBlank()) {
-        return if (userId.length == 10) {
-            "+91-$userId"
-        } else {
-            userId
-        }
-    }
-
+    if (!userId.isNullOrBlank()) return if (userId.length == 10) "+91-$userId" else userId
     return "Not Available"
 }
 
 private fun openUrl(context: android.content.Context, url: String) {
-    try {
+    runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         context.startActivity(intent)
-    } catch (e: Exception) {
-        e.printStackTrace()
     }
 }
 
 private fun dialPhoneNumber(context: android.content.Context, phoneNumber: String) {
-    try {
-        val intent = Intent(Intent.ACTION_DIAL).apply {
-            data = Uri.parse("tel:$phoneNumber")
-        }
+    runCatching {
+        val intent = Intent(Intent.ACTION_DIAL).apply { data = Uri.parse("tel:$phoneNumber") }
         context.startActivity(intent)
-    } catch (e: Exception) {
-        e.printStackTrace()
+    }
+}
+
+private fun sendEmail(context: android.content.Context, email: String) {
+    runCatching {
+        val intent = Intent(Intent.ACTION_SENDTO).apply { data = Uri.parse("mailto:$email") }
+        context.startActivity(intent)
     }
 }
 
@@ -872,17 +719,13 @@ private fun shareProfile(context: android.content.Context, prefs: PreferencesMan
     val shareText = buildString {
         append("Name: $name\n")
         append("Mobile: $phone\n")
-
         if (!branch.isNullOrBlank() || !dept.isNullOrBlank()) {
             append("Department: ")
             if (!branch.isNullOrBlank()) append("$branch ")
             if (!dept.isNullOrBlank()) append("- $dept")
             append("\n")
         }
-
-        if (!company.isNullOrBlank()) {
-            append("Company: $company\n")
-        }
+        if (!company.isNullOrBlank()) append("Company: $company\n")
     }
 
     val shareIntent = Intent().apply {
@@ -893,10 +736,5 @@ private fun shareProfile(context: android.content.Context, prefs: PreferencesMan
     context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
 }
 
-private fun getAppVersion(): String {
-    return try {
-        BuildConfig.VERSION_NAME
-    } catch (e: Exception) {
-        "1.0"
-    }
-}
+private fun getAppVersion(): String =
+    runCatching { BuildConfig.VERSION_NAME }.getOrDefault("1.0")
