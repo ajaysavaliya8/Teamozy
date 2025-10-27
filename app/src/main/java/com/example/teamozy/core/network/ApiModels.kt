@@ -5,11 +5,37 @@ data class BasicResponse(
     val status: String,           // "success" | "error" | "reject"
     val message: String? = null,
     val token: String? = null,    // present on verify-login success
-//    val minimum_face_recognition_quality_score: Float? = null,
-//    val face_vector: String? = null,
-//    val require_face_checkin: Boolean? = null,
-//    val require_face_break: Boolean? = null
+
+    // ===== NEW FIELDS FROM UPDATED API =====
+    // Employee Information
+    val mobile_number: Long? = null,
+    val full_name: String? = null,
+    val profile_url: String? = null,
+    val branch_name: String? = null,
+    val department_name: String? = null,
+    val shift_name: String? = null,
+
+    // Social Media Links
+    val facebook: String? = null,
+    val linkedin: String? = null,
+    val x: String? = null,  // Twitter/X
+    val instagram: String? = null,
+    val snapchat: String? = null,
+
+    // Company Information
+    val company_name: String? = null,
+    val company_address: String? = null,
+    val company_email: String? = null,
+    val company_contact: String? = null,
+    val company_website: String? = null,
+    val company_logo_url: String? = null,
+
+    // Support Information
+    val hr_email: String? = null,
+    val technical_support_number: String? = null,
+    val technical_support_email: String? = null
 )
+
 
 // -------- Check Status Response --------
 data class CheckStatusResponse(

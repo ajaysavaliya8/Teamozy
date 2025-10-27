@@ -12,9 +12,6 @@ import org.json.JSONObject
 sealed class AttendanceOutcome {
     data class Success(
         val currentState: String,
-//        val faceRecognitionEnabled: Boolean,
-//        val faceVector: String?,
-//        val minimumQualityScore: Float,
         val message: String,
         val lastCheckInTime: String?,
         val attendanceStatus: String?,
@@ -84,19 +81,37 @@ sealed class SignatureOutcome {
     data class Error(val message: String) : SignatureOutcome()
 }
 
-class AttendanceRepository(context: Context) {
+class AttendanceRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
     private val pm = PreferencesManager.getInstance(context)
 
-    private fun deviceId(): String = pm.deviceId
-    private fun token(): String = pm.authToken.orEmpty()
+    // ===== FIX: Get CURRENT device ID from system, not saved one =====
+    private fun deviceId(): String {
+        val id = android.provider.Settings.Secure.getString(
+            context.contentResolver,
+            android.provider.Settings.Secure.ANDROID_ID
+        ) ?: ""
+        Log.d("ATTENDANCE", "deviceId() from system = '$id'")
+        if (id.isBlank()) {
+            Log.e("ATTENDANCE", "❌ Device ID from system is BLANK!")
+        }
+        return id
+    }
+
+    private fun token(): String {
+        val t = pm.authToken.orEmpty()
+        Log.d("ATTENDANCE", "token() called = ${if (t.isBlank()) "BLANK" else "EXISTS (${t.take(20)}...)"}")
+        return t
+    }
 
     /**
      * Get current attendance status
      */
     suspend fun getStatus(): AttendanceOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
+            Log.d("ATTENDANCE", "getStatus() - deviceId: ${deviceId()}")
+
             val res = api.checkStatus(
                 deviceId = deviceId(),
                 token = token()
@@ -115,7 +130,7 @@ class AttendanceRepository(context: Context) {
                         AttendanceOutcome.Success(
                             currentState = data.current_state,
                             message = data.message,
-                            lastCheckInTime = data.last_check_in_time,  // ← ADD THIS LINE
+                            lastCheckInTime = data.last_check_in_time,
                             attendanceStatus = data.attendance_status,
                             isComplete = data.is_complete
                         )
@@ -136,6 +151,7 @@ class AttendanceRepository(context: Context) {
             AttendanceOutcome.Error(friendlyNetError(e))
         }
     }
+
     /**
      * Initial check-in request
      * Returns whether face verification is required and violation flags
@@ -145,6 +161,8 @@ class AttendanceRepository(context: Context) {
         longitude: Double
     ): CheckInOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
+            Log.d("ATTENDANCE", "checkIn() - deviceId: ${deviceId()}, lat: $latitude, lon: $longitude")
+
             val res = api.checkIn(
                 deviceId = deviceId(),
                 longitude = longitude,
@@ -306,6 +324,8 @@ class AttendanceRepository(context: Context) {
         longitude: Double
     ): CheckOutOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
+            Log.d("ATTENDANCE", "checkOut() - deviceId: ${deviceId()}, lat: $latitude, lon: $longitude")
+
             val res = api.checkOut(
                 deviceId = deviceId(),
                 longitude = longitude,

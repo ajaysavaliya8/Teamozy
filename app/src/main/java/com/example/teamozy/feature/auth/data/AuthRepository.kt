@@ -23,12 +23,18 @@ class AuthRepository(private val context: Context) {
     private val api = NetworkModule.apiService
     private val pm = PreferencesManager.getInstance(context)
 
-    private fun androidId(): String =
-        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+    private fun androidId(): String {
+        val id = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+        Log.d("AUTH", "androidId() = $id")
+        return id
+    }
 
     suspend fun sendOtp(phone: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            val res = api.sendLogin(phone.toLong(), androidId())
+            val deviceId = androidId()
+            Log.d("AUTH", "sendOtp - deviceId: $deviceId, phone: $phone")
+
+            val res = api.sendLogin(phone.toLong(), deviceId)
             Log.d("NET", "sendLogin -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
 
             when (res.code()) {
@@ -45,9 +51,12 @@ class AuthRepository(private val context: Context) {
 
     suspend fun loginWithPassword(phone: String, password: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
+            val deviceId = androidId()
+            Log.d("AUTH", "loginWithPassword - deviceId: $deviceId, phone: $phone")
+
             val res = api.verifyLogin(
                 mobileNumber = phone.toLong(),
-                deviceId = androidId(),
+                deviceId = deviceId,
                 password = password,
                 otp = null
             )
@@ -61,19 +70,22 @@ class AuthRepository(private val context: Context) {
                 else -> toOutcome(res, requireToken = true)
             }
         } catch (e: Exception) {
-            AuthOutcome.Error(e.message ?: "Login failed")
+            AuthOutcome.Error(e.message ?: "Password login failed")
         }
     }
 
     suspend fun loginWithOtp(phone: String, otp: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
+            val deviceId = androidId()
+            Log.d("AUTH", "loginWithOtp - deviceId: $deviceId, phone: $phone")
+
             val res = api.verifyLogin(
                 mobileNumber = phone.toLong(),
-                deviceId = androidId(),
+                deviceId = deviceId,
                 password = null,
                 otp = otp
             )
-            Log.d("NET", "verifyLogin(otp) -> code=${res.code()} url=${res.raw().request.url} msg=${res.message()}")
+            Log.d("NET", "verifyLogin(otp) -> code=${res.code()}")
 
             when (res.code()) {
                 409 -> {
@@ -83,61 +95,39 @@ class AuthRepository(private val context: Context) {
                 else -> toOutcome(res, requireToken = true)
             }
         } catch (e: Exception) {
-            AuthOutcome.Error(e.message ?: "Login failed")
+            AuthOutcome.Error(e.message ?: "OTP verification failed")
+        }
+    }
+
+    suspend fun verifyToken(): AuthOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val token = pm.authToken ?: return@withContext AuthOutcome.Error("No token found")
+            val res = api.verifyToken(token)
+            Log.d("NET", "verifyToken -> code=${res.code()}")
+
+            // Handle VerifyTokenResponse separately
+            if (res.isSuccessful && res.code() == 200) {
+                val body = res.body()
+                if (body?.status == "success") {
+                    AuthOutcome.Success(body.message ?: "Token verified")
+                } else {
+                    AuthOutcome.Error(body?.message ?: "Token verification failed")
+                }
+            } else {
+                AuthOutcome.Error(extractMessage(res))
+            }
+        } catch (e: Exception) {
+            AuthOutcome.Error(e.message ?: "Token verification failed")
         }
     }
 
     suspend fun sendChangeDeviceOtp(mobileNumber: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val res = api.sendChangeDeviceOtp(mobileNumber.toLong())
-            Log.d("NET", "sendChangeDeviceOtp -> code=${res.code()} url=${res.raw().request.url}")
-
-            when {
-                res.isSuccessful -> {
-                    val body = res.body()
-                    val msg = body?.message ?: "OTP sent successfully"
-                    AuthOutcome.Success(msg)
-                }
-                else -> {
-                    val msg = extractMessage(res)
-                    AuthOutcome.Error(msg.ifBlank { "Failed to send OTP" })
-                }
-            }
+            Log.d("NET", "sendChangeDeviceOtp -> code=${res.code()}")
+            toOutcome(res, requireToken = false)
         } catch (e: Exception) {
-            Log.e("NET", "sendChangeDeviceOtp error", e)
             AuthOutcome.Error(e.message ?: "Failed to send OTP")
-        }
-    }
-
-    suspend fun verifyToken(): AuthOutcome = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val token = pm.authToken.orEmpty()
-            if (token.isBlank()) {
-                return@withContext AuthOutcome.Error("No token found")
-            }
-
-            val res = api.verifyToken(token)
-            Log.d("NET", "verifyToken -> code=${res.code()}")
-
-            when {
-                res.isSuccessful -> {
-                    val body = res.body()
-                    Log.d("AUTH", "Token verified successfully")
-                    AuthOutcome.Success(body?.message ?: "Token is valid")
-                }
-                res.code() == 401 -> {
-                    Log.d("AUTH", "Token expired or invalid (401)")
-                    AuthOutcome.Error("Token expired or invalid")
-                }
-                else -> {
-                    val msg = extractMessage(res)
-                    Log.d("AUTH", "Token verification failed: $msg")
-                    AuthOutcome.Error(msg.ifBlank { "Token verification failed" })
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("NET", "verifyToken error", e)
-            AuthOutcome.Error(e.message ?: "Failed to verify token")
         }
     }
 
@@ -178,56 +168,113 @@ class AuthRepository(private val context: Context) {
         }
     }
 
+    // ===== UPDATED: Properly save device_id during login =====
     private fun toOutcome(res: Response<BasicResponse>, requireToken: Boolean): AuthOutcome {
-        if (res.isSuccessful) {
+        return if (res.isSuccessful && res.code() == 200) {
             val body = res.body()
-            if (body?.status == "success") {
-                if (requireToken) {
-                    val token = body.token.orEmpty()
-                    if (token.isBlank()) return AuthOutcome.Error("Missing token")
+            val msg = body?.message ?: "Success"
 
-                    // Persist token and device ID
-                    pm.authToken = token
-                    pm.deviceId = androidId()
-
-                    return AuthOutcome.Success(body.message ?: "Login successful.", token)
-                }
-
-                return AuthOutcome.Success(body.message ?: "OK")
+            if (requireToken && body?.token.isNullOrBlank()) {
+                return AuthOutcome.Error("Token missing in response")
             }
 
-            return AuthOutcome.Error(body?.message ?: "Unknown error")
-        }
+            // ===== CRITICAL FIX: Save device_id IMMEDIATELY during login =====
+            if (requireToken && !body?.token.isNullOrBlank()) {
+                val deviceId = androidId()
 
-        val msg = extractMessage(res)
-        return AuthOutcome.Error(msg.ifBlank { "Request failed with ${res.code()}" })
+                // Save token
+                pm.authToken = body?.token
+                Log.d("AUTH", "✅ Token saved")
+
+                // Save device ID
+                pm.deviceId = deviceId
+                Log.d("AUTH", "✅ Device ID saved: $deviceId")
+
+                // Verify it was saved
+                val savedDeviceId = pm.deviceId
+                Log.d("AUTH", "✅ Verification - Device ID from prefs: $savedDeviceId")
+
+                if (savedDeviceId.isBlank()) {
+                    Log.e("AUTH", "❌ ERROR: Device ID is BLANK after saving!")
+                } else {
+                    Log.d("AUTH", "✅ Device ID successfully saved and verified")
+                }
+            }
+
+            // ===== SAVE ALL NEW PROFILE DATA =====
+            body?.let { data ->
+                // Basic info
+                data.mobile_number?.let { pm.mobileNumber = it }
+                data.full_name?.let {
+                    pm.fullName = it
+                    pm.userName = it  // Keep backward compatibility
+                }
+                data.profile_url?.let { pm.profileUrl = it }
+
+                // Work info
+                data.branch_name?.let { pm.branchName = it }
+                data.department_name?.let { pm.departmentName = it }
+                data.shift_name?.let { pm.shiftName = it }
+
+                // Social media
+                data.facebook?.let { pm.facebook = it }
+                data.linkedin?.let { pm.linkedin = it }
+                data.x?.let { pm.x = it }
+                data.instagram?.let { pm.instagram = it }
+                data.snapchat?.let { pm.snapchat = it }
+
+                // Company info
+                data.company_name?.let { pm.companyName = it }
+                data.company_address?.let { pm.companyAddress = it }
+                data.company_email?.let { pm.companyEmail = it }
+                data.company_contact?.let { pm.companyContact = it }
+                data.company_website?.let { pm.companyWebsite = it }
+                data.company_logo_url?.let { pm.companyLogoUrl = it }
+
+                // Support info
+                data.hr_email?.let { pm.hrEmail = it }
+                data.technical_support_number?.let { pm.technicalSupportNumber = it }
+                data.technical_support_email?.let { pm.technicalSupportEmail = it }
+
+                Log.d("AUTH", "✅ All profile data saved")
+                Log.d("AUTH", "   Full Name: ${pm.fullName}")
+                Log.d("AUTH", "   Branch: ${pm.branchName}")
+                Log.d("AUTH", "   Department: ${pm.departmentName}")
+                Log.d("AUTH", "   Shift: ${pm.shiftName}")
+                Log.d("AUTH", "   Company: ${pm.companyName}")
+            }
+
+            AuthOutcome.Success(msg, body?.token)
+        } else {
+            AuthOutcome.Error(extractMessage(res))
+        }
     }
 
     private fun extractMessage(res: Response<*>): String {
         return try {
-            val raw = res.errorBody()?.string().orEmpty()
-            if (raw.startsWith("{")) {
-                val o = JSONObject(raw)
-                o.optString("message").ifBlank {
-                    o.optString("error").ifBlank {
-                        o.optString("detail")
-                    }
-                }
-            } else raw
-        } catch (_: Exception) { "" }
+            val errBody = res.errorBody()?.string()
+            if (!errBody.isNullOrBlank()) {
+                val json = JSONObject(errBody)
+                json.optString("message", "Request failed")
+            } else {
+                "Request failed: ${res.message()}"
+            }
+        } catch (e: Exception) {
+            "Request failed: ${res.message()}"
+        }
     }
 
     private fun extractDetailMessage(res: Response<*>): String {
         return try {
-            val raw = res.errorBody()?.string().orEmpty()
-            if (raw.startsWith("{")) {
-                val o = JSONObject(raw)
-                o.optString("detail").ifBlank {
-                    o.optString("message").ifBlank {
-                        o.optString("error")
-                    }
-                }
-            } else raw
-        } catch (_: Exception) { "" }
+            val errBody = res.errorBody()?.string()
+            if (!errBody.isNullOrBlank()) {
+                val json = JSONObject(errBody)
+                json.optString("detail", "Request failed")
+            } else {
+                "Request failed: ${res.message()}"
+            }
+        } catch (e: Exception) {
+            "Request failed: ${res.message()}"
+        }
     }
 }
