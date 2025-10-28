@@ -74,7 +74,8 @@ object NetworkModule {
         res
     }
 
-    private val okHttp by lazy {
+    // ✅ CHANGED: Make okHttp public so Coil can use it for authenticated image loading
+    val okHttp by lazy {
         OkHttpClient.Builder()
             .addInterceptor(headersInterceptor)
             .addInterceptor(authInterceptor)        // ← Add Bearer token

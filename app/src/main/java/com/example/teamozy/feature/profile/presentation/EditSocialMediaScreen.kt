@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.teamozy.R
@@ -72,10 +73,10 @@ fun EditSocialMediaScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                .background(Color(0xFFF5F5F5))
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             // Facebook
             SocialMediaInputField(
@@ -87,7 +88,7 @@ fun EditSocialMediaScreen(
                 placeholder = "Type here"
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             // LinkedIn
             SocialMediaInputField(
@@ -99,7 +100,7 @@ fun EditSocialMediaScreen(
                 placeholder = "Type here"
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             // X (Twitter)
             SocialMediaInputField(
@@ -111,7 +112,7 @@ fun EditSocialMediaScreen(
                 placeholder = "Type here"
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             // Instagram
             SocialMediaInputField(
@@ -123,10 +124,10 @@ fun EditSocialMediaScreen(
                 placeholder = "Type here"
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
-            // Snapchat - Using WhatsApp style input
-            SocialMediaInputFieldWithPhone(
+            // Snapchat
+            SocialMediaInputField(
                 label = "Snapchat",
                 iconRes = R.drawable.ic_snapchat,
                 iconColor = Color(0xFFFFFC00),
@@ -135,47 +136,72 @@ fun EditSocialMediaScreen(
                 placeholder = "Type here"
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
 
             // Error Message
-            if (errorMessage != null) {
+            errorMessage?.let { error ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
+                    ),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
             // Success Message
-            if (successMessage != null) {
+            successMessage?.let { success ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50).copy(alpha = 0.1f)
-                    )
+                        containerColor = Color(0xFF4CAF50)
+                    ),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(
-                        text = successMessage!!,
-                        color = Color(0xFF2E7D32),
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = success,
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
             }
 
-            // Save Button
+            // SAVE Button - After Snapchat
             Button(
                 onClick = {
                     scope.launch {
@@ -184,44 +210,46 @@ fun EditSocialMediaScreen(
                         successMessage = null
 
                         try {
-                            val token = prefs.authToken
-                            if (token.isNullOrBlank()) {
-                                errorMessage = "Authentication token not found"
-                                isLoading = false
-                                return@launch
-                            }
-
                             val response = NetworkModule.apiService.updateSocialMedia(
-                                facebook = facebook.ifBlank { "" },
-                                linkedin = linkedin.ifBlank { "" },
-                                x = x.ifBlank { "" },
-                                instagram = instagram.ifBlank { "" },
-                                snapchat = snapchat.ifBlank { "" }
+                                facebook = facebook.ifBlank { null },
+                                linkedin = linkedin.ifBlank { null },
+                                x = x.ifBlank { null },
+                                instagram = instagram.ifBlank { null },
+                                snapchat = snapchat.ifBlank { null }
                             )
 
                             if (response.isSuccessful) {
                                 val body = response.body()
                                 if (body?.status == "success") {
-                                    // Update PreferencesManager
-                                    prefs.facebook = facebook.ifBlank { null }
-                                    prefs.linkedin = linkedin.ifBlank { null }
-                                    prefs.x = x.ifBlank { null }
-                                    prefs.instagram = instagram.ifBlank { null }
-                                    prefs.snapchat = snapchat.ifBlank { null }
+                                    body.social_media?.let { socialMedia ->
+                                        prefs.facebook = socialMedia.facebook
+                                        prefs.linkedin = socialMedia.linkedin
+                                        prefs.x = socialMedia.x
+                                        prefs.instagram = socialMedia.instagram
+                                        prefs.snapchat = socialMedia.snapchat
+                                    }
 
-                                    successMessage = "Social media links updated successfully!"
-
-                                    // Navigate back after 1.5 seconds
+                                    successMessage = body.message ?: "Social media links updated successfully!"
                                     kotlinx.coroutines.delay(1500)
                                     onBack()
                                 } else {
                                     errorMessage = body?.message ?: "Failed to update social media"
                                 }
                             } else {
-                                errorMessage = "Server error: ${response.code()}"
+                                val errorBody = response.errorBody()?.string()
+                                errorMessage = if (errorBody != null) {
+                                    try {
+                                        val json = org.json.JSONObject(errorBody)
+                                        json.optString("message", "Server error: ${response.code()}")
+                                    } catch (e: Exception) {
+                                        "Server error: ${response.code()}"
+                                    }
+                                } else {
+                                    "Server error: ${response.code()}"
+                                }
                             }
                         } catch (e: Exception) {
-                            errorMessage = "Network error: ${e.localizedMessage}"
+                            errorMessage = "Network error: ${e.localizedMessage ?: "Unknown error"}"
                         } finally {
                             isLoading = false
                         }
@@ -230,28 +258,30 @@ fun EditSocialMediaScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .height(56.dp),
+                    .height(48.dp),
                 enabled = !isLoading,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
+                    containerColor = Color(0xFF1976D2)
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = Color.White,
+                        strokeWidth = 2.dp
                     )
                 } else {
                     Text(
                         text = "SAVE",
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(80.dp)) // Extra space for bottom navigation
         }
     }
 }
@@ -272,154 +302,65 @@ private fun SocialMediaInputField(
     ) {
         Text(
             text = label,
-            fontSize = 14.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
+            color = Color(0xFF212121),
+            modifier = Modifier.padding(bottom = 4.dp)
         )
 
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+                containerColor = Color.White
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            shape = RoundedCornerShape(12.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            shape = RoundedCornerShape(8.dp)
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Social Media Icon
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(iconColor),
+                    modifier = Modifier.size(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(id = iconRes),
                         contentDescription = label,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .padding(4.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(10.dp))
 
-                // Text Input
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    placeholder = {
-                        Text(
-                            text = placeholder,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent
-                    ),
-                    singleLine = true
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SocialMediaInputFieldWithPhone(
-    label: String,
-    iconRes: Int,
-    iconColor: Color,
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-    ) {
-        Text(
-            text = label,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Social Media Icon
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(iconColor),
-                    contentAlignment = Alignment.Center
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.CenterStart
                 ) {
-                    Image(
-                        painter = painterResource(id = iconRes),
-                        contentDescription = label,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .padding(4.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(16.dp))
-
-                // Country Code
-                Text(
-                    text = "+91",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(Modifier.width(8.dp))
-
-                // Text Input
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    placeholder = {
+                    if (value.isEmpty()) {
                         Text(
                             text = placeholder,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            color = Color(0xFFBDBDBD),
+                            fontSize = 14.sp
                         )
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent
-                    ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    singleLine = true
-                )
+                    }
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontSize = 14.sp,
+                            color = Color(0xFF212121)
+                        ),
+                        singleLine = true
+                    )
+                }
             }
         }
     }

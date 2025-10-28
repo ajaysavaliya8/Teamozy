@@ -38,8 +38,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.teamozy.BuildConfig
 import com.example.teamozy.R
+import com.example.teamozy.core.image.CoilImageLoader
 import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.profile.data.ProfileRepository
 import com.example.teamozy.feature.profile.data.ProfilePictureOutcome
@@ -78,7 +80,6 @@ fun ProfileScreen(
                 when (val result = profileRepository.updateProfilePicture(it)) {
                     is ProfilePictureOutcome.Success -> {
                         successMessage = result.message
-                        // Trigger recomposition by accessing prefs
                         prefs.profileUrl = result.profileUrl
                     }
                     is ProfilePictureOutcome.Error -> {
@@ -91,13 +92,12 @@ fun ProfileScreen(
         }
     }
 
-    // Camera permission launcher (optional - for future camera capture feature)
+    // Camera permission launcher
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // TODO: Launch camera for taking photo
-            // For now, we'll just use gallery picker
+            // TODO: Launch camera
         }
     }
 
@@ -179,7 +179,11 @@ fun ProfileScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (!prefs.companyLogoUrl.isNullOrBlank()) {
                                     AsyncImage(
-                                        model = prefs.companyLogoUrl,
+                                        model = ImageRequest.Builder(context)
+                                            .data(prefs.companyLogoUrl)
+                                            .crossfade(true)
+                                            .build(),
+                                        imageLoader = CoilImageLoader.get(context),
                                         contentDescription = "Company Logo",
                                         modifier = Modifier
                                             .size(56.dp)
@@ -235,10 +239,14 @@ fun ProfileScreen(
                                     modifier = Modifier.size(120.dp),
                                     contentAlignment = Alignment.BottomEnd
                                 ) {
-                                    // Profile Picture or Placeholder
+                                    // ✅ Profile Picture with Authentication
                                     if (!prefs.profileUrl.isNullOrBlank()) {
                                         AsyncImage(
-                                            model = prefs.profileUrl,
+                                            model = ImageRequest.Builder(context)
+                                                .data(prefs.profileUrl)
+                                                .crossfade(true)
+                                                .build(),
+                                            imageLoader = CoilImageLoader.get(context), // ✅ Use authenticated loader
                                             contentDescription = "Profile Picture",
                                             modifier = Modifier
                                                 .size(120.dp)
@@ -413,9 +421,9 @@ fun ProfileScreen(
                                     onClick = { prefs.snapchat?.let { openUrl(context, it) } }
                                 )
 
-                                // Edit button: IconButton for reliable clicks
+                                // Edit button
                                 IconButton(
-                                    onClick = onNavigateToEditSocialMedia,
+                                    onClick = onNavigateToEditSocialMedia,  // ✅ This should be passed as parameter
                                     modifier = Modifier
                                         .size(40.dp)
                                         .clip(CircleShape)
@@ -434,7 +442,7 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // HR Contact Section (if available)
+                // HR Contact Section
                 val hasHRInfo = !prefs.hrEmail.isNullOrBlank() || !prefs.companyContact.isNullOrBlank()
 
                 if (hasHRInfo) {
@@ -570,24 +578,25 @@ fun ProfileScreen(
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onErrorContainer
                             )
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(8.dp))
                             Text(
                                 text = error,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
-                                fontSize = 14.sp
+                                fontSize = 13.sp
                             )
                         }
                     }
                     LaunchedEffect(error) {
-                        kotlinx.coroutines.delay(3000)
+                        kotlinx.coroutines.delay(4000)
                         errorMessage = null
                     }
                 }
 
                 successMessage?.let { success ->
+                    Spacer(Modifier.height(8.dp))
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF4CAF50)
+                            containerColor = Color(0xFF10B981)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -596,20 +605,20 @@ fun ProfileScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                Icons.Default.CheckCircle,
+                                Icons.Default.Check,
                                 contentDescription = null,
                                 tint = Color.White
                             )
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(8.dp))
                             Text(
                                 text = success,
                                 color = Color.White,
-                                fontSize = 14.sp
+                                fontSize = 13.sp
                             )
                         }
                     }
                     LaunchedEffect(success) {
-                        kotlinx.coroutines.delay(3000)
+                        kotlinx.coroutines.delay(4000)
                         successMessage = null
                     }
                 }
@@ -636,7 +645,7 @@ fun ProfileScreen(
 
                     // Choose from Gallery
                     ProfilePictureOption(
-                        icon = Icons.Filled.Add ,
+                        icon = Icons.Filled.Add,
                         title = "Choose from Gallery",
                         onClick = {
                             showProfilePictureOptions = false
@@ -646,19 +655,18 @@ fun ProfileScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    // Take Photo (optional - can implement camera capture later)
+                    // Take Photo
                     ProfilePictureOption(
                         icon = Icons.Default.Add,
                         title = "Take Photo",
                         subtitle = "Coming soon",
                         onClick = {
-                            // TODO: Implement camera capture
                             showProfilePictureOptions = false
                         },
                         enabled = false
                     )
 
-                    // Remove Picture (only show if profile picture exists)
+                    // Remove Picture
                     if (!prefs.profileUrl.isNullOrBlank()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -937,7 +945,6 @@ private fun SocialMediaIconStatic(
 
 private fun calculateProfileCompletion(prefs: PreferencesManager): Int {
     var filled = 0
-    // count: name, branch, dept, profile, facebook, linkedin, x, instagram, snapchat = 9
     val total = 9
     if (!prefs.fullName.isNullOrBlank() || !prefs.userName.isNullOrBlank()) filled++
     if (!prefs.branchName.isNullOrBlank()) filled++

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -19,10 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.example.teamozy.core.network.NetworkModule
 import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
@@ -32,6 +35,7 @@ import com.example.teamozy.feature.face.data.FaceStore
 import com.example.teamozy.feature.face.presentation.FaceCaptureScreen
 import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
 import com.example.teamozy.feature.profile.presentation.ProfileScreen
+import com.example.teamozy.feature.profile.presentation.EditSocialMediaScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -40,7 +44,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 
 private const val TAG = "HomePage"
 
-private enum class HomeScreen { HOME, ATTENDANCE, PROFILE }
+private enum class HomeScreen { HOME, ATTENDANCE, PROFILE, EDIT_SOCIAL_MEDIA }
 
 /**
  * Calculate elapsed seconds from last check-in time to now
@@ -237,19 +241,19 @@ fun HomePage(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                Icon(
-                                    Icons.Filled.Info,
-                                    contentDescription = "Company",
-                                    tint = MaterialTheme.colorScheme.primary
+                                Text(
+                                    text = (prefs.companyName ?: "COMPANY").uppercase(),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Teamozy",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.SemiBold
+                                    text = prefs.userName ?: "User",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Row(
@@ -273,48 +277,38 @@ fun HomePage(
                                         )
                                     }
                                 }
-                                IconButton(
-                                    onClick = { currentScreen = HomeScreen.PROFILE },
+                                // Profile Picture
+                                Box(
                                     modifier = Modifier
                                         .size(40.dp)
                                         .clip(CircleShape)
                                         .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .clickable { currentScreen = HomeScreen.PROFILE }
                                 ) {
-                                    Icon(
-                                        Icons.Filled.Person,
-                                        contentDescription = "Profile",
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                    if (!prefs.profileUrl.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = prefs.profileUrl,
+                                            contentDescription = "Profile Picture",
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        // Fallback to icon if no profile picture
+                                        Icon(
+                                            Icons.Filled.Person,
+                                            contentDescription = "Profile",
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
                     Spacer(Modifier.height(24.dp))
-
-                    Text(
-                        text = "Hello, ${prefs.userName ?: "User"}",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    if (ui.statusMessage.isNotEmpty()) {
-                        Text(
-                            text = ui.statusMessage,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp),
-                            textAlign = TextAlign.Center
-                        )
-                    }
 
                     if (ui.checkInMessage != null || ui.checkOutMessage != null) {
                         val message = ui.checkInMessage ?: ui.checkOutMessage
@@ -522,13 +516,8 @@ fun HomePage(
                     showRegistration = true
                 },
                 onNavigateToEditSocialMedia = {
-                    // You can either:
-                    // Option 1: Navigate to a separate screen (if using full navigation)
-                    // navController.navigate("edit_social_media")
-
-                    // Option 2: Handle it inline (simple approach for now)
-                    Log.d(TAG, "Navigate to Edit Social Media - Coming Soon")
-                    // For now, you can leave this empty or show a toast
+                    Log.d(TAG, "Navigate to Edit Social Media")
+                    currentScreen = HomeScreen.EDIT_SOCIAL_MEDIA
                 },
                 onLogout = {
                     Log.d(TAG, "Logout - clearing all data")
@@ -547,6 +536,13 @@ fun HomePage(
                 },
                 onBack = {
                     currentScreen = HomeScreen.HOME
+                }
+            )
+
+            HomeScreen.EDIT_SOCIAL_MEDIA -> EditSocialMediaScreen(
+                onBack = {
+                    Log.d(TAG, "Edit Social Media -> Back to Profile")
+                    currentScreen = HomeScreen.PROFILE
                 }
             )
         }
