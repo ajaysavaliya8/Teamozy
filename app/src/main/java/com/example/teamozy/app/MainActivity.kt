@@ -22,6 +22,7 @@ import com.example.teamozy.feature.auth.presentation.LoginScreen
 import com.example.teamozy.feature.auth.data.AuthRepository
 import com.example.teamozy.feature.auth.data.AuthOutcome
 import com.example.teamozy.feature.home.presentation.HomePage
+import com.example.teamozy.feature.permissions.presentation.PermissionScreen
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
@@ -34,7 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.util.Log
 
-private enum class AppScreen { SPLASH, LOGIN, HOME }
+private enum class AppScreen { SPLASH, PERMISSIONS, LOGIN, HOME }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,23 +72,50 @@ private fun AppRoot() {
     val prefs = remember { PreferencesManager.getInstance(context) }
     val authRepo: AuthRepository = koinInject()
     var current by remember { mutableStateOf(AppScreen.SPLASH) }
+    var showPermissionsOnce by remember { mutableStateOf(false) }
 
     when (current) {
         AppScreen.SPLASH -> InlineSplash(
             authRepository = authRepo,
             preferencesManager = prefs,
             onComplete = { isAuthorized ->
-                current = if (isAuthorized) AppScreen.HOME else AppScreen.LOGIN
+                current = if (isAuthorized) {
+                    // User is logged in
+                    // Show permissions screen only on first launch after login
+                    if (!showPermissionsOnce) {
+                        showPermissionsOnce = true
+                        AppScreen.PERMISSIONS
+                    } else {
+                        AppScreen.HOME
+                    }
+                } else {
+                    // Not logged in, go to login
+                    AppScreen.LOGIN
+                }
+            }
+        )
+
+        AppScreen.PERMISSIONS -> PermissionScreen(
+            onAllGood = {
+                Log.d("MainActivity", "Permission screen completed (granted or skipped)")
+                current = AppScreen.HOME
             }
         )
 
         AppScreen.LOGIN -> LoginScreen(
-            onLoginSuccess = { current = AppScreen.HOME }
+            onLoginSuccess = {
+                Log.d("MainActivity", "Login success")
+                // After login, show permissions once
+                showPermissionsOnce = false
+                current = AppScreen.PERMISSIONS
+            }
         )
 
         AppScreen.HOME -> HomePage(
             onLogout = {
+                Log.d("MainActivity", "Logout, clearing preferences")
                 prefs.clearAll()
+                showPermissionsOnce = false
                 current = AppScreen.LOGIN
             }
         )
@@ -98,72 +126,84 @@ private fun AppRoot() {
 private fun InlineSplash(
     authRepository: AuthRepository,
     preferencesManager: PreferencesManager,
-    onComplete: (Boolean) -> Unit,
-    minimumDurationMillis: Long = 1200L
+    onComplete: (Boolean) -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        val startTime = System.currentTimeMillis()
+        delay(1500) // Short splash delay
 
-        // Check if token exists
-        val hasToken = !preferencesManager.authToken.isNullOrBlank()
+        scope.launch {
+            // Check if user is logged in (has token)
+            val isLoggedIn = preferencesManager.isLoggedIn()
 
-        var isAuthorized = false
+            Log.d("InlineSplash", "isLoggedIn: $isLoggedIn")
 
-        if (hasToken) {
-            // Verify token with backend
-            Log.d("SPLASH", "Token found, verifying with server...")
-            when (val result = authRepository.verifyToken()) {
-                is AuthOutcome.Success -> {
-                    Log.d("SPLASH", "Token verified successfully")
-                    isAuthorized = true
-                }
-                is AuthOutcome.Error -> {
-                    Log.d("SPLASH", "Token verification failed: ${result.message}")
-                    // Clear invalid token
-                    preferencesManager.clearAll()
-                    isAuthorized = false
-                }
-
-                is AuthOutcome.DeviceNotRegistered -> {
-                    Log.d("SPLASH", "Device not registered: ${result.message}")
-                    // Clear token for unregistered device
-                    preferencesManager.clearAll()
-                    isAuthorized = false
-                }
+            if (!isLoggedIn) {
+                Log.d("InlineSplash", "No token found, going to login")
+                onComplete(false)
+                return@launch
             }
-        } else {
-            Log.d("SPLASH", "No token found, redirecting to login")
-            isAuthorized = false
-        }
 
-        // Ensure minimum splash duration
-        val elapsed = System.currentTimeMillis() - startTime
-        val remaining = minimumDurationMillis - elapsed
-        if (remaining > 0) {
-            delay(remaining)
-        }
+            // User has token, try to verify it
+            Log.d("InlineSplash", "Token found, verifying with server...")
 
-        onComplete(isAuthorized)
+            var isAuthorized = true // Assume authorized by default (offline mode)
+
+            try {
+                when (val result = authRepository.verifyToken()) {
+                    is AuthOutcome.Success -> {
+                        Log.d("InlineSplash", "✅ Token verified successfully")
+                        isAuthorized = true
+                    }
+
+                    is AuthOutcome.Error -> {
+                        val errorMsg = result.message.lowercase()
+
+                        // Only clear token if it's explicitly invalid
+                        if (errorMsg.contains("invalid") ||
+                            errorMsg.contains("expired") ||
+                            errorMsg.contains("unauthorized")) {
+                            Log.w("InlineSplash", "❌ Token is invalid: ${result.message}")
+                            preferencesManager.clearAll()
+                            isAuthorized = false
+                        } else {
+                            // Network error or other issue - allow offline access
+                            Log.w("InlineSplash", "⚠️ Token verification failed (network?): ${result.message}")
+                            Log.d("InlineSplash", "Allowing offline access with existing token")
+                            isAuthorized = true
+                        }
+                    }
+
+                    is AuthOutcome.DeviceNotRegistered -> {
+                        Log.w("InlineSplash", "❌ Device not registered: ${result.message}")
+                        preferencesManager.clearAll()
+                        isAuthorized = false
+                    }
+                }
+            } catch (e: Exception) {
+                // Any exception during verification - allow offline access
+                Log.e("InlineSplash", "⚠️ Exception during token verification: ${e.message}")
+                Log.d("InlineSplash", "Allowing offline access with existing token")
+                isAuthorized = true
+            }
+
+            onComplete(isAuthorized)
+        }
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "Teamozy",
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(16.dp))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             CircularProgressIndicator()
-            Spacer(Modifier.height(8.dp))
             Text(
-                text = "Verifying…",
+                "Loading Teamozy...",
+                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
         }
