@@ -129,6 +129,23 @@ fun HomePage(
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var isTimerRunning by remember { mutableStateOf(false) }
 
+    // ✅ Permission checkers for Check In and Check Out
+    val checkInPermissionChecker = rememberPermissionChecker(
+        context = context,
+        onPermissionsGranted = {
+            Log.d(TAG, "✅ Permissions granted for Check In")
+            vm.startCheckIn(context)
+        }
+    )
+
+    val checkOutPermissionChecker = rememberPermissionChecker(
+        context = context,
+        onPermissionsGranted = {
+            Log.d(TAG, "✅ Permissions granted for Check Out")
+            vm.startCheckOut(context)
+        }
+    )
+
     // ✨ Start/Continue timer based on check-in state
     LaunchedEffect(ui.currentState) {
         if (ui.currentState == "CHECK_OUT_NEEDED") {
@@ -234,84 +251,15 @@ fun HomePage(
                         .verticalScroll(rememberScrollState())
                 ) {
                     // Top Bar
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 2.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    text = (prefs.companyName ?: "COMPANY").uppercase(),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = prefs.userName ?: "User",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = { vm.refreshStatus() },
-                                    enabled = !ui.isRefreshing
-                                ) {
-                                    if (ui.isRefreshing) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                    } else {
-                                        Icon(
-                                            Icons.Filled.Refresh,
-                                            contentDescription = "Refresh Status",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                                // Profile Picture
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer)
-                                        .clickable { currentScreen = HomeScreen.PROFILE }
-                                ) {
-                                    if (!prefs.profileUrl.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = prefs.profileUrl,
-                                            contentDescription = "Profile Picture",
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .clip(CircleShape),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    } else {
-                                        // Fallback to icon if no profile picture
-                                        Icon(
-                                            Icons.Filled.Person,
-                                            contentDescription = "Profile",
-                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.align(Alignment.Center)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    HomeTopBar(
+                        context = context,
+                        companyName = prefs.companyName,
+                        userName = prefs.userName,
+                        profileUrl = prefs.profileUrl,
+                        isRefreshing = ui.isRefreshing,
+                        onRefreshClick = { vm.refreshStatus() },
+                        onProfileClick = { currentScreen = HomeScreen.PROFILE }
+                    )
 
                     Spacer(Modifier.height(24.dp))
 
@@ -417,7 +365,7 @@ fun HomePage(
                                             Log.d(TAG, "CHECK IN BUTTON CLICKED")
                                             faceVerificationGeneration++
                                             Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
-                                            vm.startCheckIn(context)
+                                            checkInPermissionChecker()
                                         },
                                         modifier = Modifier
                                             .weight(1f)
@@ -449,7 +397,7 @@ fun HomePage(
                                             Log.d(TAG, "CHECK OUT BUTTON CLICKED")
                                             faceVerificationGeneration++
                                             Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
-                                            vm.startCheckOut(context)
+                                            checkOutPermissionChecker()
                                         },
                                         modifier = Modifier
                                             .weight(1f)
