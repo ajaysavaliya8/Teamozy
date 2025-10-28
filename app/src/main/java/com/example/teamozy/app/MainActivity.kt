@@ -1,41 +1,44 @@
 package com.example.teamozy.app
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.platform.LocalContext
-import com.example.teamozy.core.network.NetworkModule
-import com.example.teamozy.core.utils.PreferencesManager
-import com.example.teamozy.feature.auth.presentation.LoginScreen
-import com.example.teamozy.feature.auth.data.AuthRepository
-import com.example.teamozy.feature.auth.data.AuthOutcome
-import com.example.teamozy.feature.home.presentation.HomePage
-import com.example.teamozy.feature.permissions.presentation.PermissionScreen
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
+import org.koin.compose.koinInject
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
-import org.koin.compose.koinInject
+
+import com.example.teamozy.core.network.NetworkModule
+import com.example.teamozy.feature.auth.data.AuthRepository
+import com.example.teamozy.feature.auth.data.AuthOutcome
+import com.example.teamozy.feature.auth.presentation.LoginScreen
+import com.example.teamozy.feature.home.presentation.HomePage
+import com.example.teamozy.feature.permissions.presentation.PermissionScreen
+import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.di.authModule
 import com.example.teamozy.di.attendanceModule
 import com.example.teamozy.di.permissionsModule
 import com.example.teamozy.di.homeModule
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import android.util.Log
 
-private enum class AppScreen { SPLASH, PERMISSIONS, LOGIN, HOME }
+private enum class AppScreen {
+    SPLASH,
+    LOGIN,
+    PERMISSIONS,
+    HOME
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,7 +75,6 @@ private fun AppRoot() {
     val prefs = remember { PreferencesManager.getInstance(context) }
     val authRepo: AuthRepository = koinInject()
     var current by remember { mutableStateOf(AppScreen.SPLASH) }
-    var showPermissionsOnce by remember { mutableStateOf(false) }
 
     when (current) {
         AppScreen.SPLASH -> InlineSplash(
@@ -81,11 +83,12 @@ private fun AppRoot() {
             onComplete = { isAuthorized ->
                 current = if (isAuthorized) {
                     // User is logged in
-                    // Show permissions screen only on first launch after login
-                    if (!showPermissionsOnce) {
-                        showPermissionsOnce = true
+                    // Check if permissions screen has been shown before
+                    if (!prefs.hasShownPermissions) {
+                        // First time after login - show permissions
                         AppScreen.PERMISSIONS
                     } else {
+                        // Already shown before - go directly to home
                         AppScreen.HOME
                     }
                 } else {
@@ -98,6 +101,8 @@ private fun AppRoot() {
         AppScreen.PERMISSIONS -> PermissionScreen(
             onAllGood = {
                 Log.d("MainActivity", "Permission screen completed (granted or skipped)")
+                // Mark that permissions screen has been shown
+                prefs.hasShownPermissions = true
                 current = AppScreen.HOME
             }
         )
@@ -105,8 +110,8 @@ private fun AppRoot() {
         AppScreen.LOGIN -> LoginScreen(
             onLoginSuccess = {
                 Log.d("MainActivity", "Login success")
-                // After login, show permissions once
-                showPermissionsOnce = false
+                // After successful login, reset the flag to show permissions
+                prefs.hasShownPermissions = false
                 current = AppScreen.PERMISSIONS
             }
         )
@@ -115,7 +120,6 @@ private fun AppRoot() {
             onLogout = {
                 Log.d("MainActivity", "Logout, clearing preferences")
                 prefs.clearAll()
-                showPermissionsOnce = false
                 current = AppScreen.LOGIN
             }
         )
@@ -137,61 +141,18 @@ private fun InlineSplash(
             // Check if user is logged in (has token)
             val isLoggedIn = preferencesManager.isLoggedIn()
 
-            Log.d("InlineSplash", "isLoggedIn: $isLoggedIn")
-
-            if (!isLoggedIn) {
-                Log.d("InlineSplash", "No token found, going to login")
+            if (isLoggedIn) {
+                // For now, assume token is valid if it exists
+                // You can add token validation logic here if needed
+                onComplete(true)
+            } else {
+                // Not logged in
                 onComplete(false)
-                return@launch
             }
-
-            // User has token, try to verify it
-            Log.d("InlineSplash", "Token found, verifying with server...")
-
-            var isAuthorized = true // Assume authorized by default (offline mode)
-
-            try {
-                when (val result = authRepository.verifyToken()) {
-                    is AuthOutcome.Success -> {
-                        Log.d("InlineSplash", "✅ Token verified successfully")
-                        isAuthorized = true
-                    }
-
-                    is AuthOutcome.Error -> {
-                        val errorMsg = result.message.lowercase()
-
-                        // Only clear token if it's explicitly invalid
-                        if (errorMsg.contains("invalid") ||
-                            errorMsg.contains("expired") ||
-                            errorMsg.contains("unauthorized")) {
-                            Log.w("InlineSplash", "❌ Token is invalid: ${result.message}")
-                            preferencesManager.clearAll()
-                            isAuthorized = false
-                        } else {
-                            // Network error or other issue - allow offline access
-                            Log.w("InlineSplash", "⚠️ Token verification failed (network?): ${result.message}")
-                            Log.d("InlineSplash", "Allowing offline access with existing token")
-                            isAuthorized = true
-                        }
-                    }
-
-                    is AuthOutcome.DeviceNotRegistered -> {
-                        Log.w("InlineSplash", "❌ Device not registered: ${result.message}")
-                        preferencesManager.clearAll()
-                        isAuthorized = false
-                    }
-                }
-            } catch (e: Exception) {
-                // Any exception during verification - allow offline access
-                Log.e("InlineSplash", "⚠️ Exception during token verification: ${e.message}")
-                Log.d("InlineSplash", "Allowing offline access with existing token")
-                isAuthorized = true
-            }
-
-            onComplete(isAuthorized)
         }
     }
 
+    // Simple splash screen UI
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -200,12 +161,11 @@ private fun InlineSplash(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            CircularProgressIndicator()
             Text(
-                "Loading Teamozy...",
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center
+                text = "Teamozy",
+                style = MaterialTheme.typography.headlineLarge
             )
+            CircularProgressIndicator()
         }
     }
 }

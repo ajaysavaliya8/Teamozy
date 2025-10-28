@@ -80,7 +80,7 @@ class PreferencesManager private constructor(context: Context) {
         get() = prefs.getString(KEY_LINKEDIN, null)
         set(value) = prefs.edit().putString(KEY_LINKEDIN, value).apply()
 
-    var x: String?  // Twitter/X
+    var x: String?
         get() = prefs.getString(KEY_X, null)
         set(value) = prefs.edit().putString(KEY_X, value).apply()
 
@@ -130,6 +130,11 @@ class PreferencesManager private constructor(context: Context) {
         get() = prefs.getString(KEY_TECH_SUPPORT_EMAIL, null)
         set(value) = prefs.edit().putString(KEY_TECH_SUPPORT_EMAIL, value).apply()
 
+    // ===== PERMISSION SCREEN FLAG =====
+    var hasShownPermissions: Boolean
+        get() = prefs.getBoolean(KEY_HAS_SHOWN_PERMISSIONS, false)
+        set(value) = prefs.edit().putBoolean(KEY_HAS_SHOWN_PERMISSIONS, value).apply()
+
     fun isLoggedIn(): Boolean = !authToken.isNullOrBlank()
 
     fun clearAll() {
@@ -168,6 +173,9 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_HR_EMAIL = "hr_email"
         private const val KEY_TECH_SUPPORT_NUMBER = "tech_support_number"
         private const val KEY_TECH_SUPPORT_EMAIL = "tech_support_email"
+
+        // Permission screen flag
+        private const val KEY_HAS_SHOWN_PERMISSIONS = "has_shown_permissions"
 
         @Volatile private var INSTANCE: PreferencesManager? = null
 
