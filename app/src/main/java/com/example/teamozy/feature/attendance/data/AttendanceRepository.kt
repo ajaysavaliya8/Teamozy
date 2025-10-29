@@ -8,6 +8,7 @@ import com.example.teamozy.core.state.AppStateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import com.example.teamozy.feature.face.util.FaceVectorUtil
 
 sealed class AttendanceOutcome {
     data class Success(
@@ -24,6 +25,7 @@ sealed class AttendanceOutcome {
 sealed class CheckInOutcome {
     data class RequiresFaceVerification(
         val tToken: String,
+        val faceVector: FloatArray?,
         val minimumQualityScore: Float,
         val isLate: Boolean,
         val isOutOfRange: Boolean,
@@ -48,6 +50,7 @@ sealed class CheckInOutcome {
 sealed class CheckOutOutcome {
     data class RequiresFaceVerification(
         val tToken: String,
+        val faceVector: FloatArray?,
         val minimumQualityScore: Float,
         val workHours: Float,
         val isEarly: Boolean,
@@ -193,11 +196,25 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  late_reason_required: $lateReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
 
+                        val faceVector = body.face_vector?.let { faceVectorString ->
+                            FaceVectorUtil.parseFaceVector(faceVectorString)
+                        }
+
+                        if (faceVerificationRequired) {
+                            Log.d("NET", "  face_vector present: ${body.face_vector != null}")
+                            Log.d("NET", "  face_vector parsed: ${faceVector != null}")
+                            if (faceVector != null) {
+                                Log.d("NET", "  face_vector size: ${faceVector.size}")
+                                Log.d("NET", "  face_vector valid: ${FaceVectorUtil.isValidFaceVector(faceVector)}")
+                            }
+                        }
+
                         // Determine what's needed next
                         when {
                             faceVerificationRequired -> {
                                 CheckInOutcome.RequiresFaceVerification(
                                     tToken = body.t_token,
+                                    faceVector = faceVector,
                                     minimumQualityScore = minimumQualityScore,
                                     isLate = isLate,
                                     isOutOfRange = isOutOfRange,
@@ -358,11 +375,26 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  early_reason_required: $earlyReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
 
+                        val faceVector = body.face_vector?.let { faceVectorString ->
+                            FaceVectorUtil.parseFaceVector(faceVectorString)
+                        }
+
+                        if (faceVerificationRequired) {
+                            Log.d("NET", "  face_vector present: ${body.face_vector != null}")
+                            Log.d("NET", "  face_vector parsed: ${faceVector != null}")
+                            if (faceVector != null) {
+                                Log.d("NET", "  face_vector size: ${faceVector.size}")
+                                Log.d("NET", "  face_vector valid: ${FaceVectorUtil.isValidFaceVector(faceVector)}")
+                            }
+                        }
+
+
                         // Determine what's needed next
                         when {
                             faceVerificationRequired -> {
                                 CheckOutOutcome.RequiresFaceVerification(
                                     tToken = body.t_token,
+                                    faceVector = faceVector,
                                     minimumQualityScore = minimumQualityScore,
                                     workHours = workHours,
                                     isEarly = isEarly,

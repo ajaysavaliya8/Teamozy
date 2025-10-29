@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.example.teamozy.feature.face.util.FaceVectorUtil
+import android.util.Log
 
 /**
  * AttendanceViewModel
@@ -26,13 +28,6 @@ class AttendanceViewModel(
 
     private val _ui = MutableStateFlow(AttendanceUiState())
     val ui: StateFlow<AttendanceUiState> = _ui.asStateFlow()
-
-    /**
-     * Refresh the current attendance status from server
-     */
-    /**
-     * Refresh the current attendance status from server
-     */
     fun refreshStatus() {
         if (_ui.value.isRefreshing) return
 
@@ -66,10 +61,6 @@ class AttendanceViewModel(
         }
     }
 
-    /**
-     * Start check-in process
-     * Gets location and makes initial check-in API call
-     */
     fun startCheckIn(context: Context) {
         if (_ui.value.isLoading) return
 
@@ -97,10 +88,19 @@ class AttendanceViewModel(
                         longitude = loc.longitude
                     )) {
                         is CheckInOutcome.RequiresFaceVerification -> {
+
+                            Log.d("AttendanceViewModel", "✅ Check-in requires face verification")
+                            Log.d("AttendanceViewModel", "   face_vector present: ${outcome.faceVector != null}")
+                            if (outcome.faceVector != null) {
+                                Log.d("AttendanceViewModel", "   face_vector size: ${outcome.faceVector.size}")
+                                Log.d("AttendanceViewModel", "   face_vector valid: ${FaceVectorUtil.isValidFaceVector(outcome.faceVector)}")
+                            }
+
                             // Face verification is required
                             _ui.value = _ui.value.copy(
                                 isLoading = false,
                                 checkInTToken = outcome.tToken,
+                                checkInFaceVector = outcome.faceVector,
                                 checkInMinimumQualityScore = outcome.minimumQualityScore,
                                 checkInIsLate = outcome.isLate,
                                 checkInIsOutOfRange = outcome.isOutOfRange,
@@ -150,10 +150,6 @@ class AttendanceViewModel(
         }
     }
 
-    /**
-     * Start check-out process
-     * Gets location and makes initial check-out API call
-     */
     fun startCheckOut(context: Context) {
         if (_ui.value.isLoading) return
 
@@ -181,10 +177,17 @@ class AttendanceViewModel(
                         longitude = loc.longitude
                     )) {
                         is CheckOutOutcome.RequiresFaceVerification -> {
+                            Log.d("AttendanceViewModel", "✅ Check-out requires face verification")
+                            Log.d("AttendanceViewModel", "   face_vector present: ${outcome.faceVector != null}")
+                            if (outcome.faceVector != null) {
+                                Log.d("AttendanceViewModel", "   face_vector size: ${outcome.faceVector.size}")
+                                Log.d("AttendanceViewModel", "   face_vector valid: ${FaceVectorUtil.isValidFaceVector(outcome.faceVector)}")
+                            }
                             // Face verification is required
                             _ui.value = _ui.value.copy(
                                 isLoading = false,
                                 checkOutTToken = outcome.tToken,
+                                checkOutFaceVector = outcome.faceVector,
                                 checkOutMinimumQualityScore = outcome.minimumQualityScore,
                                 checkOutWorkHours = outcome.workHours,
                                 checkOutIsEarly = outcome.isEarly,
@@ -236,9 +239,6 @@ class AttendanceViewModel(
         }
     }
 
-    /**
-     * Called after face verification completes (for check-in OR check-out)
-     */
     fun onFaceVerificationComplete(qualityScore: Float, verified: Boolean) {
         _ui.value = _ui.value.copy(
             showFaceVerification = false,
@@ -264,22 +264,18 @@ class AttendanceViewModel(
         }
     }
 
-    /**
-     * Called when face verification is cancelled
-     */
     fun onFaceVerificationCancelled() {
         _ui.value = _ui.value.copy(
             showFaceVerification = false,
             checkInTToken = null,
+            checkInFaceVector = null,
             checkInMessage = null,
             checkOutTToken = null,
+            checkOutFaceVector = null,
             checkOutMessage = null
         )
     }
 
-    /**
-     * Called when user dismisses reason dialog without submitting
-     */
     fun onReasonDialogDismissed() {
         _ui.value = _ui.value.copy(
             showReasonDialog = false,
@@ -290,9 +286,7 @@ class AttendanceViewModel(
         )
     }
 
-    /**
-     * Complete check-in with signature API call
-     */
+
     fun completeCheckIn(lateReason: String?, outOfRangeReason: String?) {
         val tToken = _ui.value.checkInTToken
         if (tToken == null) {
@@ -322,6 +316,7 @@ class AttendanceViewModel(
                         isLoading = false,
                         successMessage = outcome.message,
                         checkInTToken = null,
+                        checkInFaceVector = null,
                         checkInMessage = null,
                         faceVerificationQualityScore = null,
                         faceVerificationSuccess = false
@@ -337,6 +332,7 @@ class AttendanceViewModel(
                         isLoading = false,
                         errorMessage = outcome.message,
                         checkInTToken = null,
+                        checkInFaceVector = null,
                         checkInMessage = null
                     )
                     autoClearMessages()
@@ -345,9 +341,6 @@ class AttendanceViewModel(
         }
     }
 
-    /**
-     * Complete check-out with signature API call
-     */
     fun completeCheckOut(earlyReason: String?, outOfRangeReason: String?) {
         val tToken = _ui.value.checkOutTToken
         if (tToken == null) {
@@ -377,12 +370,13 @@ class AttendanceViewModel(
                         isLoading = false,
                         successMessage = outcome.message,
                         checkOutTToken = null,
+                        checkOutFaceVector = null,
                         checkOutMessage = null,
                         faceVerificationQualityScore = null,
                         faceVerificationSuccess = false
                     )
                     autoClearMessages()
-                    // Refresh status after successful check-out
+
                     delay(1000)
                     refreshStatus()
                 }
@@ -392,6 +386,7 @@ class AttendanceViewModel(
                         isLoading = false,
                         errorMessage = outcome.message,
                         checkOutTToken = null,
+                        checkOutFaceVector = null,
                         checkOutMessage = null
                     )
                     autoClearMessages()
@@ -400,9 +395,7 @@ class AttendanceViewModel(
         }
     }
 
-    /**
-     * Clear success and error messages
-     */
+
     fun clearMessages() {
         _ui.value = _ui.value.copy(
             successMessage = null,
@@ -410,9 +403,6 @@ class AttendanceViewModel(
         )
     }
 
-    /**
-     * Auto-clear messages after a delay
-     */
     private fun autoClearMessages() {
         viewModelScope.launch {
             delay(4500)
@@ -420,34 +410,19 @@ class AttendanceViewModel(
         }
     }
 
-    /**
-     * Helper to determine if user can check in based on current state
-     */
     fun canCheckIn(): Boolean {
         return _ui.value.currentState == "CHECK_IN_NEEDED"
     }
 
-    /**
-     * Helper to determine if user can check out based on current state
-     */
     fun canCheckOut(): Boolean {
         return _ui.value.currentState == "CHECK_OUT_NEEDED"
     }
 
-    /**
-     * Helper to determine if attendance is complete for today
-     */
     fun isComplete(): Boolean {
         return _ui.value.currentState == "COMPLETED"
     }
 }
 
-/**
- * UI State for Attendance
- */
-/**
- * UI State for Attendance
- */
 data class AttendanceUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
@@ -479,6 +454,9 @@ data class AttendanceUiState(
     val checkOutEarlyReasonRequired: Boolean = false,
     val checkOutOutOfRangeReasonRequired: Boolean = false,
     val checkOutMessage: String? = null,
+
+    val checkInFaceVector: FloatArray? = null,
+    val checkOutFaceVector: FloatArray? = null,
 
     // UI flags (shared between check-in and check-out)
     val showFaceVerification: Boolean = false,

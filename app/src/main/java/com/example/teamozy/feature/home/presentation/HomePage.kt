@@ -48,6 +48,7 @@ import androidx.core.content.ContextCompat
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.example.teamozy.feature.face.util.FaceVectorUtil
 
 private const val TAG = "HomePage"
 private const val PREF_FACE_EMBEDDING = "face_embedding"
@@ -591,20 +592,31 @@ fun HomePage(
                                 return@launch
                             }
 
-                            // ✨ Load stored face embedding for comparison
-                            val storedEmbedding = withContext(Dispatchers.IO) {
-                                SimpleFaceStore.loadEmbedding(context)
-                            }
+                            // ⭐ Get face_vector from API (not local storage!)
+                            val storedFaceVector = ui.checkInFaceVector ?: ui.checkOutFaceVector
 
-                            if (storedEmbedding == null) {
-                                Log.e(TAG, "❌ No stored face found - user needs to register")
-                                faceVerifyError = "No registered face found. Please register your face first."
+                            if (storedFaceVector == null) {
+                                Log.e(TAG, "❌ No stored face vector from API")
+                                faceVerifyError = "Face verification data not available. Please contact support."
                                 faceVerifyBusy = false
                                 return@launch
                             }
 
-                            // ✨ Calculate similarity between live and stored embeddings
-                            val similarity = calculateCosineSimilarity(liveEmbedding, storedEmbedding)
+                            // Validate stored face vector
+                            if (!FaceVectorUtil.isValidFaceVector(storedFaceVector)) {
+                                Log.e(TAG, "❌ Invalid stored face vector from API")
+                                faceVerifyError = "Invalid face data. Please contact support."
+                                faceVerifyBusy = false
+                                return@launch
+                            }
+
+                            Log.d(TAG, "✅ Stored face vector loaded from API: ${storedFaceVector.size} dimensions")
+
+                            // ⭐ Calculate similarity using FaceVectorUtil
+                            val similarity = FaceVectorUtil.calculateSimilarity(liveEmbedding, storedFaceVector)
+
+
+
                             Log.d(TAG, "📊 Face similarity score: $similarity")
 
                             // ✨ Get minimum threshold from server

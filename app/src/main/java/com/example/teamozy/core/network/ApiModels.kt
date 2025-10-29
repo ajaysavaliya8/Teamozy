@@ -54,11 +54,12 @@ data class CheckStatusData(
 
 // -------- Check-In Response --------
 data class CheckInResponse(
-    val status: String,           // "success" | "error"
+    val status: String,
     val message: String? = null,
     val face_verification_required: Boolean? = null,
     val minimum_quality_score: Float? = null,
     val t_token: String? = null,
+    val face_vector: String? = null,
     val is_late: Boolean? = null,
     val is_out_of_range: Boolean? = null,
     val late_reason_required: Boolean? = null,
@@ -80,6 +81,7 @@ data class CheckOutResponse(
     val face_verification_required: Boolean? = null,
     val minimum_quality_score: Float? = null,
     val t_token: String? = null,
+    val face_vector: String? = null,
     val work_hours: Float? = null,
     val is_early: Boolean? = null,
     val is_out_of_range: Boolean? = null,
