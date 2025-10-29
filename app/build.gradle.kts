@@ -6,12 +6,12 @@ plugins {
 }
 
 android {
-    namespace = "com.example.teamozy"
+    namespace = "com.hrms.jeejateamozy"
     compileSdk = 36
 
     defaultConfig {
 
-        applicationId = "com.example.teamozy"
+        applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
