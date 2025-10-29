@@ -31,7 +31,6 @@ import com.example.teamozy.core.utils.PreferencesManager
 import com.example.teamozy.feature.attendance.data.AttendanceRepository
 import com.example.teamozy.feature.attendance.presentation.AttendanceViewModel
 import com.example.teamozy.feature.face.data.EmbeddingExtractor
-import com.example.teamozy.feature.face.data.FaceStore
 import com.example.teamozy.feature.face.presentation.FaceCaptureScreen
 import com.example.teamozy.feature.face.presentation.FaceRegistrationScreen
 import com.example.teamozy.feature.profile.presentation.ProfileScreen
@@ -46,10 +45,53 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import android.content.Context
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 private const val TAG = "HomePage"
+private const val PREF_FACE_EMBEDDING = "face_embedding"
 
 private enum class HomeScreen { HOME, ATTENDANCE, PROFILE, EDIT_SOCIAL_MEDIA }
+
+/**
+ * Simple face storage using SharedPreferences
+ */
+private object SimpleFaceStore {
+    private const val PREFS_NAME = "face_data"
+
+    fun saveEmbedding(context: Context, embedding: FloatArray) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = Gson().toJson(embedding.toList())
+        prefs.edit().putString(PREF_FACE_EMBEDDING, json).apply()
+        Log.d(TAG, "✅ Face embedding saved: size=${embedding.size}")
+    }
+
+    fun loadEmbedding(context: Context): FloatArray? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(PREF_FACE_EMBEDDING, null) ?: return null
+
+        return try {
+            val type = object : TypeToken<List<Float>>() {}.type
+            val list = Gson().fromJson<List<Float>>(json, type)
+            list.toFloatArray()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading embedding", e)
+            null
+        }
+    }
+
+    fun hasEnrollment(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.contains(PREF_FACE_EMBEDDING)
+    }
+
+    fun clear(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+        Log.d(TAG, "✅ Face data cleared")
+    }
+}
 
 /**
  * Calculate elapsed seconds from last check-in time to now
@@ -193,9 +235,8 @@ fun HomePage(
 
     LaunchedEffect(Unit) {
         vm.refreshStatus()
-        val store = FaceStore.getInstance(context)
-        if (store.hasEnrollment()) {
-            val embedding = store.loadEmbedding()
+        if (SimpleFaceStore.hasEnrollment(context)) {
+            val embedding = SimpleFaceStore.loadEmbedding(context)
             Log.d(TAG, "Stored embedding loaded: size=${embedding?.size}")
         } else {
             Log.d(TAG, "No face enrollment found")
@@ -477,7 +518,7 @@ fun HomePage(
                     scope.launch {
                         try {
                             withContext(Dispatchers.IO) {
-                                FaceStore.getInstance(context).clear()
+                                SimpleFaceStore.clear(context)
                             }
                             prefs.clearAll()
                             onLogout()
@@ -551,9 +592,8 @@ fun HomePage(
                             }
 
                             // ✨ Load stored face embedding for comparison
-                            val store = FaceStore.getInstance(context)
                             val storedEmbedding = withContext(Dispatchers.IO) {
-                                store.loadEmbedding()
+                                SimpleFaceStore.loadEmbedding(context)
                             }
 
                             if (storedEmbedding == null) {
@@ -628,7 +668,7 @@ fun HomePage(
     if (showRegistration) {
         FaceRegistrationScreen(
             onDismiss = { showRegistration = false },
-            onEnrolled = { embedding, bitmap ->
+            onEnrolled = { embedding: FloatArray, bitmap: Bitmap ->
                 registrationBusy = true
                 scope.launch {
                     try {
@@ -664,7 +704,7 @@ fun HomePage(
                         if (response.isSuccessful) {
                             snack.showSnackbar("Face registered successfully!")
                             withContext(Dispatchers.IO) {
-                                FaceStore.getInstance(context).saveEmbedding(embedding)
+                                SimpleFaceStore.saveEmbedding(context, embedding)
                             }
                             vm.refreshStatus()
                             bitmap.recycle()

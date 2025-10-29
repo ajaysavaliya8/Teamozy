@@ -6,9 +6,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -18,11 +17,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.teamozy.R
@@ -51,12 +50,7 @@ fun EditSocialMediaScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        "Edit Social Links",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text("Edit Social Links", fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -73,72 +67,78 @@ fun EditSocialMediaScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFFF5F5F5))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
 
             // Facebook
             SocialMediaInputField(
-                label = "Facebook",
-                iconRes = R.drawable.ic_facebook,
-                iconColor = Color(0xFF1877F2),
+                iconRes = R.drawable.ic_facebook,          // full-color asset
+                contentDesc = "Facebook",
+                brandFocusColor = Color(0xFF1877F2),
                 value = facebook,
                 onValueChange = { facebook = it },
-                placeholder = "Type here"
+                placeholder = "https://facebook.com/your.username",
+                imeAction = ImeAction.Next
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
             // LinkedIn
             SocialMediaInputField(
-                label = "Linkedin",
                 iconRes = R.drawable.ic_linkedin,
-                iconColor = Color(0xFF0A66C2),
+                contentDesc = "LinkedIn",
+                brandFocusColor = Color(0xFF0A66C2),
                 value = linkedin,
                 onValueChange = { linkedin = it },
-                placeholder = "Type here"
+                placeholder = "https://linkedin.com/in/your-id",
+                imeAction = ImeAction.Next
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
             // X (Twitter)
             SocialMediaInputField(
-                label = "X (Twitter)",
                 iconRes = R.drawable.ic_x,
-                iconColor = Color(0xFF000000),
+                contentDesc = "X (Twitter)",
+                brandFocusColor = Color(0xFF000000),
                 value = x,
                 onValueChange = { x = it },
-                placeholder = "Type here"
+                placeholder = "https://x.com/your.handle",
+                imeAction = ImeAction.Next
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
             // Instagram
             SocialMediaInputField(
-                label = "Instagram",
                 iconRes = R.drawable.ic_instagram,
-                iconColor = Color(0xFFE4405F),
+                contentDesc = "Instagram",
+                brandFocusColor = Color(0xFFE4405F),
                 value = instagram,
                 onValueChange = { instagram = it },
-                placeholder = "Type here"
+                placeholder = "https://instagram.com/your.username",
+                imeAction = ImeAction.Next
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // Snapchat
+            // Snapchat (ID or link)
             SocialMediaInputField(
-                label = "Snapchat",
                 iconRes = R.drawable.ic_snapchat,
-                iconColor = Color(0xFFFFFC00),
+                contentDesc = "Snapchat",
+                brandFocusColor = Color(0xFFFFFC00),
                 value = snapchat,
                 onValueChange = { snapchat = it },
-                placeholder = "Type here"
+                placeholder = "Your Snapchat ID or link",
+                imeAction = ImeAction.Done,
+                keyboardType = KeyboardType.Text
             )
 
             Spacer(Modifier.height(16.dp))
 
-            // Error Message
+            // Error
             errorMessage?.let { error ->
                 Card(
                     modifier = Modifier
@@ -147,7 +147,7 @@ fun EditSocialMediaScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     ),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -166,42 +166,38 @@ fun EditSocialMediaScreen(
                         )
                     }
                 }
+                LaunchedEffect(error) {
+                    kotlinx.coroutines.delay(3000)
+                    errorMessage = null
+                }
                 Spacer(Modifier.height(12.dp))
             }
 
-            // Success Message
-            successMessage?.let { success ->
+            // Success
+            successMessage?.let { msg ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF4CAF50)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32))
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color.White
-                        )
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
                         Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = success,
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Text(text = msg, color = Color.White, fontSize = 14.sp)
                     }
+                }
+                LaunchedEffect(msg) {
+                    kotlinx.coroutines.delay(3000)
+                    successMessage = null
                 }
                 Spacer(Modifier.height(12.dp))
             }
 
-            // SAVE Button - After Snapchat
+            // Save
             Button(
                 onClick = {
                     scope.launch {
@@ -210,7 +206,7 @@ fun EditSocialMediaScreen(
                         successMessage = null
 
                         try {
-                            val response = NetworkModule.apiService.updateSocialMedia(
+                            val res = NetworkModule.apiService.updateSocialMedia(
                                 facebook = facebook.ifBlank { null },
                                 linkedin = linkedin.ifBlank { null },
                                 x = x.ifBlank { null },
@@ -218,38 +214,27 @@ fun EditSocialMediaScreen(
                                 snapchat = snapchat.ifBlank { null }
                             )
 
-                            if (response.isSuccessful) {
-                                val body = response.body()
-                                if (body?.status == "success") {
-                                    body.social_media?.let { socialMedia ->
-                                        prefs.facebook = socialMedia.facebook
-                                        prefs.linkedin = socialMedia.linkedin
-                                        prefs.x = socialMedia.x
-                                        prefs.instagram = socialMedia.instagram
-                                        prefs.snapchat = socialMedia.snapchat
-                                    }
+                            if (res.isSuccessful && res.body()?.status == "success") {
+                                // persist locally
+                                prefs.facebook = facebook.ifBlank { null }
+                                prefs.linkedin = linkedin.ifBlank { null }
+                                prefs.x = x.ifBlank { null }
+                                prefs.instagram = instagram.ifBlank { null }
+                                prefs.snapchat = snapchat.ifBlank { null }
 
-                                    successMessage = body.message ?: "Social media links updated successfully!"
-                                    kotlinx.coroutines.delay(1500)
-                                    onBack()
-                                } else {
-                                    errorMessage = body?.message ?: "Failed to update social media"
-                                }
+                                successMessage = res.body()?.message ?: "Social media links updated"
                             } else {
-                                val errorBody = response.errorBody()?.string()
-                                errorMessage = if (errorBody != null) {
-                                    try {
-                                        val json = org.json.JSONObject(errorBody)
-                                        json.optString("message", "Server error: ${response.code()}")
-                                    } catch (e: Exception) {
-                                        "Server error: ${response.code()}"
-                                    }
-                                } else {
-                                    "Server error: ${response.code()}"
+                                val errorBody = res.errorBody()?.string().orEmpty()
+                                val msg = try {
+                                    org.json.JSONObject(errorBody).optString("message")
+                                        .ifBlank { "Failed to update" }
+                                } catch (_: Exception) {
+                                    "Failed to update social media links"
                                 }
+                                errorMessage = msg
                             }
                         } catch (e: Exception) {
-                            errorMessage = "Network error: ${e.localizedMessage ?: "Unknown error"}"
+                            errorMessage = e.message ?: "Unknown error"
                         } finally {
                             isLoading = false
                         }
@@ -258,110 +243,65 @@ fun EditSocialMediaScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .height(48.dp),
+                    .height(50.dp),
                 enabled = !isLoading,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF1976D2)
-                ),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(22.dp),
                         color = Color.White,
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text(
-                        text = "SAVE",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Text("SAVE")
                 }
             }
 
-            Spacer(Modifier.height(80.dp)) // Extra space for bottom navigation
+            Spacer(Modifier.height(80.dp))
         }
     }
 }
 
 @Composable
 private fun SocialMediaInputField(
-    label: String,
     iconRes: Int,
-    iconColor: Color,
+    contentDesc: String,
+    brandFocusColor: Color,
     value: String,
     onValueChange: (String) -> Unit,
-    placeholder: String
+    placeholder: String,
+    imeAction: ImeAction,
+    keyboardType: KeyboardType = KeyboardType.Uri
 ) {
-    Column(
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-    ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color(0xFF212121),
-            modifier = Modifier.padding(bottom = 4.dp)
+            .padding(horizontal = 16.dp),
+        placeholder = { Text(placeholder) },
+        leadingIcon = {
+            // Use the original, full-color asset — no tint
+            Image(
+                painter = painterResource(id = iconRes),
+                contentDescription = contentDesc,
+                modifier = Modifier.size(22.dp)
+            )
+        },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction = imeAction
+        ),
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            // Neutral when not focused; brand accent on focus
+            unfocusedBorderColor = Color(0xFFE2E8F0),
+            focusedBorderColor = brandFocusColor,
+            unfocusedContainerColor = Color.White,
+            focusedContainerColor = Color.White
         )
-
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.White
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.size(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = iconRes),
-                        contentDescription = label,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (value.isEmpty()) {
-                        Text(
-                            text = placeholder,
-                            color = Color(0xFFBDBDBD),
-                            fontSize = 14.sp
-                        )
-                    }
-                    BasicTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            fontSize = 14.sp,
-                            color = Color(0xFF212121)
-                        ),
-                        singleLine = true
-                    )
-                }
-            }
-        }
-    }
+    )
 }

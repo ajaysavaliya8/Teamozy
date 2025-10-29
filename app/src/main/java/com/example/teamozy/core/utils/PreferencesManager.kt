@@ -33,9 +33,7 @@ class PreferencesManager private constructor(context: Context) {
         get() = faceThreshold
         set(value) { faceThreshold = value }
 
-    var faceVector: String?
-        get() = prefs.getString(KEY_FACE_VECTOR, null)
-        set(value) = prefs.edit().putString(KEY_FACE_VECTOR, value).apply()
+    // ❌ REMOVED: var faceVector - No longer storing face vectors locally
 
     // New fields for face verification requirements
     var requireFaceCheckin: Boolean
@@ -148,7 +146,7 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_FACE_THRESHOLD = "face_threshold"
-        private const val KEY_FACE_VECTOR = "face_vector"
+        // ❌ REMOVED: private const val KEY_FACE_VECTOR = "face_vector"
         private const val KEY_REQUIRE_FACE_CHECKIN = "require_face_checkin"
         private const val KEY_REQUIRE_FACE_BREAK = "require_face_break"
 
