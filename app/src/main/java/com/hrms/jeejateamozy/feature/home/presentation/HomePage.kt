@@ -19,12 +19,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
@@ -289,10 +292,9 @@ fun HomePage(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding)
-                        .verticalScroll(rememberScrollState())
+                        .padding(padding)  // Padding for bottom nav bar
                 ) {
-                    // Top Bar
+                    // Static Top Bar (outside scroll)
                     HomeTopBar(
                         context = context,
                         companyName = prefs.companyName,
@@ -303,194 +305,214 @@ fun HomePage(
                         onProfileClick = { currentScreen = HomeScreen.PROFILE }
                     )
 
-                    Spacer(Modifier.height(24.dp))
+                    // Scrollable Content
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Spacer(Modifier.height(24.dp))
 
-                    if (ui.checkInMessage != null || ui.checkOutMessage != null) {
-                        val message = ui.checkInMessage ?: ui.checkOutMessage
-                        Spacer(Modifier.height(8.dp))
+                        if (ui.checkInMessage != null || ui.checkOutMessage != null) {
+                            val message = ui.checkInMessage ?: ui.checkOutMessage
+                            Spacer(Modifier.height(8.dp))
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFFFF3CD)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Warning,
+                                        contentDescription = null,
+                                        tint = Color(0xFF856404)
+                                    )
+                                    Text(
+                                        text = message ?: "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF856404)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(32.dp))
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 20.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFFFF3CD)
-                            )
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                            shape = RoundedCornerShape(24.dp)
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Filled.Warning,
-                                    contentDescription = null,
-                                    tint = Color(0xFF856404)
-                                )
-                                Text(
-                                    text = message ?: "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF856404)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(32.dp))
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                        shape = RoundedCornerShape(24.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(20.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.size(130.dp)
-                            ) {
-                                // ✨ Calculate progress based on 8-hour workday (28800 seconds)
-                                val workdaySeconds = 8 * 60 * 60 // 8 hours
-                                val progress = if (isTimerRunning) {
-                                    (elapsedSeconds.toFloat() / workdaySeconds).coerceIn(0f, 1f)
-                                } else {
-                                    0f
-                                }
-
-                                CircularProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier.size(130.dp),
-                                    color = if (isTimerRunning) Color(0xFF00C896) else Color(0xFF4DD0B8),
-                                    strokeWidth = 10.dp,
-                                    trackColor = Color(0xFFE0F2F1),
-                                )
                                 Box(
-                                    modifier = Modifier
-                                        .size(100.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surface),
-                                    contentAlignment = Alignment.Center
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.size(130.dp)
                                 ) {
-                                    // ✨ Display actual elapsed time
-                                    val hours = elapsedSeconds / 3600
-                                    val minutes = (elapsedSeconds % 3600) / 60
-                                    val seconds = elapsedSeconds % 60
+                                    // ✨ Calculate progress based on 8-hour workday (28800 seconds)
+                                    val workdaySeconds = 8 * 60 * 60 // 8 hours
+                                    val progress = if (isTimerRunning) {
+                                        (elapsedSeconds.toFloat() / workdaySeconds).coerceIn(0f, 1f)
+                                    } else {
+                                        0f
+                                    }
 
-                                    Text(
-                                        text = "%02d:%02d:%02d".format(hours, minutes, seconds),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isTimerRunning) {
-                                            Color(0xFF00C896)
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        }
+                                    CircularProgressIndicator(
+                                        progress = { progress },
+                                        modifier = Modifier.size(130.dp),
+                                        color = if (isTimerRunning) Color(0xFF00C896) else Color(0xFF4DD0B8),
+                                        strokeWidth = 10.dp,
+                                        trackColor = Color(0xFFE0F2F1),
                                     )
-                                }
-                            }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(100.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surface),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        // ✨ Display actual elapsed time
+                                        val hours = elapsedSeconds / 3600
+                                        val minutes = (elapsedSeconds % 3600) / 60
+                                        val seconds = elapsedSeconds % 60
 
-                            when (ui.currentState) {
-                                "CHECK_IN_NEEDED" -> {
-                                    Button(
-                                        onClick = {
-                                            Log.d(TAG, "CHECK IN BUTTON CLICKED")
-                                            faceVerificationGeneration++
-                                            Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
-                                            checkInPermissionChecker()
-                                        },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(56.dp),
-                                        enabled = !ui.isLoading && !faceVerifyBusy,
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFF00C896)
-                                        ),
-                                        shape = RoundedCornerShape(16.dp)
-                                    ) {
-                                        if (ui.isLoading) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp),
-                                                color = Color.White,
-                                                strokeWidth = 2.dp
-                                            )
-                                        } else {
-                                            Text(
-                                                "Check In",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                                "CHECK_OUT_NEEDED" -> {
-                                    Button(
-                                        onClick = {
-                                            Log.d(TAG, "CHECK OUT BUTTON CLICKED")
-                                            faceVerificationGeneration++
-                                            Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
-                                            checkOutPermissionChecker()
-                                        },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(56.dp),
-                                        enabled = !ui.isLoading && !faceVerifyBusy,
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFFFF6B6B)
-                                        ),
-                                        shape = RoundedCornerShape(16.dp)
-                                    ) {
-                                        if (ui.isLoading) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp),
-                                                color = Color.White,
-                                                strokeWidth = 2.dp
-                                            )
-                                        } else {
-                                            Text(
-                                                "Check Out",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                                "COMPLETED" -> {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.CheckCircle,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(32.dp),
-                                            tint = Color(0xFF00C896)
-                                        )
-                                        Spacer(Modifier.height(8.dp))
                                         Text(
-                                            text = "Completed",
-                                            style = MaterialTheme.typography.titleMedium,
+                                            text = "%02d:%02d:%02d".format(hours, minutes, seconds),
+                                            style = MaterialTheme.typography.titleLarge,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF00C896)
+                                            color = if (isTimerRunning) {
+                                                Color(0xFF00C896)
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            }
                                         )
+                                    }
+                                }
+
+                                when (ui.currentState) {
+                                    "CHECK_IN_NEEDED" -> {
+                                        Button(
+                                            onClick = {
+                                                Log.d(TAG, "CHECK IN BUTTON CLICKED")
+                                                faceVerificationGeneration++
+                                                Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
+                                                checkInPermissionChecker()
+                                            },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(56.dp),
+                                            enabled = !ui.isLoading && !faceVerifyBusy,
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFF00C896)
+                                            ),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ) {
+                                            if (ui.isLoading) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(24.dp),
+                                                    color = Color.White,
+                                                    strokeWidth = 2.dp
+                                                )
+                                            } else {
+                                                Text(
+                                                    "Check In",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                    "CHECK_OUT_NEEDED" -> {
+                                        Button(
+                                            onClick = {
+                                                Log.d(TAG, "CHECK OUT BUTTON CLICKED")
+                                                faceVerificationGeneration++
+                                                Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
+                                                checkOutPermissionChecker()
+                                            },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(56.dp),
+                                            enabled = !ui.isLoading && !faceVerifyBusy,
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFFFF6B6B)
+                                            ),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ) {
+                                            if (ui.isLoading) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(24.dp),
+                                                    color = Color.White,
+                                                    strokeWidth = 2.dp
+                                                )
+                                            } else {
+                                                Text(
+                                                    "Check Out",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                    "COMPLETED" -> {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.CheckCircle,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(32.dp),
+                                                tint = Color(0xFF00C896)
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            Text(
+                                                text = "Completed",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF00C896)
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(24.dp))
+
+                        // ==================== 🎯 QUICK ACCESS SECTION ====================
+                        QuickAccessSection(
+                            onCircularClick = { /* TODO: Navigate to Circular */ },
+                            onApplyLeavesClick = { /* TODO: Navigate to Apply Leaves */ },
+                            onWorkReportClick = { /* TODO: Navigate to Work Report */ },
+                            onTasksClick = { /* TODO: Navigate to Tasks */ },
+                            onPayslipClick = { /* TODO: Navigate to Payslip */ },
+                            onDocumentsClick = { /* TODO: Navigate to Documents */ }
+                        )
+                        // ==================== END OF QUICK ACCESS SECTION ====================
+
+                        Spacer(Modifier.height(24.dp))
+                    }
                 }
             }
             HomeScreen.ATTENDANCE -> {
@@ -741,6 +763,196 @@ fun HomePage(
     }
 }
 
+// ==================== 🎯 QUICK ACCESS SECTION COMPOSABLES ====================
+
+/**
+ * Quick Access Section with 2x3 grid layout
+ * Displays all work-related tools in an organized grid
+ */
+@Composable
+private fun QuickAccessSection(
+    onCircularClick: () -> Unit = {},
+    onApplyLeavesClick: () -> Unit = {},
+    onWorkReportClick: () -> Unit = {},
+    onTasksClick: () -> Unit = {},
+    onPayslipClick: () -> Unit = {},
+    onDocumentsClick: () -> Unit = {}
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Quick Access",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                Icons.Outlined.TouchApp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            text = "All Your Work Related Tools.",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        // Grid of Quick Access Items (2 rows x 3 columns)
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Row 1: Circular, Apply Leaves, Work Report
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                QuickAccessItem(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Receipt,
+                    title = "Circular",
+                    iconColor = Color(0xFF00C896),
+                    onClick = onCircularClick
+                )
+                QuickAccessItem(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.EventNote,
+                    title = "Apply Leaves",
+                    iconColor = Color(0xFF3B82F6),
+                    onClick = onApplyLeavesClick
+                )
+                QuickAccessItem(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.EditNote,
+                    title = "Work Report",
+                    iconColor = Color(0xFF00C896),
+                    onClick = onWorkReportClick
+                )
+            }
+
+            // Row 2: Tasks, Payslip, Documents
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                QuickAccessItem(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.CheckCircle,
+                    title = "Tasks",
+                    iconColor = Color(0xFF00C896),
+                    onClick = onTasksClick
+                )
+                QuickAccessItem(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.ReceiptLong,
+                    title = "Payslip",
+                    iconColor = Color(0xFF3B5998),
+                    onClick = onPayslipClick
+                )
+                QuickAccessItem(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Outlined.Description,
+                    title = "Documents",
+                    iconColor = Color(0xFF00C896),
+                    onClick = onDocumentsClick
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Individual Quick Access Item Card
+ *
+ * Design: Circular icon inside a rounded card, with text label below the card
+ *
+ * @param modifier Modifier for the item
+ * @param icon Material Icon to display
+ * @param title Title text below the card
+ * @param iconColor Color for the icon background gradient
+ * @param onClick Click handler
+ */
+@Composable
+private fun QuickAccessItem(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    title: String,
+    iconColor: Color = Color(0xFF00C896),
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = modifier.clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Card with circular icon
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                // Circular icon container with gradient background
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    iconColor,
+                                    iconColor.copy(alpha = 0.7f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Text label below the card
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+    }
+}
+
+// ==================== END OF QUICK ACCESS SECTION ====================
+
 @Composable
 fun ReasonDialog(
     isCheckIn: Boolean,
@@ -823,4 +1035,86 @@ fun ReasonDialog(
             }
         }
     )
+}
+
+@Composable
+fun HomeTopBar(
+    context: Context,
+    companyName: String?,
+    userName: String?,
+    profileUrl: String?,
+    isRefreshing: Boolean,
+    onRefreshClick: () -> Unit,
+    onProfileClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = companyName ?: "Company Name",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Welcome, ${userName ?: "User"}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onRefreshClick,
+                enabled = !isRefreshing
+            ) {
+                if (isRefreshing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        Icons.Outlined.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onProfileClick)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!profileUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = profileUrl,
+                        contentDescription = "Profile",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = "Profile",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+        }
+    }
 }

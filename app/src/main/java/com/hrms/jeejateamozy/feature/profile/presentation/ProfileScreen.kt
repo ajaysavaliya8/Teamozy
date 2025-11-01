@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -423,7 +424,7 @@ fun ProfileScreen(
 
                                 // Edit button
                                 IconButton(
-                                    onClick = onNavigateToEditSocialMedia,  // ✅ This should be passed as parameter
+                                    onClick = onNavigateToEditSocialMedia,
                                     modifier = Modifier
                                         .size(40.dp)
                                         .clip(CircleShape)
@@ -439,6 +440,109 @@ fun ProfileScreen(
                         }
                     }
                 }
+
+                Spacer(Modifier.height(16.dp))
+
+                // ==================== 🎯 QUICK ACCESS SECTION ====================
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Text(
+                        text = "Quick Access",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        // Grid of Quick Access Items
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Row 1: Contact Detail, Personal Info, Employment detail
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.ContactPage,
+                                    title = "Contact\nDetail",
+                                    onClick = { /* TODO: Navigate to Contact Detail */ }
+                                )
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.Person,
+                                    title = "Personal\nInfo",
+                                    onClick = { /* TODO: Navigate to Personal Info */ }
+                                )
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.Work,
+                                    title = "Employment\nDetail",
+                                    onClick = { /* TODO: Navigate to Employment Detail */ }
+                                )
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            // Row 2: Past Experience, Education, Shift Details
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.WorkHistory,
+                                    title = "Past\nExperience",
+                                    onClick = { /* TODO: Navigate to Past Experience */ }
+                                )
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.School,
+                                    title = "Achievements\n& Education",
+                                    onClick = { /* TODO: Navigate to Achievements & Education */ }
+                                )
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.AccessTime,
+                                    title = "Shift\nDetails",
+                                    onClick = { /* TODO: Navigate to Shift Details */ }
+                                )
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            // Row 3: My Timeline, Notification Settings, Nominees
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.Timeline,
+                                    title = "My\nTimeline",
+                                    onClick = { /* TODO: Navigate to Timeline */ }
+                                )
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.Notifications,
+                                    title = "Notification\nSettings",
+                                    onClick = { /* TODO: Navigate to Notification Settings */ }
+                                )
+                                QuickAccessItem(
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Outlined.Group,
+                                    title = "Nominees",
+                                    onClick = { /* TODO: Navigate to Nominees */ }
+                                )
+                            }
+                        }
+                    }
+                }
+                // ==================== END OF QUICK ACCESS SECTION ====================
 
                 Spacer(Modifier.height(16.dp))
 
@@ -576,7 +680,7 @@ fun ProfileScreen(
                             Icon(
                                 Icons.Default.Info,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onErrorContainer
+                                tint = MaterialTheme.colorScheme.error
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
@@ -593,10 +697,9 @@ fun ProfileScreen(
                 }
 
                 successMessage?.let { success ->
-                    Spacer(Modifier.height(8.dp))
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF10B981)
+                            containerColor = Color(0xFF4CAF50)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -940,6 +1043,75 @@ private fun SocialMediaIconStatic(
         )
     }
 }
+
+// ==================== 🎯 QUICK ACCESS ITEM COMPOSABLE ====================
+/**
+ * Quick Access Item Card Component - FIXED VERSION
+ *
+ * Displays a card with an icon and title for quick navigation
+ * FIXES:
+ * 1. Changed aspectRatio from 1f to 0.85f to make cards taller
+ * 2. This prevents text cutoff on longer words like "Employment"
+ *
+ * @param modifier Modifier for the card
+ * @param icon Material Icon to display
+ * @param title Title text (supports multi-line with \n)
+ * @param onClick Click handler for navigation
+ */
+@Composable
+private fun QuickAccessItem(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    title: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier
+            .aspectRatio(0.85f)  // ✅ FIXED: Taller cards (was 1f) to accommodate text better
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),  // Adequate padding for content
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Circular icon container
+            Box(
+                modifier = Modifier
+                    .size(42.dp)  // Balanced icon size
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Spacer(Modifier.height(8.dp))  // Adequate spacing
+            Text(
+                text = title,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                lineHeight = 13.sp,  // ✅ Better line height for readability
+                maxLines = 2,
+                modifier = Modifier.padding(horizontal = 2.dp)
+            )
+        }
+    }
+}
+// ==================== END OF QUICK ACCESS ITEM COMPOSABLE ====================
 
 /* ---------------- Helpers ---------------- */
 
