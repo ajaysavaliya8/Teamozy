@@ -52,6 +52,8 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
+import org.koin.androidx.compose.koinViewModel
+
 
 private const val TAG = "HomePage"
 private const val PREF_FACE_EMBEDDING = "face_embedding"
@@ -145,9 +147,8 @@ private fun calculateCosineSimilarity(embedding1: FloatArray, embedding2: FloatA
 
 @Composable
 fun rememberAttendanceViewModel(context: android.content.Context): AttendanceViewModel {
-    return remember {
-        AttendanceViewModel(AttendanceRepository(context))
-    }
+    // ✅ Use Koin to get a properly scoped ViewModel that survives recomposition
+    return koinViewModel()
 }
 
 @Composable
@@ -164,7 +165,16 @@ fun HomePage(
     val prefs = remember { PreferencesManager.getInstance(context) }
 
     // Navigation state
-    var currentScreen by remember { mutableStateOf(HomeScreen.HOME) }
+    var currentScreen by remember(initialScreen) {
+        mutableStateOf(
+            when (initialScreen) {
+                "PROFILE" -> HomeScreen.PROFILE
+                "HOME" -> HomeScreen.HOME
+                else -> HomeScreen.HOME
+            }
+        )
+    }
+
     var showRegistration by remember { mutableStateOf(false) }
     var registrationBusy by remember { mutableStateOf(false) }
 
@@ -177,13 +187,6 @@ fun HomePage(
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var isTimerRunning by remember { mutableStateOf(false) }
 
-    LaunchedEffect(initialScreen) {
-        when (initialScreen) {
-            "PROFILE" -> currentScreen = HomeScreen.PROFILE
-            "HOME" -> currentScreen = HomeScreen.HOME
-            else -> currentScreen = HomeScreen.HOME
-        }
-    }
 
     // ✅ Permission checkers for Check In and Check Out
     val checkInPermissionChecker = rememberPermissionChecker(
@@ -286,7 +289,7 @@ fun HomePage(
                         userName = prefs.userName,
                         profileUrl = prefs.profileUrl,
                         isRefreshing = ui.isRefreshing,
-                        onRefreshClick = { vm.refreshStatus() },
+                        onRefreshClick = { vm.refreshStatus(force = true) },
                         onProfileClick = { currentScreen = HomeScreen.PROFILE }
                     )
 

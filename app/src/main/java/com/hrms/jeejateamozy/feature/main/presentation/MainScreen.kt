@@ -63,10 +63,7 @@ fun MainScreen(
             }
 
             NavigationScreen.PROFILE -> {
-                // Profile is handled by HomePage, so navigate to HOME and let HomePage show Profile
-                LaunchedEffect(Unit) {
-                    currentNavigationScreen = NavigationScreen.HOME
-                }
+
                 // Temporarily show HomePage while switching
                 HomePage(
                     onLogout = onLogout,

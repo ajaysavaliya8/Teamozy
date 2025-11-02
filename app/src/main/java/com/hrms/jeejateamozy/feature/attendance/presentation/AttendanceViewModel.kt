@@ -28,7 +28,15 @@ class AttendanceViewModel(
 
     private val _ui = MutableStateFlow(AttendanceUiState())
     val ui: StateFlow<AttendanceUiState> = _ui.asStateFlow()
-    fun refreshStatus() {
+    private var hasLoadedInitialStatus = false
+
+    fun refreshStatus(force: Boolean = false) {
+        // ✅ ADD THESE 5 LINES:
+        if (hasLoadedInitialStatus && !force) {
+            Log.d("AttendanceViewModel", "⏭️ Skipping refreshStatus - already loaded (force=$force)")
+            return
+        }
+
         if (_ui.value.isRefreshing) return
 
         viewModelScope.launch {
@@ -48,6 +56,9 @@ class AttendanceViewModel(
                         isComplete = outcome.isComplete,
                         errorMessage = null
                     )
+                    // ✅ ADD THESE 2 LINES:
+                    hasLoadedInitialStatus = true
+                    Log.d("AttendanceViewModel", "✅ Status loaded successfully")
                 }
 
                 is AttendanceOutcome.Error -> {
@@ -134,7 +145,7 @@ class AttendanceViewModel(
                             autoClearMessages()
                             // Refresh status after success
                             delay(1000)
-                            refreshStatus()
+                            refreshStatus(force = true)
                         }
 
                         is CheckInOutcome.Error -> {
@@ -324,7 +335,7 @@ class AttendanceViewModel(
                     autoClearMessages()
                     // Refresh status after successful check-in
                     delay(1000)
-                    refreshStatus()
+                    refreshStatus()    // ⚠️ CHANGE THIS LINE TO: refreshStatus(force = true)
                 }
 
                 is SignatureOutcome.Error -> {
@@ -378,7 +389,7 @@ class AttendanceViewModel(
                     autoClearMessages()
 
                     delay(1000)
-                    refreshStatus()
+                    refreshStatus()    // ⚠️ CHANGE THIS LINE TO: refreshStatus(force = true)
                 }
 
                 is SignatureOutcome.Error -> {
@@ -394,8 +405,6 @@ class AttendanceViewModel(
             }
         }
     }
-
-
     fun clearMessages() {
         _ui.value = _ui.value.copy(
             successMessage = null,
