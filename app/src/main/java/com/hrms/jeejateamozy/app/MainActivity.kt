@@ -25,7 +25,7 @@ import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.presentation.LoginScreen
-import com.hrms.jeejateamozy.feature.home.presentation.HomePage
+import com.hrms.jeejateamozy.feature.main.presentation.MainScreen
 import com.hrms.jeejateamozy.feature.permissions.presentation.PermissionScreen
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.di.authModule
@@ -116,7 +116,7 @@ private fun AppRoot() {
             }
         )
 
-        AppScreen.HOME -> HomePage(
+        AppScreen.HOME -> MainScreen(
             onLogout = {
                 Log.d("MainActivity", "Logout, clearing preferences")
                 prefs.clearAll()

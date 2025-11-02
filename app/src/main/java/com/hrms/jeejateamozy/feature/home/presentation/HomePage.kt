@@ -56,7 +56,7 @@ import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
 private const val TAG = "HomePage"
 private const val PREF_FACE_EMBEDDING = "face_embedding"
 
-private enum class HomeScreen { HOME, ATTENDANCE, PROFILE, EDIT_SOCIAL_MEDIA }
+private enum class HomeScreen { HOME, PROFILE, EDIT_SOCIAL_MEDIA }
 
 /**
  * Simple face storage using SharedPreferences
@@ -152,7 +152,9 @@ fun rememberAttendanceViewModel(context: android.content.Context): AttendanceVie
 
 @Composable
 fun HomePage(
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    paddingValues: PaddingValues = PaddingValues(0.dp),
+    initialScreen: String = "HOME"
 ) {
     val context = LocalContext.current
     val vm = rememberAttendanceViewModel(context)
@@ -174,6 +176,14 @@ fun HomePage(
     // ✨ Timer state for tracking work hours
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var isTimerRunning by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialScreen) {
+        when (initialScreen) {
+            "PROFILE" -> currentScreen = HomeScreen.PROFILE
+            "HOME" -> currentScreen = HomeScreen.HOME
+            else -> currentScreen = HomeScreen.HOME
+        }
+    }
 
     // ✅ Permission checkers for Check In and Check Out
     val checkInPermissionChecker = rememberPermissionChecker(
@@ -260,32 +270,7 @@ fun HomePage(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snack) },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 3.dp
-            ) {
-                NavigationBarItem(
-                    selected = currentScreen == HomeScreen.HOME,
-                    onClick = { currentScreen = HomeScreen.HOME },
-                    icon = { Icon(if (currentScreen == HomeScreen.HOME) Icons.Filled.Home else Icons.Outlined.Home, "Home") },
-                    label = { Text("Home") }
-                )
-                NavigationBarItem(
-                    selected = currentScreen == HomeScreen.ATTENDANCE,
-                    onClick = { currentScreen = HomeScreen.ATTENDANCE },
-                    icon = { Icon(if (currentScreen == HomeScreen.ATTENDANCE) Icons.Filled.DateRange else Icons.Outlined.DateRange, "Attendance") },
-                    label = { Text("Attendance") }
-                )
-                NavigationBarItem(
-                    selected = currentScreen == HomeScreen.PROFILE,
-                    onClick = { currentScreen = HomeScreen.PROFILE },
-                    icon = { Icon(if (currentScreen == HomeScreen.PROFILE) Icons.Filled.Person else Icons.Outlined.Person, "Profile") },
-                    label = { Text("Profile") }
-                )
-            }
-        }
+        snackbarHost = { SnackbarHost(snack) }
     ) { padding ->
         when (currentScreen) {
             HomeScreen.HOME -> {
@@ -515,16 +500,7 @@ fun HomePage(
                     }
                 }
             }
-            HomeScreen.ATTENDANCE -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Attendance Screen\n(Coming Soon)", textAlign = TextAlign.Center)
-                }
-            }
+
 
             HomeScreen.PROFILE -> ProfileScreen(
                 onNavigateToFaceChange = {
