@@ -16,7 +16,9 @@ import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.profile.presentation.utils.dialPhoneNumber
 import com.hrms.jeejateamozy.feature.profile.presentation.utils.sendEmail
-
+import com.hrms.jeejateamozy.BuildConfig
+import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.Info
 /**
  * Section Card Wrapper
  * Provides consistent styling for all profile sections
@@ -105,39 +107,6 @@ fun FaceRecognitionSection(
 }
 
 /**
- * Account Section
- */
-@Composable
-fun AccountSection() {
-    SectionCard(title = "Account") {
-        ProfileMenuItem(
-            icon = Icons.Outlined.Person,
-            title = "Personal Information",
-            subtitle = "View and edit your personal details",
-            onClick = { /* TODO */ }
-        )
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
-        ProfileMenuItem(
-            icon = Icons.Outlined.Lock,
-            title = "Privacy & Security",
-            subtitle = "Manage your privacy settings",
-            onClick = { /* TODO */ }
-        )
-        HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
-        ProfileMenuItem(
-            icon = Icons.Outlined.Notifications,
-            title = "Notifications",
-            subtitle = "Configure notification preferences",
-            onClick = { /* TODO */ }
-        )
-    }
-}
-
-/**
  * Support Section
  */
 @Composable
@@ -166,11 +135,50 @@ fun SupportSection(
             if (!prefs.technicalSupportEmail.isNullOrBlank()) {
                 ContactItem(
                     icon = Icons.Default.Email,
-                    title = "Technical Support",
+                    title = "Technical Support Email",
                     value = prefs.technicalSupportEmail!!,
                     onClick = { sendEmail(context, prefs.technicalSupportEmail!!) }
                 )
             }
+
+            // Add divider before app version
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
+        }
+
+        // ✅ App Version Item
+        AppVersionItem()
+    }
+}
+
+@Composable
+private fun AppVersionItem() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically  // ✅ Now works with import
+    ) {
+        Icon(
+            Icons.Filled.Info,  // ✅ Changed from Default.Info to Filled.Info
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "App Version",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Version ${BuildConfig.VERSION_NAME}",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

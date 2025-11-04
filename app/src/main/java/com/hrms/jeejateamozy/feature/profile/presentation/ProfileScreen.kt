@@ -270,11 +270,6 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Account Section
-                AccountSection()
-
-                Spacer(Modifier.height(16.dp))
-
                 // Support Section
                 SupportSection(
                     context = context,

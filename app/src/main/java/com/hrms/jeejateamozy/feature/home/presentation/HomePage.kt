@@ -80,6 +80,7 @@ fun rememberAttendanceViewModel(context: android.content.Context): AttendanceVie
 @Composable
 fun HomePage(
     onLogout: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     paddingValues: PaddingValues = PaddingValues(0.dp)
 ) {
     val context = LocalContext.current
@@ -191,7 +192,7 @@ fun HomePage(
                 profileUrl = prefs.profileUrl,
                 isRefreshing = ui.isRefreshing,
                 onRefreshClick = { vm.refreshStatus(force = true) },
-                onProfileClick = { /* Profile click handled by bottom nav */ }
+                onProfileClick = onNavigateToProfile
             )
 
             // Scrollable Content

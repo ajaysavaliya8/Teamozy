@@ -26,7 +26,8 @@ import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.presentation.LoginScreen
 import com.hrms.jeejateamozy.feature.main.presentation.MainScreen
-import com.hrms.jeejateamozy.feature.permissions.presentation.PermissionScreen
+import com.hrms.jeejateamozy.feature.permissions.presentation.PermissionDialog
+import com.hrms.jeejateamozy.feature.permissions.presentation.arePermissionsGranted
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.di.authModule
 import com.hrms.jeejateamozy.di.attendanceModule
@@ -36,8 +37,7 @@ import com.hrms.jeejateamozy.di.homeModule
 private enum class AppScreen {
     SPLASH,
     LOGIN,
-    PERMISSIONS,
-    HOME
+    HOME  // Permission popup shows here automatically if needed
 }
 
 class MainActivity : ComponentActivity() {
@@ -82,15 +82,9 @@ private fun AppRoot() {
             preferencesManager = prefs,
             onComplete = { isAuthorized ->
                 current = if (isAuthorized) {
-                    // User is logged in
-                    // Check if permissions screen has been shown before
-                    if (!prefs.hasShownPermissions) {
-                        // First time after login - show permissions
-                        AppScreen.PERMISSIONS
-                    } else {
-                        // Already shown before - go directly to home
-                        AppScreen.HOME
-                    }
+                    // User is logged in - go directly to home
+                    // Permission popup will check and show automatically if needed
+                    AppScreen.HOME
                 } else {
                     // Not logged in, go to login
                     AppScreen.LOGIN
@@ -98,29 +92,72 @@ private fun AppRoot() {
             }
         )
 
-        AppScreen.PERMISSIONS -> PermissionScreen(
-            onAllGood = {
-                Log.d("MainActivity", "Permission screen completed (granted or skipped)")
-                // Mark that permissions screen has been shown
-                prefs.hasShownPermissions = true
+        AppScreen.LOGIN -> LoginScreen(
+            onLoginSuccess = {
+                Log.d("MainActivity", "Login success")
+                // After successful login, go directly to home
+                // Permission popup will check and show automatically if needed
                 current = AppScreen.HOME
             }
         )
 
-        AppScreen.LOGIN -> LoginScreen(
-            onLoginSuccess = {
-                Log.d("MainActivity", "Login success")
-                // After successful login, reset the flag to show permissions
-                prefs.hasShownPermissions = false
-                current = AppScreen.PERMISSIONS
-            }
-        )
+        AppScreen.HOME -> {
+            // Show home screen with automatic permission dialog if needed
+            HomeWithPermissions(
+                preferencesManager = prefs,
+                onLogout = {
+                    Log.d("MainActivity", "Logout, clearing preferences")
+                    prefs.clearAll()
+                    current = AppScreen.LOGIN
+                }
+            )
+        }
+    }
+}
 
-        AppScreen.HOME -> MainScreen(
-            onLogout = {
-                Log.d("MainActivity", "Logout, clearing preferences")
-                prefs.clearAll()
-                current = AppScreen.LOGIN
+@Composable
+private fun HomeWithPermissions(
+    preferencesManager: PreferencesManager,
+    onLogout: () -> Unit
+) {
+    val context = LocalContext.current
+    var showPermissionDialog by remember { mutableStateOf(false) }
+
+    // Check if we should show permission dialog
+    LaunchedEffect(Unit) {
+        // Only check on first time or if permissions not granted
+        if (!preferencesManager.hasShownPermissions) {
+            // Check if permissions are already granted
+            if (arePermissionsGranted(context)) {
+                // All permissions already granted - mark as handled
+                preferencesManager.hasShownPermissions = true
+            } else {
+                // Some permissions missing - show dialog
+                // The dialog will check again internally
+                showPermissionDialog = true
+            }
+        }
+    }
+
+    // Main home screen
+    MainScreen(onLogout = onLogout)
+
+    // Show permission dialog overlay if needed
+    if (showPermissionDialog) {
+        PermissionDialog(
+            onDismiss = {
+                // User dismissed without granting all
+                showPermissionDialog = false
+                // Mark that we've shown the dialog
+                preferencesManager.hasShownPermissions = true
+                Log.d("MainActivity", "Permission dialog dismissed")
+            },
+            onPermissionsHandled = {
+                // All permissions granted successfully
+                showPermissionDialog = false
+                // Mark that we've shown and handled permissions
+                preferencesManager.hasShownPermissions = true
+                Log.d("MainActivity", "All permissions granted")
             }
         )
     }

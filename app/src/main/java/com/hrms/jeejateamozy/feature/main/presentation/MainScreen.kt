@@ -58,9 +58,12 @@ fun MainScreen(
                 // Main navigation screens
                 when (currentNavigationScreen) {
                     NavigationScreen.HOME -> {
-                        // ✅ HomePage shows ONLY home content
+
                         HomePage(
                             onLogout = onLogout,
+                            onNavigateToProfile = {
+                                currentNavigationScreen = NavigationScreen.PROFILE
+                            },
                             paddingValues = paddingValues
                         )
                     }
