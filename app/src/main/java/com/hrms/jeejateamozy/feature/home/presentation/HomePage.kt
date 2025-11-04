@@ -3,7 +3,6 @@ package com.hrms.jeejateamozy.feature.home.presentation
 
 import android.graphics.Bitmap
 import android.util.Log
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,80 +28,25 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
-import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceViewModel
 import com.hrms.jeejateamozy.feature.face.data.EmbeddingExtractor
 import com.hrms.jeejateamozy.feature.face.presentation.FaceCaptureScreen
-import com.hrms.jeejateamozy.feature.face.presentation.FaceRegistrationScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.ProfileScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.EditSocialMediaScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
 import org.koin.androidx.compose.koinViewModel
 
 
 private const val TAG = "HomePage"
-private const val PREF_FACE_EMBEDDING = "face_embedding"
 
-private enum class HomeScreen { HOME, PROFILE, EDIT_SOCIAL_MEDIA }
-
-/**
- * Simple face storage using SharedPreferences
- */
-private object SimpleFaceStore {
-    private const val PREFS_NAME = "face_data"
-
-    fun saveEmbedding(context: Context, embedding: FloatArray) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = Gson().toJson(embedding.toList())
-        prefs.edit().putString(PREF_FACE_EMBEDDING, json).apply()
-        Log.d(TAG, "✅ Face embedding saved: size=${embedding.size}")
-    }
-
-    fun loadEmbedding(context: Context): FloatArray? {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val json = prefs.getString(PREF_FACE_EMBEDDING, null) ?: return null
-
-        return try {
-            val type = object : TypeToken<List<Float>>() {}.type
-            val list = Gson().fromJson<List<Float>>(json, type)
-            list.toFloatArray()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading embedding", e)
-            null
-        }
-    }
-
-    fun hasEnrollment(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.contains(PREF_FACE_EMBEDDING)
-    }
-
-    fun clear(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
-        Log.d(TAG, "✅ Face data cleared")
-    }
-}
+// ❌ REMOVED: SimpleFaceStore object - We don't store face locally, it comes from API
 
 /**
  * Calculate elapsed seconds from last check-in time to now
- * @param lastCheckInTime Format: "2025-10-26 17:45:00"
- * @return Elapsed seconds, or 0 if parsing fails
  */
 private fun calculateElapsedSeconds(lastCheckInTime: String?): Int {
     if (lastCheckInTime.isNullOrBlank()) return 0
@@ -113,8 +57,6 @@ private fun calculateElapsedSeconds(lastCheckInTime: String?): Int {
         val now = java.util.Date()
         val elapsedMillis = now.time - checkInDate.time
         val elapsedSeconds = (elapsedMillis / 1000).toInt()
-
-        // Return elapsed seconds, minimum 0
         return if (elapsedSeconds >= 0) elapsedSeconds else 0
     } catch (e: Exception) {
         android.util.Log.e(TAG, "Error parsing last_check_in_time: $lastCheckInTime", e)
@@ -122,40 +64,23 @@ private fun calculateElapsedSeconds(lastCheckInTime: String?): Int {
     }
 }
 
-/**
- * Calculate cosine similarity between two embeddings
- * Returns a value between 0 and 1, where 1 means identical faces
- */
-private fun calculateCosineSimilarity(embedding1: FloatArray, embedding2: FloatArray): Float {
-    if (embedding1.size != embedding2.size) {
-        throw IllegalArgumentException("Embeddings must have same size")
-    }
-
-    var dotProduct = 0.0
-    var norm1 = 0.0
-    var norm2 = 0.0
-
-    for (i in embedding1.indices) {
-        dotProduct += embedding1[i] * embedding2[i]
-        norm1 += embedding1[i] * embedding1[i]
-        norm2 += embedding2[i] * embedding2[i]
-    }
-
-    val similarity = dotProduct / (kotlin.math.sqrt(norm1) * kotlin.math.sqrt(norm2))
-    return similarity.toFloat()
-}
-
 @Composable
 fun rememberAttendanceViewModel(context: android.content.Context): AttendanceViewModel {
-    // ✅ Use Koin to get a properly scoped ViewModel that survives recomposition
     return koinViewModel()
 }
 
+/**
+ * HomePage - Shows ONLY home content
+ *
+ * ✅ CORRECTED:
+ * - No SimpleFaceStore (face vector comes from API)
+ * - No Face Registration (moved to ProfileScreen)
+ * - Only shows: Check-in/out, Timer, Quick Access, Face Verification
+ */
 @Composable
 fun HomePage(
     onLogout: () -> Unit,
-    paddingValues: PaddingValues = PaddingValues(0.dp),
-    initialScreen: String = "HOME"
+    paddingValues: PaddingValues = PaddingValues(0.dp)
 ) {
     val context = LocalContext.current
     val vm = rememberAttendanceViewModel(context)
@@ -164,31 +89,18 @@ fun HomePage(
     val snack = remember { SnackbarHostState() }
     val prefs = remember { PreferencesManager.getInstance(context) }
 
-    // Navigation state
-    var currentScreen by remember(initialScreen) {
-        mutableStateOf(
-            when (initialScreen) {
-                "PROFILE" -> HomeScreen.PROFILE
-                "HOME" -> HomeScreen.HOME
-                else -> HomeScreen.HOME
-            }
-        )
-    }
+    // ❌ REMOVED: showRegistration state - Face Registration moved to ProfileScreen
 
-    var showRegistration by remember { mutableStateOf(false) }
-    var registrationBusy by remember { mutableStateOf(false) }
-
-    // ✨ Face verification state with generation counter
+    // Face verification state with generation counter
     var faceVerifyBusy by remember { mutableStateOf(false) }
     var faceVerifyError by remember { mutableStateOf<String?>(null) }
     var faceVerificationGeneration by remember { mutableIntStateOf(0) }
 
-    // ✨ Timer state for tracking work hours
+    // Timer state for tracking work hours
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var isTimerRunning by remember { mutableStateOf(false) }
 
-
-    // ✅ Permission checkers for Check In and Check Out
+    // Permission checkers for Check In and Check Out
     val checkInPermissionChecker = rememberPermissionChecker(
         context = context,
         onPermissionsGranted = {
@@ -205,13 +117,11 @@ fun HomePage(
         }
     )
 
-    // ✨ Start/Continue timer based on check-in state
+    // Start/Continue timer based on check-in state
     LaunchedEffect(ui.currentState) {
         if (ui.currentState == "CHECK_OUT_NEEDED") {
             if (!isTimerRunning) {
-                // Try to get last check-in time if field exists
                 val lastCheckInTime = try {
-                    // Use reflection to check if field exists
                     ui::class.java.getDeclaredField("lastCheckInTime").let { field ->
                         field.isAccessible = true
                         field.get(ui) as? String
@@ -220,7 +130,6 @@ fun HomePage(
                     null
                 }
 
-                // Calculate elapsed time from last check-in if available
                 val elapsed = calculateElapsedSeconds(lastCheckInTime)
                 elapsedSeconds = elapsed
                 isTimerRunning = true
@@ -233,7 +142,6 @@ fun HomePage(
                 }
             }
         } else {
-            // Stop timer when not in CHECK_OUT_NEEDED state
             if (isTimerRunning) {
                 isTimerRunning = false
                 elapsedSeconds = 0
@@ -242,7 +150,7 @@ fun HomePage(
         }
     }
 
-    // ✨ Timer tick effect - runs every second when active
+    // Timer tick effect
     LaunchedEffect(isTimerRunning) {
         while (isTimerRunning) {
             delay(1000)
@@ -252,12 +160,6 @@ fun HomePage(
 
     LaunchedEffect(Unit) {
         vm.refreshStatus()
-        if (SimpleFaceStore.hasEnrollment(context)) {
-            val embedding = SimpleFaceStore.loadEmbedding(context)
-            Log.d(TAG, "Stored embedding loaded: size=${embedding?.size}")
-        } else {
-            Log.d(TAG, "No face enrollment found")
-        }
     }
 
     LaunchedEffect(ui.errorMessage) {
@@ -275,278 +177,235 @@ fun HomePage(
     Scaffold(
         snackbarHost = { SnackbarHost(snack) }
     ) { padding ->
-        when (currentScreen) {
-            HomeScreen.HOME -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)  // Padding for bottom nav bar
-                ) {
-                    // Static Top Bar (outside scroll)
-                    HomeTopBar(
-                        context = context,
-                        companyName = prefs.companyName,
-                        userName = prefs.userName,
-                        profileUrl = prefs.profileUrl,
-                        isRefreshing = ui.isRefreshing,
-                        onRefreshClick = { vm.refreshStatus(force = true) },
-                        onProfileClick = { currentScreen = HomeScreen.PROFILE }
-                    )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(paddingValues)
+        ) {
+            // Static Top Bar
+            HomeTopBar(
+                context = context,
+                companyName = prefs.companyName,
+                userName = prefs.userName,
+                profileUrl = prefs.profileUrl,
+                isRefreshing = ui.isRefreshing,
+                onRefreshClick = { vm.refreshStatus(force = true) },
+                onProfileClick = { /* Profile click handled by bottom nav */ }
+            )
 
-                    // Scrollable Content
-                    Column(
+            // Scrollable Content
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Spacer(Modifier.height(24.dp))
+
+                // Warning Messages
+                if (ui.checkInMessage != null || ui.checkOutMessage != null) {
+                    val message = ui.checkInMessage ?: ui.checkOutMessage
+                    Spacer(Modifier.height(8.dp))
+                    Card(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFF3CD)
+                        )
                     ) {
-                        Spacer(Modifier.height(24.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFF856404)
+                            )
+                            Text(
+                                text = message ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF856404)
+                            )
+                        }
+                    }
+                }
 
-                        if (ui.checkInMessage != null || ui.checkOutMessage != null) {
-                            val message = ui.checkInMessage ?: ui.checkOutMessage
-                            Spacer(Modifier.height(8.dp))
-                            Card(
+                Spacer(Modifier.height(32.dp))
+
+                // Check-in/out Card with Timer
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Timer Display
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(130.dp)
+                        ) {
+                            val workdaySeconds = 8 * 60 * 60
+                            val progress = if (isTimerRunning) {
+                                (elapsedSeconds.toFloat() / workdaySeconds).coerceIn(0f, 1f)
+                            } else {
+                                0f
+                            }
+
+                            CircularProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.size(130.dp),
+                                color = if (isTimerRunning) Color(0xFF00C896) else Color(0xFF4DD0B8),
+                                strokeWidth = 10.dp,
+                                trackColor = Color(0xFFE0F2F1),
+                            )
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = Color(0xFFFFF3CD)
-                                )
+                                    .size(100.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surface),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Warning,
-                                        contentDescription = null,
-                                        tint = Color(0xFF856404)
-                                    )
-                                    Text(
-                                        text = message ?: "",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF856404)
-                                    )
-                                }
+                                val hours = elapsedSeconds / 3600
+                                val minutes = (elapsedSeconds % 3600) / 60
+                                val seconds = elapsedSeconds % 60
+
+                                Text(
+                                    text = "%02d:%02d:%02d".format(hours, minutes, seconds),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isTimerRunning) {
+                                        Color(0xFF00C896)
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
+                                )
                             }
                         }
 
-                        Spacer(Modifier.height(32.dp))
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            shape = RoundedCornerShape(24.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.size(130.dp)
+                        // Check-in/out Buttons
+                        when (ui.currentState) {
+                            "CHECK_IN_NEEDED" -> {
+                                Button(
+                                    onClick = {
+                                        Log.d(TAG, "CHECK IN BUTTON CLICKED")
+                                        faceVerificationGeneration++
+                                        checkInPermissionChecker()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    enabled = !ui.isLoading && !faceVerifyBusy,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF00C896)
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
                                 ) {
-                                    // ✨ Calculate progress based on 8-hour workday (28800 seconds)
-                                    val workdaySeconds = 8 * 60 * 60 // 8 hours
-                                    val progress = if (isTimerRunning) {
-                                        (elapsedSeconds.toFloat() / workdaySeconds).coerceIn(0f, 1f)
+                                    if (ui.isLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp
+                                        )
                                     } else {
-                                        0f
-                                    }
-
-                                    CircularProgressIndicator(
-                                        progress = { progress },
-                                        modifier = Modifier.size(130.dp),
-                                        color = if (isTimerRunning) Color(0xFF00C896) else Color(0xFF4DD0B8),
-                                        strokeWidth = 10.dp,
-                                        trackColor = Color(0xFFE0F2F1),
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(100.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surface),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        // ✨ Display actual elapsed time
-                                        val hours = elapsedSeconds / 3600
-                                        val minutes = (elapsedSeconds % 3600) / 60
-                                        val seconds = elapsedSeconds % 60
-
                                         Text(
-                                            text = "%02d:%02d:%02d".format(hours, minutes, seconds),
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isTimerRunning) {
-                                                Color(0xFF00C896)
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurface
-                                            }
+                                            "Check In",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
-
-                                when (ui.currentState) {
-                                    "CHECK_IN_NEEDED" -> {
-                                        Button(
-                                            onClick = {
-                                                Log.d(TAG, "CHECK IN BUTTON CLICKED")
-                                                faceVerificationGeneration++
-                                                Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
-                                                checkInPermissionChecker()
-                                            },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(56.dp),
-                                            enabled = !ui.isLoading && !faceVerifyBusy,
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color(0xFF00C896)
-                                            ),
-                                            shape = RoundedCornerShape(16.dp)
-                                        ) {
-                                            if (ui.isLoading) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(24.dp),
-                                                    color = Color.White,
-                                                    strokeWidth = 2.dp
-                                                )
-                                            } else {
-                                                Text(
-                                                    "Check In",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-                                        }
-                                    }
-                                    "CHECK_OUT_NEEDED" -> {
-                                        Button(
-                                            onClick = {
-                                                Log.d(TAG, "CHECK OUT BUTTON CLICKED")
-                                                faceVerificationGeneration++
-                                                Log.d(TAG, "faceVerificationGeneration: $faceVerificationGeneration")
-                                                checkOutPermissionChecker()
-                                            },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(56.dp),
-                                            enabled = !ui.isLoading && !faceVerifyBusy,
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color(0xFFFF6B6B)
-                                            ),
-                                            shape = RoundedCornerShape(16.dp)
-                                        ) {
-                                            if (ui.isLoading) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(24.dp),
-                                                    color = Color.White,
-                                                    strokeWidth = 2.dp
-                                                )
-                                            } else {
-                                                Text(
-                                                    "Check Out",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-                                        }
-                                    }
-                                    "COMPLETED" -> {
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.CheckCircle,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(32.dp),
-                                                tint = Color(0xFF00C896)
-                                            )
-                                            Spacer(Modifier.height(8.dp))
-                                            Text(
-                                                text = "Completed",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF00C896)
-                                            )
-                                        }
+                            }
+                            "CHECK_OUT_NEEDED" -> {
+                                Button(
+                                    onClick = {
+                                        Log.d(TAG, "CHECK OUT BUTTON CLICKED")
+                                        faceVerificationGeneration++
+                                        checkOutPermissionChecker()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    enabled = !ui.isLoading && !faceVerifyBusy,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFFF6B6B)
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    if (ui.isLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = Color.White,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Text(
+                                            "Check Out",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
                             }
-                        }
-
-                        Spacer(Modifier.height(24.dp))
-
-                        // ==================== 🎯 QUICK ACCESS SECTION ====================
-                        QuickAccessSection(
-                            onCircularClick = { /* TODO: Navigate to Circular */ },
-                            onApplyLeavesClick = { /* TODO: Navigate to Apply Leaves */ },
-                            onWorkReportClick = { /* TODO: Navigate to Work Report */ },
-                            onTasksClick = { /* TODO: Navigate to Tasks */ },
-                            onPayslipClick = { /* TODO: Navigate to Payslip */ },
-                            onDocumentsClick = { /* TODO: Navigate to Documents */ }
-                        )
-                        // ==================== END OF QUICK ACCESS SECTION ====================
-
-                        Spacer(Modifier.height(24.dp))
-                    }
-                }
-            }
-
-
-            HomeScreen.PROFILE -> ProfileScreen(
-                onNavigateToFaceChange = {
-                    Log.d(TAG, "Profile -> Face Registration")
-                    currentScreen = HomeScreen.HOME
-                    showRegistration = true
-                },
-                onNavigateToEditSocialMedia = {
-                    Log.d(TAG, "Navigate to Edit Social Media")
-                    currentScreen = HomeScreen.EDIT_SOCIAL_MEDIA
-                },
-                onLogout = {
-                    Log.d(TAG, "Logout - clearing all data")
-                    scope.launch {
-                        try {
-                            withContext(Dispatchers.IO) {
-                                SimpleFaceStore.clear(context)
+                            "COMPLETED" -> {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = Color(0xFF00C896)
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = "Completed",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF00C896)
+                                    )
+                                }
                             }
-                            prefs.clearAll()
-                            onLogout()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error during logout", e)
-                            onLogout()
                         }
                     }
-                },
-                onBack = {
-                    currentScreen = HomeScreen.HOME
                 }
-            )
 
-            HomeScreen.EDIT_SOCIAL_MEDIA -> EditSocialMediaScreen(
-                onBack = {
-                    Log.d(TAG, "Edit Social Media -> Back to Profile")
-                    currentScreen = HomeScreen.PROFILE
-                }
-            )
+                Spacer(Modifier.height(24.dp))
+
+                // Quick Access Section
+                QuickAccessSection(
+                    onCircularClick = { /* TODO */ },
+                    onApplyLeavesClick = { /* TODO */ },
+                    onWorkReportClick = { /* TODO */ },
+                    onTasksClick = { /* TODO */ },
+                    onPayslipClick = { /* TODO */ },
+                    onDocumentsClick = { /* TODO */ }
+                )
+
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 
-    // ✨ Reset busy state when screens are dismissed
+    // Reset busy state when screens are dismissed
     LaunchedEffect(ui.showFaceVerification, ui.showReasonDialog) {
-        // When face verification screen is dismissed
         if (!ui.showFaceVerification && !ui.showReasonDialog && faceVerifyBusy) {
             Log.d(TAG, "✅ Screens dismissed, resetting faceVerifyBusy = false")
             faceVerifyBusy = false
@@ -554,18 +413,16 @@ fun HomePage(
         }
     }
 
-    // ✨ Face Verification Screen
+    // ✅ Face Verification Screen (for Check-in/out)
     if (ui.showFaceVerification) {
         key(faceVerificationGeneration) {
             FaceCaptureScreen(
                 generation = faceVerificationGeneration,
                 onDismiss = {
-                    Log.d(TAG, "🔙 Face capture dismissed (generation=$faceVerificationGeneration)")
-                    // ✨ Reset state IMMEDIATELY - no delay
+                    Log.d(TAG, "🔙 Face capture dismissed")
                     vm.onFaceVerificationCancelled()
                     faceVerifyBusy = false
                     faceVerifyError = null
-                    Log.d(TAG, "✅ Button re-enabled: faceVerifyBusy = false")
                 },
                 onCaptured = { /* unused */ },
                 onBitmapCaptured = { bitmap ->
@@ -579,7 +436,6 @@ fun HomePage(
 
                     scope.launch {
                         try {
-                            // Extract live face embedding
                             val extractor = EmbeddingExtractor.getInstance(context)
                             val liveEmbedding = withContext(Dispatchers.Default) {
                                 extractor.extractOrNull(bitmap)
@@ -593,7 +449,7 @@ fun HomePage(
                                 return@launch
                             }
 
-                            // ⭐ Get face_vector from API (not local storage!)
+                            // Get face_vector from API
                             val storedFaceVector = ui.checkInFaceVector ?: ui.checkOutFaceVector
 
                             if (storedFaceVector == null) {
@@ -603,7 +459,6 @@ fun HomePage(
                                 return@launch
                             }
 
-                            // Validate stored face vector
                             if (!FaceVectorUtil.isValidFaceVector(storedFaceVector)) {
                                 Log.e(TAG, "❌ Invalid stored face vector from API")
                                 faceVerifyError = "Invalid face data. Please contact support."
@@ -613,17 +468,12 @@ fun HomePage(
 
                             Log.d(TAG, "✅ Stored face vector loaded from API: ${storedFaceVector.size} dimensions")
 
-                            // ⭐ Calculate similarity using FaceVectorUtil
                             val similarity = FaceVectorUtil.calculateSimilarity(liveEmbedding, storedFaceVector)
-
-
 
                             Log.d(TAG, "📊 Face similarity score: $similarity")
 
-                            // ✨ Get minimum threshold from server
                             val minimumThreshold = ui.checkInMinimumQualityScore ?: ui.checkOutMinimumQualityScore ?: 0.55f
 
-                            // ✨ Verify if similarity meets threshold
                             val isVerified = similarity >= minimumThreshold
 
                             if (isVerified) {
@@ -654,6 +504,7 @@ fun HomePage(
         }
     }
 
+    // Reason Dialog
     if (ui.showReasonDialog) {
         val isCheckIn = ui.checkInTToken != null
         val isLateOrEarly = if (isCheckIn) ui.checkInIsLate else ui.checkOutIsEarly
@@ -678,76 +529,11 @@ fun HomePage(
         )
     }
 
-    if (showRegistration) {
-        FaceRegistrationScreen(
-            onDismiss = { showRegistration = false },
-            onEnrolled = { embedding: FloatArray, bitmap: Bitmap ->
-                registrationBusy = true
-                scope.launch {
-                    try {
-                        val api = NetworkModule.apiService
-                        val imageBytes = withContext(Dispatchers.Default) {
-                            val outputStream = java.io.ByteArrayOutputStream()
-                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
-                            outputStream.toByteArray()
-                        }
-                        val embeddingJson = com.google.gson.Gson().toJson(embedding.toList())
-
-                        val imagePart = okhttp3.MultipartBody.Part.createFormData(
-                            "face_image",
-                            "face_${System.currentTimeMillis()}.jpg",
-                            okhttp3.RequestBody.create("image/jpeg".toMediaTypeOrNull(), imageBytes)
-                        )
-                        val faceDataPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), embeddingJson)
-                        val priorityPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), "normal")
-                        val reasonPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), "Face registration from mobile app")
-
-                        val response = withContext(Dispatchers.IO) {
-                            api.registerFaceRecognition(
-                                face_image = imagePart,
-                                faceVector = faceDataPart,
-                                priority = priorityPart,
-                                reasonForChange = reasonPart
-                            )
-                        }
-
-                        registrationBusy = false
-                        showRegistration = false
-
-                        if (response.isSuccessful) {
-                            snack.showSnackbar("Face registered successfully!")
-                            withContext(Dispatchers.IO) {
-                                SimpleFaceStore.saveEmbedding(context, embedding)
-                            }
-                            vm.refreshStatus()
-                            bitmap.recycle()
-                        } else {
-                            val message = try {
-                                response.errorBody()?.string() ?: response.message()
-                            } catch (e: Exception) {
-                                "Failed to register face"
-                            }
-                            snack.showSnackbar(message)
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Registration error", e)
-                        registrationBusy = false
-                        showRegistration = false
-                        bitmap.recycle()
-                        snack.showSnackbar("Network error. Please try again.")
-                    }
-                }
-            }
-        )
-    }
+    // ❌ REMOVED: Face Registration Screen - Moved to ProfileScreen.kt
 }
 
-// ==================== 🎯 QUICK ACCESS SECTION COMPOSABLES ====================
+// ==================== UI COMPONENTS ====================
 
-/**
- * Quick Access Section with 2x3 grid layout
- * Displays all work-related tools in an organized grid
- */
 @Composable
 private fun QuickAccessSection(
     onCircularClick: () -> Unit = {},
@@ -762,7 +548,6 @@ private fun QuickAccessSection(
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
     ) {
-        // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -792,9 +577,7 @@ private fun QuickAccessSection(
 
         Spacer(Modifier.height(20.dp))
 
-        // Grid of Quick Access Items (2 rows x 3 columns)
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // Row 1: Circular, Apply Leaves, Work Report
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -822,7 +605,6 @@ private fun QuickAccessSection(
                 )
             }
 
-            // Row 2: Tasks, Payslip, Documents
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -853,17 +635,6 @@ private fun QuickAccessSection(
     }
 }
 
-/**
- * Individual Quick Access Item Card
- *
- * Design: Circular icon inside a rounded card, with text label below the card
- *
- * @param modifier Modifier for the item
- * @param icon Material Icon to display
- * @param title Title text below the card
- * @param iconColor Color for the icon background gradient
- * @param onClick Click handler
- */
 @Composable
 private fun QuickAccessItem(
     modifier: Modifier = Modifier,
@@ -876,7 +647,6 @@ private fun QuickAccessItem(
         modifier = modifier.clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Card with circular icon
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -891,7 +661,6 @@ private fun QuickAccessItem(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                // Circular icon container with gradient background
                 Box(
                     modifier = Modifier
                         .size(56.dp)
@@ -918,7 +687,6 @@ private fun QuickAccessItem(
 
         Spacer(Modifier.height(8.dp))
 
-        // Text label below the card
         Text(
             text = title,
             fontSize = 14.sp,
@@ -929,8 +697,6 @@ private fun QuickAccessItem(
         )
     }
 }
-
-// ==================== END OF QUICK ACCESS SECTION ====================
 
 @Composable
 fun ReasonDialog(

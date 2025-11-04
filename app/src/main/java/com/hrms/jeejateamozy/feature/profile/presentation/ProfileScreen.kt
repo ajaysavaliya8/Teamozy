@@ -4,7 +4,9 @@ package com.hrms.jeejateamozy.feature.profile.presentation
 
 import android.Manifest
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -43,12 +45,26 @@ import coil.request.ImageRequest
 import com.hrms.jeejateamozy.BuildConfig
 import com.hrms.jeejateamozy.R
 import com.hrms.jeejateamozy.core.image.CoilImageLoader
+import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
+import com.hrms.jeejateamozy.feature.face.presentation.FaceRegistrationScreen
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
 import com.hrms.jeejateamozy.feature.profile.data.ProfilePictureOutcome
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 
 
+private const val TAG = "ProfileScreen"
+
+/**
+ * ProfileScreen with Face Registration
+ *
+ * ✅ ADDED: Face Registration logic (moved from HomePage)
+ * - User can update their face from Profile screen
+ * - Face registration handled completely here
+ */
 @Composable
 fun ProfileScreen(
     onNavigateToFaceChange: () -> Unit,
@@ -67,6 +83,10 @@ fun ProfileScreen(
     var isUpdatingPicture by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
+
+    // ✅ ADDED: Face Registration state
+    var showFaceRegistration by remember { mutableStateOf(false) }
+    var registrationBusy by remember { mutableStateOf(false) }
 
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -100,6 +120,71 @@ fun ProfileScreen(
         if (isGranted) {
             // TODO: Launch camera
         }
+    }
+
+    // ✅ ADDED: Show Face Registration Screen
+    if (showFaceRegistration) {
+        FaceRegistrationScreen(
+            onDismiss = {
+                showFaceRegistration = false
+                registrationBusy = false
+            },
+            onEnrolled = { embedding: FloatArray, bitmap: Bitmap ->
+                registrationBusy = true
+                scope.launch {
+                    try {
+                        val api = NetworkModule.apiService
+                        val imageBytes = withContext(Dispatchers.Default) {
+                            val outputStream = java.io.ByteArrayOutputStream()
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, outputStream)
+                            outputStream.toByteArray()
+                        }
+                        val embeddingJson = com.google.gson.Gson().toJson(embedding.toList())
+
+                        val imagePart = okhttp3.MultipartBody.Part.createFormData(
+                            "face_image",
+                            "face_${System.currentTimeMillis()}.jpg",
+                            okhttp3.RequestBody.create("image/jpeg".toMediaTypeOrNull(), imageBytes)
+                        )
+                        val faceDataPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), embeddingJson)
+                        val priorityPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), "normal")
+                        val reasonPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), "Face registration from mobile app")
+
+                        val response = withContext(Dispatchers.IO) {
+                            api.registerFaceRecognition(
+                                face_image = imagePart,
+                                faceVector = faceDataPart,
+                                priority = priorityPart,
+                                reasonForChange = reasonPart
+                            )
+                        }
+
+                        registrationBusy = false
+                        showFaceRegistration = false
+
+                        if (response.isSuccessful) {
+                            successMessage = "Face registered successfully!"
+                            bitmap.recycle()
+                        } else {
+                            val message = try {
+                                response.errorBody()?.string() ?: response.message()
+                            } catch (e: Exception) {
+                                "Failed to register face"
+                            }
+                            errorMessage = message
+                            bitmap.recycle()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Registration error", e)
+                        registrationBusy = false
+                        showFaceRegistration = false
+                        bitmap.recycle()
+                        errorMessage = "Network error. Please try again."
+                    }
+                }
+            }
+        )
+        return  // Exit early to show only FaceRegistrationScreen
     }
 
     Scaffold(
@@ -240,14 +325,13 @@ fun ProfileScreen(
                                     modifier = Modifier.size(120.dp),
                                     contentAlignment = Alignment.BottomEnd
                                 ) {
-                                    // ✅ Profile Picture with Authentication
                                     if (!prefs.profileUrl.isNullOrBlank()) {
                                         AsyncImage(
                                             model = ImageRequest.Builder(context)
                                                 .data(prefs.profileUrl)
                                                 .crossfade(true)
                                                 .build(),
-                                            imageLoader = CoilImageLoader.get(context), // ✅ Use authenticated loader
+                                            imageLoader = CoilImageLoader.get(context),
                                             contentDescription = "Profile Picture",
                                             modifier = Modifier
                                                 .size(120.dp)
@@ -281,7 +365,7 @@ fun ProfileScreen(
                                         }
                                     }
 
-                                    // Edit/Add button on avatar
+                                    // Edit/Add button
                                     Surface(
                                         modifier = Modifier
                                             .size(36.dp)
@@ -443,7 +527,7 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // ==================== 🎯 QUICK ACCESS SECTION ====================
+                // Quick Access Section
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     Text(
                         text = "Quick Access",
@@ -459,9 +543,8 @@ fun ProfileScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
-                        // Grid of Quick Access Items
                         Column(modifier = Modifier.padding(16.dp)) {
-                            // Row 1: Contact Detail, Personal Info, Employment detail
+                            // Row 1
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -470,25 +553,25 @@ fun ProfileScreen(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.ContactPage,
                                     title = "Contact\nDetail",
-                                    onClick = { /* TODO: Navigate to Contact Detail */ }
+                                    onClick = { /* TODO */ }
                                 )
                                 QuickAccessItem(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.Person,
                                     title = "Personal\nInfo",
-                                    onClick = { /* TODO: Navigate to Personal Info */ }
+                                    onClick = { /* TODO */ }
                                 )
                                 QuickAccessItem(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.Work,
                                     title = "Employment\nDetail",
-                                    onClick = { /* TODO: Navigate to Employment Detail */ }
+                                    onClick = { /* TODO */ }
                                 )
                             }
 
                             Spacer(Modifier.height(12.dp))
 
-                            // Row 2: Past Experience, Education, Shift Details
+                            // Row 2
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -497,25 +580,25 @@ fun ProfileScreen(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.WorkHistory,
                                     title = "Past\nExperience",
-                                    onClick = { /* TODO: Navigate to Past Experience */ }
+                                    onClick = { /* TODO */ }
                                 )
                                 QuickAccessItem(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.School,
                                     title = "Achievements\n& Education",
-                                    onClick = { /* TODO: Navigate to Achievements & Education */ }
+                                    onClick = { /* TODO */ }
                                 )
                                 QuickAccessItem(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.AccessTime,
                                     title = "Shift\nDetails",
-                                    onClick = { /* TODO: Navigate to Shift Details */ }
+                                    onClick = { /* TODO */ }
                                 )
                             }
 
                             Spacer(Modifier.height(12.dp))
 
-                            // Row 3: My Timeline, Notification Settings, Nominees
+                            // Row 3
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -524,25 +607,24 @@ fun ProfileScreen(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.Timeline,
                                     title = "My\nTimeline",
-                                    onClick = { /* TODO: Navigate to Timeline */ }
+                                    onClick = { /* TODO */ }
                                 )
                                 QuickAccessItem(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.Notifications,
                                     title = "Notification\nSettings",
-                                    onClick = { /* TODO: Navigate to Notification Settings */ }
+                                    onClick = { /* TODO */ }
                                 )
                                 QuickAccessItem(
                                     modifier = Modifier.weight(1f),
                                     icon = Icons.Outlined.Group,
                                     title = "Nominees",
-                                    onClick = { /* TODO: Navigate to Nominees */ }
+                                    onClick = { /* TODO */ }
                                 )
                             }
                         }
                     }
                 }
-                // ==================== END OF QUICK ACCESS SECTION ====================
 
                 Spacer(Modifier.height(16.dp))
 
@@ -574,13 +656,13 @@ fun ProfileScreen(
                     Spacer(Modifier.height(16.dp))
                 }
 
-                // Face Recognition Section
+                // ✅ Face Recognition Section - Now triggers internal FaceRegistrationScreen
                 SectionCard(title = "Face Recognition") {
                     ProfileMenuItem(
                         icon = Icons.Outlined.Face,
                         title = "Update Face",
                         subtitle = "Update your face for recognition",
-                        onClick = onNavigateToFaceChange,
+                        onClick = { showFaceRegistration = true },  // ✅ Show directly here!
                         iconTint = MaterialTheme.colorScheme.secondary
                     )
                 }
@@ -746,7 +828,6 @@ fun ProfileScreen(
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
 
-                    // Choose from Gallery
                     ProfilePictureOption(
                         icon = Icons.Filled.Add,
                         title = "Choose from Gallery",
@@ -758,7 +839,6 @@ fun ProfileScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    // Take Photo
                     ProfilePictureOption(
                         icon = Icons.Default.Add,
                         title = "Take Photo",
@@ -769,7 +849,6 @@ fun ProfileScreen(
                         enabled = false
                     )
 
-                    // Remove Picture
                     if (!prefs.profileUrl.isNullOrBlank()) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -861,6 +940,9 @@ fun ProfileScreen(
         }
     }
 }
+
+// ==================== UI COMPONENTS ====================
+// (Keep all your existing UI components from the original ProfileScreen)
 
 @Composable
 private fun ProfilePictureOption(
@@ -1044,20 +1126,6 @@ private fun SocialMediaIconStatic(
     }
 }
 
-// ==================== 🎯 QUICK ACCESS ITEM COMPOSABLE ====================
-/**
- * Quick Access Item Card Component - FIXED VERSION
- *
- * Displays a card with an icon and title for quick navigation
- * FIXES:
- * 1. Changed aspectRatio from 1f to 0.85f to make cards taller
- * 2. This prevents text cutoff on longer words like "Employment"
- *
- * @param modifier Modifier for the card
- * @param icon Material Icon to display
- * @param title Title text (supports multi-line with \n)
- * @param onClick Click handler for navigation
- */
 @Composable
 private fun QuickAccessItem(
     modifier: Modifier = Modifier,
@@ -1067,7 +1135,7 @@ private fun QuickAccessItem(
 ) {
     Card(
         modifier = modifier
-            .aspectRatio(0.85f)  // ✅ FIXED: Taller cards (was 1f) to accommodate text better
+            .aspectRatio(0.85f)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
@@ -1078,14 +1146,13 @@ private fun QuickAccessItem(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),  // Adequate padding for content
+                .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Circular icon container
             Box(
                 modifier = Modifier
-                    .size(42.dp)  // Balanced icon size
+                    .size(42.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
@@ -1097,21 +1164,20 @@ private fun QuickAccessItem(
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
-            Spacer(Modifier.height(8.dp))  // Adequate spacing
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = title,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
-                lineHeight = 13.sp,  // ✅ Better line height for readability
+                lineHeight = 13.sp,
                 maxLines = 2,
                 modifier = Modifier.padding(horizontal = 2.dp)
             )
         }
     }
 }
-// ==================== END OF QUICK ACCESS ITEM COMPOSABLE ====================
 
 /* ---------------- Helpers ---------------- */
 
