@@ -54,6 +54,8 @@ fun ProfileScreen(
     onNavigateToFaceChange: () -> Unit,
     onNavigateToEditSocialMedia: () -> Unit,
     onNavigateToEditContactDetail: () -> Unit,
+    onNavigateToEditPersonalInfo: () -> Unit,        // NEW
+    onNavigateToViewEmploymentDetail: () -> Unit,    // NEW
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -251,12 +253,12 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(16.dp))
 
+                // Quick Access Grid with NEW callbacks
                 QuickAccessGrid(
-                    onContactDetailClick = onNavigateToEditContactDetail
+                    onContactDetailClick = onNavigateToEditContactDetail,
+                    onPersonalInfoClick = onNavigateToEditPersonalInfo,           // NEW
+                    onEmploymentDetailClick = onNavigateToViewEmploymentDetail    // NEW
                 )
-
-
-
 
                 Spacer(Modifier.height(16.dp))
 

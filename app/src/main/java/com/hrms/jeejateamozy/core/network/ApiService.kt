@@ -5,6 +5,8 @@ import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 import com.hrms.jeejateamozy.feature.profile.data.ContactInfoResponse
+import com.hrms.jeejateamozy.feature.profile.data.PersonalInfoResponse
+import com.hrms.jeejateamozy.feature.profile.data.EmploymentDetailResponse
 
 data class DeviceChangeResponse(
     val detail: String
@@ -144,4 +146,21 @@ interface ApiService {
         @Field("current_address") currentAddress: String? = null,
         @Field("permanent_address") permanentAddress: String? = null
     ): Response<ContactInfoResponse>
+
+    @GET("personal-info")
+    suspend fun getPersonalInfo(): Response<PersonalInfoResponse>
+
+    @FormUrlEncoded
+    @PUT("personal-info")
+    suspend fun updatePersonalInfo(
+        @Field("blood_group") bloodGroup: String? = null,
+        @Field("marital_status") maritalStatus: String? = null,
+        @Field("no_of_family_members") noOfFamilyMembers: Int? = null,
+        @Field("languages") languages: List<String>? = null
+    ): Response<PersonalInfoResponse>
+
+    // ---------- PROFILE - EMPLOYMENT DETAIL ----------
+    @GET("employment-details")
+    suspend fun getEmploymentDetails(): Response<EmploymentDetailResponse>
+
 }

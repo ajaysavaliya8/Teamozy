@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
+import retrofit2.Response
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -256,51 +257,193 @@ class ProfileRepository(private val context: Context) {
         }
     }
 
+    suspend fun getPersonalInfo(): PersonalInfoOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Fetching personal information")
+
+            val response = api.getPersonalInfo()
+
+            Log.d("PROFILE", "Get personal info response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Personal info retrieved successfully")
+                        PersonalInfoOutcome.Success(
+                            message = responseBody.message,
+                            personalInfo = responseBody.data
+                        )
+                    } else {
+                        PersonalInfoOutcome.Error(responseBody?.message ?: "Failed to retrieve personal information")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    PersonalInfoOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    PersonalInfoOutcome.Error("Personal information not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    PersonalInfoOutcome.Error(errorMsg ?: "Failed to retrieve personal information")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error fetching personal info", e)
+            PersonalInfoOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
     /**
-     * Compress image to reduce file size
-     * Converts to JPEG and resizes if necessary
+     * Update personal information
+     * Only these fields are editable: blood_group, marital_status, no_of_family_members, languages
+     */
+    suspend fun updatePersonalInfo(
+        bloodGroup: String?,
+        maritalStatus: String?,
+        noOfFamilyMembers: Int?,
+        languages: List<String>?
+    ): PersonalInfoOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Updating personal information")
+
+            val response = api.updatePersonalInfo(
+                bloodGroup = bloodGroup,
+                maritalStatus = maritalStatus,
+                noOfFamilyMembers = noOfFamilyMembers,
+                languages = languages
+            )
+
+            Log.d("PROFILE", "Update personal info response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Personal info updated successfully")
+                        PersonalInfoOutcome.Success(
+                            message = responseBody.message,
+                            personalInfo = responseBody.data
+                        )
+                    } else {
+                        PersonalInfoOutcome.Error(responseBody?.message ?: "Failed to update personal information")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    PersonalInfoOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 400 -> {
+                    val errorMsg = extractErrorMessage(response)
+                    PersonalInfoOutcome.Error(errorMsg ?: "Invalid personal information")
+                }
+
+                response.code() == 404 -> {
+                    PersonalInfoOutcome.Error("Personal information not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    PersonalInfoOutcome.Error(errorMsg ?: "Failed to update personal information")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error updating personal info", e)
+            PersonalInfoOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+    suspend fun getEmploymentDetails(): EmploymentDetailOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Fetching employment details")
+
+            val response = api.getEmploymentDetails()
+
+            Log.d("PROFILE", "Get employment details response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Employment details retrieved successfully")
+                        EmploymentDetailOutcome.Success(
+                            message = responseBody.message,
+                            employmentDetail = responseBody.data
+                        )
+                    } else {
+                        EmploymentDetailOutcome.Error(responseBody?.message ?: "Failed to retrieve employment details")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    EmploymentDetailOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    EmploymentDetailOutcome.Error("Employment details not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    EmploymentDetailOutcome.Error(errorMsg ?: "Failed to retrieve employment details")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error fetching employment details", e)
+            EmploymentDetailOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    /**
+     * Helper function to compress image
      */
     private fun compressImage(imageUri: Uri): File? {
         return try {
-            // Read bitmap from URI
             val inputStream = context.contentResolver.openInputStream(imageUri)
-            var bitmap = BitmapFactory.decodeStream(inputStream)
+            val originalBitmap = BitmapFactory.decodeStream(inputStream)
             inputStream?.close()
 
-            if (bitmap == null) {
-                Log.e("PROFILE", "Failed to decode bitmap from URI")
+            if (originalBitmap == null) {
+                Log.e("PROFILE", "Failed to decode image")
                 return null
             }
 
-            // Resize if too large (max 2048x2048)
-            val maxSize = 2048
-            if (bitmap.width > maxSize || bitmap.height > maxSize) {
-                val ratio = Math.min(
-                    maxSize.toFloat() / bitmap.width,
-                    maxSize.toFloat() / bitmap.height
-                )
-                val width = (bitmap.width * ratio).toInt()
-                val height = (bitmap.height * ratio).toInt()
-                bitmap = Bitmap.createScaledBitmap(bitmap, width, height, true)
-                Log.d("PROFILE", "Image resized to ${width}x${height}")
+            // Calculate new dimensions (max 1024px on longest side)
+            val maxSize = 1024
+            val ratio = if (originalBitmap.width > originalBitmap.height) {
+                maxSize.toFloat() / originalBitmap.width
+            } else {
+                maxSize.toFloat() / originalBitmap.height
             }
 
-            // Rotate if needed based on EXIF data
-            bitmap = correctImageOrientation(imageUri, bitmap)
+            val newWidth = (originalBitmap.width * ratio).toInt()
+            val newHeight = (originalBitmap.height * ratio).toInt()
 
-            // Create temporary file
-            val tempFile = File(context.cacheDir, "profile_picture_${System.currentTimeMillis()}.jpg")
-            val outputStream = FileOutputStream(tempFile)
+            // Resize bitmap
+            val resizedBitmap = Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
 
-            // Compress to JPEG with 85% quality
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-            outputStream.flush()
-            outputStream.close()
+            // Compress to JPEG
+            val outputStream = ByteArrayOutputStream()
+            resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
 
-            // Recycle bitmap
-            bitmap.recycle()
+            // Save to temporary file
+            val tempFile = File(context.cacheDir, "profile_${System.currentTimeMillis()}.jpg")
+            val fos = FileOutputStream(tempFile)
+            fos.write(outputStream.toByteArray())
+            fos.close()
 
-            Log.d("PROFILE", "Image compressed to ${tempFile.length() / 1024}KB")
+            // Clean up bitmaps
+            originalBitmap.recycle()
+            resizedBitmap.recycle()
+
+            Log.d("PROFILE", "Image compressed: ${tempFile.length() / 1024}KB")
             tempFile
         } catch (e: Exception) {
             Log.e("PROFILE", "Error compressing image", e)
@@ -309,54 +452,22 @@ class ProfileRepository(private val context: Context) {
     }
 
     /**
-     * Correct image orientation based on EXIF data
+     * Helper function to extract error message from response
      */
-    private fun correctImageOrientation(imageUri: Uri, bitmap: Bitmap): Bitmap {
-        return try {
-            val inputStream = context.contentResolver.openInputStream(imageUri)
-            val exif = androidx.exifinterface.media.ExifInterface(inputStream!!)
-            inputStream.close()
-
-            val orientation = exif.getAttributeInt(
-                androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
-                androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
-            )
-
-            val matrix = Matrix()
-            when (orientation) {
-                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
-                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
-                androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
-                androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
-                androidx.exifinterface.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
-            }
-
-            if (!matrix.isIdentity) {
-                val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-                bitmap.recycle()
-                return rotatedBitmap
-            }
-
-            bitmap
-        } catch (e: Exception) {
-            Log.e("PROFILE", "Error correcting image orientation", e)
-            bitmap
-        }
-    }
-
-    /**
-     * Extract error message from response
-     */
-    private fun extractErrorMessage(response: retrofit2.Response<*>): String? {
+    private fun <T> extractErrorMessage(response: Response<T>): String? {
         return try {
             val errorBody = response.errorBody()?.string()
             if (!errorBody.isNullOrBlank()) {
-                val json = org.json.JSONObject(errorBody)
-                json.optString("message", null)
+                // Try to parse JSON error response
+                val gson = com.google.gson.Gson()
+                val errorResponse = gson.fromJson(errorBody, Map::class.java)
+                errorResponse["message"] as? String ?: errorResponse["detail"] as? String
+                errorResponse["message"] as? String ?: errorResponse["detail"] as? String
             } else {
                 null
             }
         } catch (e: Exception) {
+            Log.e("PROFILE", "Error extracting error message", e)
             null
         }
     }

@@ -10,6 +10,9 @@ import com.hrms.jeejateamozy.feature.home.presentation.HomePage
 import com.hrms.jeejateamozy.feature.profile.presentation.ProfileScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.EditSocialMediaScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.EditContactDetailScreen
+import com.hrms.jeejateamozy.feature.profile.presentation.EditPersonalInfoScreen
+import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentDetailScreen
+
 /**
  * Main Screen Component
  * Manages navigation between Home, Attendance, and Profile screens
@@ -29,10 +32,11 @@ fun MainScreen(
     // State to track current selected bottom navigation screen
     var currentNavigationScreen by remember { mutableStateOf(NavigationScreen.HOME) }
 
-    // State to manage EditSocialMedia screen
+    // State to manage child screens
     var showEditSocialMedia by remember { mutableStateOf(false) }
     var showEditContactDetail by remember { mutableStateOf(false) }
-
+    var showEditPersonalInfo by remember { mutableStateOf(false) }           // CHANGED: Edit instead of View
+    var showViewEmploymentDetail by remember { mutableStateOf(false) }
 
     Scaffold(
         bottomBar = {
@@ -43,11 +47,13 @@ fun MainScreen(
                     // Reset child navigation when switching tabs
                     showEditSocialMedia = false
                     showEditContactDetail = false
+                    showEditPersonalInfo = false
+                    showViewEmploymentDetail = false
                 }
             )
         }
     ) { paddingValues ->
-        // Handle EditSocialMedia screen (full screen overlay)
+        // Handle child screens (full screen overlays)
         when {
             showEditSocialMedia -> {
                 EditSocialMediaScreen(
@@ -67,11 +73,29 @@ fun MainScreen(
                 )
             }
 
+            // CHANGED: EditPersonalInfoScreen (editable)
+            showEditPersonalInfo -> {
+                EditPersonalInfoScreen(
+                    onBack = {
+                        showEditPersonalInfo = false
+                        currentNavigationScreen = NavigationScreen.PROFILE
+                    }
+                )
+            }
+
+            showViewEmploymentDetail -> {
+                ViewEmploymentDetailScreen(
+                    onBack = {
+                        showViewEmploymentDetail = false
+                        currentNavigationScreen = NavigationScreen.PROFILE
+                    }
+                )
+            }
+
             else -> {
                 // Main navigation screens
                 when (currentNavigationScreen) {
                     NavigationScreen.HOME -> {
-
                         HomePage(
                             onLogout = onLogout,
                             onNavigateToProfile = {
@@ -108,9 +132,17 @@ fun MainScreen(
                                 // Show EditSocialMedia screen
                                 showEditSocialMedia = true
                             },
-                            onNavigateToEditContactDetail = {  // ← ADD THIS PARAMETER
+                            onNavigateToEditContactDetail = {
                                 // Show EditContactDetail screen
                                 showEditContactDetail = true
+                            },
+                            onNavigateToEditPersonalInfo = {                  // Keep name for compatibility
+                                // Show EditPersonalInfo screen (editable)
+                                showEditPersonalInfo = true
+                            },
+                            onNavigateToViewEmploymentDetail = {
+                                // Show ViewEmploymentDetail screen
+                                showViewEmploymentDetail = true
                             },
                             onLogout = onLogout,
                             onBack = {

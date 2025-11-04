@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun EditContactDetailScreen(
     onBack: () -> Unit
-) {
+    ) {
     val context = LocalContext.current
     val profileRepository = remember { ProfileRepository(context) }
     val scope = rememberCoroutineScope()
