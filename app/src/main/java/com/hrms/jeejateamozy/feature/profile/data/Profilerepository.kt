@@ -146,6 +146,117 @@ class ProfileRepository(private val context: Context) {
     }
 
     /**
+     * Get contact information
+     */
+    suspend fun getContactInfo(): ContactInfoOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Fetching contact information")
+
+            val response = api.getContactInfo()
+
+            Log.d("PROFILE", "Get contact info response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Contact info retrieved successfully")
+                        ContactInfoOutcome.Success(
+                            message = responseBody.message,
+                            contactInfo = responseBody.data
+                        )
+                    } else {
+                        ContactInfoOutcome.Error(responseBody?.message ?: "Failed to retrieve contact information")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    ContactInfoOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    ContactInfoOutcome.Error("Contact information not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    ContactInfoOutcome.Error(errorMsg ?: "Failed to retrieve contact information")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error fetching contact info", e)
+            ContactInfoOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    /**
+     * Update contact information
+     */
+    suspend fun updateContactInfo(
+        countryCode: Int?,
+        alternatePhone: Long?,
+        emergencyPhone: Long?,
+        whatsappNumber: Long?,
+        companyPhone: Long?,
+        currentAddress: String?,
+        permanentAddress: String?
+    ): ContactInfoOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Updating contact information")
+
+            val response = api.updateContactInfo(
+                countryCode = countryCode,
+                alternatePhoneNumber = alternatePhone,
+                emergencyPhoneNumber = emergencyPhone,
+                whatsappNumber = whatsappNumber,
+                companyPhoneNumber = companyPhone,
+                currentAddress = currentAddress,
+                permanentAddress = permanentAddress
+            )
+
+            Log.d("PROFILE", "Update contact info response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Contact info updated successfully")
+                        ContactInfoOutcome.Success(
+                            message = responseBody.message,
+                            contactInfo = responseBody.data
+                        )
+                    } else {
+                        ContactInfoOutcome.Error(responseBody?.message ?: "Failed to update contact information")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    ContactInfoOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 400 -> {
+                    val errorMsg = extractErrorMessage(response)
+                    ContactInfoOutcome.Error(errorMsg ?: "Invalid contact information")
+                }
+
+                response.code() == 404 -> {
+                    ContactInfoOutcome.Error("Contact information not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    ContactInfoOutcome.Error(errorMsg ?: "Failed to update contact information")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error updating contact info", e)
+            ContactInfoOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    /**
      * Compress image to reduce file size
      * Converts to JPEG and resizes if necessary
      */

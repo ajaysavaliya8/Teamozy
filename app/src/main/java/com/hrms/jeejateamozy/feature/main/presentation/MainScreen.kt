@@ -9,7 +9,7 @@ import androidx.compose.ui.text.style.TextAlign
 import com.hrms.jeejateamozy.feature.home.presentation.HomePage
 import com.hrms.jeejateamozy.feature.profile.presentation.ProfileScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.EditSocialMediaScreen
-
+import com.hrms.jeejateamozy.feature.profile.presentation.EditContactDetailScreen
 /**
  * Main Screen Component
  * Manages navigation between Home, Attendance, and Profile screens
@@ -31,6 +31,8 @@ fun MainScreen(
 
     // State to manage EditSocialMedia screen
     var showEditSocialMedia by remember { mutableStateOf(false) }
+    var showEditContactDetail by remember { mutableStateOf(false) }
+
 
     Scaffold(
         bottomBar = {
@@ -40,6 +42,7 @@ fun MainScreen(
                     currentNavigationScreen = screen
                     // Reset child navigation when switching tabs
                     showEditSocialMedia = false
+                    showEditContactDetail = false
                 }
             )
         }
@@ -54,6 +57,16 @@ fun MainScreen(
                     }
                 )
             }
+
+            showEditContactDetail -> {
+                EditContactDetailScreen(
+                    onBack = {
+                        showEditContactDetail = false
+                        currentNavigationScreen = NavigationScreen.PROFILE
+                    }
+                )
+            }
+
             else -> {
                 // Main navigation screens
                 when (currentNavigationScreen) {
@@ -94,6 +107,10 @@ fun MainScreen(
                             onNavigateToEditSocialMedia = {
                                 // Show EditSocialMedia screen
                                 showEditSocialMedia = true
+                            },
+                            onNavigateToEditContactDetail = {  // ← ADD THIS PARAMETER
+                                // Show EditContactDetail screen
+                                showEditContactDetail = true
                             },
                             onLogout = onLogout,
                             onBack = {

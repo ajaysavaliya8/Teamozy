@@ -4,6 +4,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
+import com.hrms.jeejateamozy.feature.profile.data.ContactInfoResponse
 
 data class DeviceChangeResponse(
     val detail: String
@@ -128,4 +129,19 @@ interface ApiService {
 
     @DELETE("profile/remove-picture")
     suspend fun removeProfilePicture(): Response<BasicResponse>
+
+    @GET("contact-info")
+    suspend fun getContactInfo(): Response<ContactInfoResponse>
+
+    @FormUrlEncoded
+    @PUT("contact-info")
+    suspend fun updateContactInfo(
+        @Field("country_code") countryCode: Int? = null,
+        @Field("alternate_phone_number") alternatePhoneNumber: Long? = null,
+        @Field("emergency_phone_number") emergencyPhoneNumber: Long? = null,
+        @Field("whatsapp_number") whatsappNumber: Long? = null,
+        @Field("company_phone_number") companyPhoneNumber: Long? = null,
+        @Field("current_address") currentAddress: String? = null,
+        @Field("permanent_address") permanentAddress: String? = null
+    ): Response<ContactInfoResponse>
 }

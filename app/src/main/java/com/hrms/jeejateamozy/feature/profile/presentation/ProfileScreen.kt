@@ -53,6 +53,7 @@ private const val TAG = "ProfileScreen"
 fun ProfileScreen(
     onNavigateToFaceChange: () -> Unit,
     onNavigateToEditSocialMedia: () -> Unit,
+    onNavigateToEditContactDetail: () -> Unit,
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -250,8 +251,12 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Quick Access Grid
-                QuickAccessGrid()
+                QuickAccessGrid(
+                    onContactDetailClick = onNavigateToEditContactDetail
+                )
+
+
+
 
                 Spacer(Modifier.height(16.dp))
 
