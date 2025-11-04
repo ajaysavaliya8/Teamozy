@@ -1,5 +1,6 @@
 package com.hrms.jeejateamozy.core.network
 
+import com.hrms.jeejateamozy.feature.profile.data.BankingInfoResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -163,4 +164,16 @@ interface ApiService {
     @GET("employment-details")
     suspend fun getEmploymentDetails(): Response<EmploymentDetailResponse>
 
+    @GET("banking-info")
+    suspend fun getBankingInfo(): Response<BankingInfoResponse>
+
+    @FormUrlEncoded
+    @PUT("banking-info")
+    suspend fun updateBankingInfo(
+        @Field("account_holder_name") accountHolderName: String? = null,
+        @Field("bank_name") bankName: String? = null,
+        @Field("bank_account_number") bankAccountNumber: String? = null,
+        @Field("account_type") accountType: String? = null,
+        @Field("ifsc_code") ifscCode: String? = null
+    ): Response<BankingInfoResponse>
 }

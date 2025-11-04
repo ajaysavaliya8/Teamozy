@@ -471,4 +471,112 @@ class ProfileRepository(private val context: Context) {
             null
         }
     }
+
+    suspend fun getBankingInfo(): BankingInfoOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Fetching banking information")
+
+            val response = api.getBankingInfo()
+
+            Log.d("PROFILE", "Get banking info response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Banking info retrieved successfully")
+                        BankingInfoOutcome.Success(
+                            message = responseBody.message,
+                            bankingInfo = responseBody.data
+                        )
+                    } else {
+                        BankingInfoOutcome.Error(responseBody?.message ?: "Failed to retrieve banking information")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    BankingInfoOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    BankingInfoOutcome.Error("Banking information not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    BankingInfoOutcome.Error(errorMsg ?: "Failed to retrieve banking information")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error fetching banking info", e)
+            BankingInfoOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    /**
+     * Update banking information
+     * All 5 fields are editable: account_holder_name, bank_name, bank_account_number, account_type, ifsc_code
+     */
+    suspend fun updateBankingInfo(
+        accountHolderName: String?,
+        bankName: String?,
+        bankAccountNumber: String?,
+        accountType: String?,
+        ifscCode: String?
+    ): BankingInfoOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Updating banking information")
+
+            val response = api.updateBankingInfo(
+                accountHolderName = accountHolderName,
+                bankName = bankName,
+                bankAccountNumber = bankAccountNumber,
+                accountType = accountType,
+                ifscCode = ifscCode
+            )
+
+            Log.d("PROFILE", "Update banking info response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Banking info updated successfully")
+                        BankingInfoOutcome.Success(
+                            message = responseBody.message,
+                            bankingInfo = responseBody.data
+                        )
+                    } else {
+                        BankingInfoOutcome.Error(responseBody?.message ?: "Failed to update banking information")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    BankingInfoOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 400 -> {
+                    val errorMsg = extractErrorMessage(response)
+                    BankingInfoOutcome.Error(errorMsg ?: "Invalid banking information")
+                }
+
+                response.code() == 404 -> {
+                    BankingInfoOutcome.Error("Banking information not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    BankingInfoOutcome.Error(errorMsg ?: "Failed to update banking information")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error updating banking info", e)
+            BankingInfoOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+
+
 }

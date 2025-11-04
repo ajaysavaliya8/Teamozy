@@ -26,8 +26,9 @@ import androidx.compose.ui.unit.sp
 fun QuickAccessGrid(
     modifier: Modifier = Modifier,
     onContactDetailClick: () -> Unit = {},
-    onPersonalInfoClick: () -> Unit = {},           // NEW
-    onEmploymentDetailClick: () -> Unit = {}        // NEW
+    onPersonalInfoClick: () -> Unit = {},
+    onEmploymentDetailClick: () -> Unit = {},
+    onBankingInfoClick: () -> Unit = {}        // NEW
 ) {
     Column(modifier = modifier.padding(horizontal = 16.dp)) {
         Text(
@@ -81,9 +82,9 @@ fun QuickAccessGrid(
                 ) {
                     QuickAccessItem(
                         modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.WorkHistory,
-                        title = "Past\nExperience",
-                        onClick = { /* TODO */ }
+                        icon = Icons.Outlined.AccountBalance,
+                        title = "Banking\nInfo",
+                        onClick = onBankingInfoClick    // UPDATED
                     )
                     QuickAccessItem(
                         modifier = Modifier.weight(1f),

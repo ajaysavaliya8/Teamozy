@@ -12,6 +12,7 @@ import com.hrms.jeejateamozy.feature.profile.presentation.EditSocialMediaScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.EditContactDetailScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.EditPersonalInfoScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentDetailScreen
+import com.hrms.jeejateamozy.feature.profile.presentation.EditBankingInfoScreen
 
 /**
  * Main Screen Component
@@ -35,8 +36,9 @@ fun MainScreen(
     // State to manage child screens
     var showEditSocialMedia by remember { mutableStateOf(false) }
     var showEditContactDetail by remember { mutableStateOf(false) }
-    var showEditPersonalInfo by remember { mutableStateOf(false) }           // CHANGED: Edit instead of View
+    var showEditPersonalInfo by remember { mutableStateOf(false) }
     var showViewEmploymentDetail by remember { mutableStateOf(false) }
+    var showEditBankingInfo by remember { mutableStateOf(false) }       // NEW
 
     Scaffold(
         bottomBar = {
@@ -49,6 +51,7 @@ fun MainScreen(
                     showEditContactDetail = false
                     showEditPersonalInfo = false
                     showViewEmploymentDetail = false
+                    showEditBankingInfo = false                          // NEW
                 }
             )
         }
@@ -87,6 +90,16 @@ fun MainScreen(
                 ViewEmploymentDetailScreen(
                     onBack = {
                         showViewEmploymentDetail = false
+                        currentNavigationScreen = NavigationScreen.PROFILE
+                    }
+                )
+            }
+
+            // NEW - Banking Info Screen
+            showEditBankingInfo -> {
+                EditBankingInfoScreen(
+                    onBack = {
+                        showEditBankingInfo = false
                         currentNavigationScreen = NavigationScreen.PROFILE
                     }
                 )
@@ -143,6 +156,10 @@ fun MainScreen(
                             onNavigateToViewEmploymentDetail = {
                                 // Show ViewEmploymentDetail screen
                                 showViewEmploymentDetail = true
+                            },
+                            onNavigateToEditBankingInfo = {                   // NEW
+                                // Show EditBankingInfo screen
+                                showEditBankingInfo = true
                             },
                             onLogout = onLogout,
                             onBack = {
