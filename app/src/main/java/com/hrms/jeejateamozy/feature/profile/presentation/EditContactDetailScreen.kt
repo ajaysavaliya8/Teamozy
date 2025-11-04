@@ -274,7 +274,11 @@ fun EditContactDetailScreen(
                             try {
                                 // Convert string values to appropriate types
                                 val countryCodeValue = countryCode.toIntOrNull()
-                                val alternatePhoneValue = alternatePhone.toLongOrNull()
+                                val alternatePhoneValue = when {
+                                    alternatePhone.isBlank() -> null
+                                    alternatePhone == "0" -> 0L
+                                    else -> alternatePhone.toLongOrNull()
+                                }
                                 val emergencyPhoneValue = emergencyPhone.toLongOrNull()
                                 val whatsappValue = whatsappNumber.toLongOrNull()
                                 val companyPhoneValue = companyPhone.toLongOrNull()
@@ -320,7 +324,9 @@ fun EditContactDetailScreen(
                         .height(50.dp),
                     enabled = !isLoading,
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(
