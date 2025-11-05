@@ -20,7 +20,10 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Quick Access Grid Section
- * 3x3 grid of profile-related quick access items
+ * 2 rows x 3 columns = 6 items total
+ *
+ * Row 1: Contact Detail, Personal Info, Employment Detail
+ * Row 2: Banking Info, Employment Identity, Shift Details
  */
 @Composable
 fun QuickAccessGrid(
@@ -28,7 +31,9 @@ fun QuickAccessGrid(
     onContactDetailClick: () -> Unit = {},
     onPersonalInfoClick: () -> Unit = {},
     onEmploymentDetailClick: () -> Unit = {},
-    onBankingInfoClick: () -> Unit = {}        // NEW
+    onBankingInfoClick: () -> Unit = {},
+    onEmploymentIdentityClick: () -> Unit = {},
+    onShiftDetailsClick: () -> Unit = {}
 ) {
     Column(modifier = modifier.padding(horizontal = 16.dp)) {
         Text(
@@ -48,7 +53,7 @@ fun QuickAccessGrid(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                // Row 1
+                // Row 1: Contact, Personal, Employment
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -63,19 +68,19 @@ fun QuickAccessGrid(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.Person,
                         title = "Personal\nInfo",
-                        onClick = onPersonalInfoClick        // UPDATED
+                        onClick = onPersonalInfoClick
                     )
                     QuickAccessItem(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.Work,
                         title = "Employment\nDetail",
-                        onClick = onEmploymentDetailClick    // UPDATED
+                        onClick = onEmploymentDetailClick
                     )
                 }
 
                 Spacer(Modifier.height(12.dp))
 
-                // Row 2
+                // Row 2: Banking, Identity, Shift
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -84,46 +89,19 @@ fun QuickAccessGrid(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.AccountBalance,
                         title = "Banking\nInfo",
-                        onClick = onBankingInfoClick    // UPDATED
+                        onClick = onBankingInfoClick
                     )
                     QuickAccessItem(
                         modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.School,
-                        title = "Achievements\n& Education",
-                        onClick = { /* TODO */ }
+                        icon = Icons.Outlined.Badge,
+                        title = "Employment\nIdentity",
+                        onClick = onEmploymentIdentityClick
                     )
                     QuickAccessItem(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Outlined.AccessTime,
                         title = "Shift\nDetails",
-                        onClick = { /* TODO */ }
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                // Row 3
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    QuickAccessItem(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.Timeline,
-                        title = "My\nTimeline",
-                        onClick = { /* TODO */ }
-                    )
-                    QuickAccessItem(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.Notifications,
-                        title = "Notification\nSettings",
-                        onClick = { /* TODO */ }
-                    )
-                    QuickAccessItem(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.Group,
-                        title = "Nominees",
-                        onClick = { /* TODO */ }
+                        onClick = onShiftDetailsClick
                     )
                 }
             }

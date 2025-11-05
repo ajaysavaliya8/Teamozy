@@ -8,6 +8,8 @@ import retrofit2.http.*
 import com.hrms.jeejateamozy.feature.profile.data.ContactInfoResponse
 import com.hrms.jeejateamozy.feature.profile.data.PersonalInfoResponse
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentDetailResponse
+import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityResponse
+import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsResponse
 
 data class DeviceChangeResponse(
     val detail: String
@@ -176,4 +178,11 @@ interface ApiService {
         @Field("account_type") accountType: String? = null,
         @Field("ifsc_code") ifscCode: String? = null
     ): Response<BankingInfoResponse>
+
+    @GET("employment-identity")
+    suspend fun getEmploymentIdentity(): Response<EmploymentIdentityResponse>
+
+    @GET("employee-shift")
+    suspend fun getEmploymentShift(): Response<ShiftDetailsResponse>
+
 }

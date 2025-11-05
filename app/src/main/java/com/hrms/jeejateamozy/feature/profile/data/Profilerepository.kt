@@ -577,6 +577,95 @@ class ProfileRepository(private val context: Context) {
         }
     }
 
+    suspend fun getEmploymentIdentity(): EmploymentIdentityOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Fetching employment identity information")
 
+            val response = api.getEmploymentIdentity()
 
+            Log.d("PROFILE", "Get employment identity response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Employment identity retrieved successfully")
+                        EmploymentIdentityOutcome.Success(
+                            message = responseBody.message,
+                            identityInfo = responseBody.data
+                        )
+                    } else {
+                        EmploymentIdentityOutcome.Error(responseBody?.message ?: "Failed to retrieve identity information")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    EmploymentIdentityOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 403 -> {
+                    EmploymentIdentityOutcome.Error("Only active employees can access identity information")
+                }
+
+                response.code() == 404 -> {
+                    EmploymentIdentityOutcome.Error("Identity information not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    EmploymentIdentityOutcome.Error(errorMsg ?: "Failed to retrieve identity information")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error fetching employment identity", e)
+            EmploymentIdentityOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    suspend fun getShiftDetails(): ShiftDetailsOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("PROFILE", "Fetching shift details")
+
+            val response = api.getEmploymentShift()
+
+            Log.d("PROFILE", "Get shift details response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d("PROFILE", "Shift details retrieved successfully")
+                        ShiftDetailsOutcome.Success(
+                            message = responseBody.message,
+                            shiftDetails = responseBody.data
+                        )
+                    } else {
+                        ShiftDetailsOutcome.Error(responseBody?.message ?: "Failed to retrieve shift details")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    ShiftDetailsOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 403 -> {
+                    ShiftDetailsOutcome.Error("Only active employees can access shift information")
+                }
+
+                response.code() == 404 -> {
+                    ShiftDetailsOutcome.Error("Shift information not found")
+                }
+
+                else -> {
+                    val errorMsg = extractErrorMessage(response)
+                    ShiftDetailsOutcome.Error(errorMsg ?: "Failed to retrieve shift details")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error fetching shift details", e)
+            ShiftDetailsOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
 }

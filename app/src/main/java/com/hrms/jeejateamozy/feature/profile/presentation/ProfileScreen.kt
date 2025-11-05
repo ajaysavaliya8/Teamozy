@@ -56,7 +56,9 @@ fun ProfileScreen(
     onNavigateToEditContactDetail: () -> Unit,
     onNavigateToEditPersonalInfo: () -> Unit,
     onNavigateToViewEmploymentDetail: () -> Unit,
-    onNavigateToEditBankingInfo: () -> Unit,        // NEW
+    onNavigateToEditBankingInfo: () -> Unit,
+    onNavigateToViewEmploymentIdentity: () -> Unit,
+    onNavigateToViewShiftDetails: () -> Unit,
     onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -259,7 +261,9 @@ fun ProfileScreen(
                     onContactDetailClick = onNavigateToEditContactDetail,
                     onPersonalInfoClick = onNavigateToEditPersonalInfo,
                     onEmploymentDetailClick = onNavigateToViewEmploymentDetail,
-                    onBankingInfoClick = onNavigateToEditBankingInfo           // NEW
+                    onBankingInfoClick = onNavigateToEditBankingInfo,
+                    onEmploymentIdentityClick = onNavigateToViewEmploymentIdentity,
+                    onShiftDetailsClick = onNavigateToViewShiftDetails
                 )
 
                 Spacer(Modifier.height(16.dp))

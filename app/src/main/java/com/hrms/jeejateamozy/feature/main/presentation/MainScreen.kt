@@ -13,7 +13,8 @@ import com.hrms.jeejateamozy.feature.profile.presentation.EditContactDetailScree
 import com.hrms.jeejateamozy.feature.profile.presentation.EditPersonalInfoScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentDetailScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.EditBankingInfoScreen
-
+import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentIdentityScreen
+import com.hrms.jeejateamozy.feature.profile.presentation.ViewShiftDetailsScreen
 /**
  * Main Screen Component
  * Manages navigation between Home, Attendance, and Profile screens
@@ -38,7 +39,9 @@ fun MainScreen(
     var showEditContactDetail by remember { mutableStateOf(false) }
     var showEditPersonalInfo by remember { mutableStateOf(false) }
     var showViewEmploymentDetail by remember { mutableStateOf(false) }
-    var showEditBankingInfo by remember { mutableStateOf(false) }       // NEW
+    var showEditBankingInfo by remember { mutableStateOf(false) }
+    var showViewEmploymentIdentity by remember { mutableStateOf(false) }
+    var showViewShiftDetails by remember { mutableStateOf(false) }
 
     Scaffold(
         bottomBar = {
@@ -51,7 +54,9 @@ fun MainScreen(
                     showEditContactDetail = false
                     showEditPersonalInfo = false
                     showViewEmploymentDetail = false
-                    showEditBankingInfo = false                          // NEW
+                    showEditBankingInfo = false
+                    showViewEmploymentIdentity = false
+                    showViewShiftDetails = false
                 }
             )
         }
@@ -76,7 +81,6 @@ fun MainScreen(
                 )
             }
 
-            // CHANGED: EditPersonalInfoScreen (editable)
             showEditPersonalInfo -> {
                 EditPersonalInfoScreen(
                     onBack = {
@@ -100,6 +104,23 @@ fun MainScreen(
                 EditBankingInfoScreen(
                     onBack = {
                         showEditBankingInfo = false
+                        currentNavigationScreen = NavigationScreen.PROFILE
+                    }
+                )
+            }
+
+            showViewEmploymentIdentity -> {
+                ViewEmploymentIdentityScreen(
+                    onBack = {
+                        showViewEmploymentIdentity = false
+                        currentNavigationScreen = NavigationScreen.PROFILE
+                    }
+                )
+            }
+            showViewShiftDetails -> {
+                ViewShiftDetailsScreen(
+                    onBack = {
+                        showViewShiftDetails = false
                         currentNavigationScreen = NavigationScreen.PROFILE
                     }
                 )
@@ -161,6 +182,10 @@ fun MainScreen(
                                 // Show EditBankingInfo screen
                                 showEditBankingInfo = true
                             },
+                            onNavigateToViewEmploymentIdentity = {  // NEW
+                                showViewEmploymentIdentity = true
+                            },
+                            onNavigateToViewShiftDetails = { showViewShiftDetails = true },
                             onLogout = onLogout,
                             onBack = {
                                 // Go back to HOME tab
