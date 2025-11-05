@@ -104,10 +104,14 @@ fun FaceRegistrationScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            cleanupCamera()
-            // Clean up any remaining bitmaps
-            capturedBitmaps.forEach { it.recycle() }
+            // Recycle all captured bitmaps to prevent memory leak
+            capturedBitmaps.forEach { bitmap ->
+                if (!bitmap.isRecycled) {
+                    bitmap.recycle()
+                }
+            }
             capturedBitmaps.clear()
+            Log.d("FaceRegistration", "Cleaned up ${capturedBitmaps.size} bitmaps")
         }
     }
 
