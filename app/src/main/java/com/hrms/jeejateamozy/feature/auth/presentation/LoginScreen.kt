@@ -520,19 +520,26 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             onSendOtp = {
                 scope.launch {
                     deviceOtpLoading = true
+                    deviceCanResend = false      // ← Add this line IMMEDIATELY
+                    deviceSecondsLeft = 30        // ← Add this line too
+
                     when (val outcome = repo.sendChangeDeviceOtp(deviceMobileNumber)) {
                         is AuthOutcome.Success -> {
                             deviceOtpLoading = false
                             deviceOtpSent = true
                             snack.showSnackbar(outcome.message)
-                            startDeviceResendTimer(30)
+                            startDeviceResendTimer(30)  // This will now just start the countdown
                         }
                         is AuthOutcome.Error -> {
                             deviceOtpLoading = false
+                            deviceCanResend = true   // ← Add this: re-enable on error
+                            deviceSecondsLeft = 0     // ← Add this: reset timer on error
                             snack.showSnackbar(outcome.message)
                         }
                         else -> {
                             deviceOtpLoading = false
+                            deviceCanResend = true   // ← Add this: re-enable on failure
+                            deviceSecondsLeft = 0     // ← Add this: reset timer on failure
                         }
                     }
                 }
