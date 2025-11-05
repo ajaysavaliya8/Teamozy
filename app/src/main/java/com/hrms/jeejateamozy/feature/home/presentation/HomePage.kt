@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceViewModel
+import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceEvent  // ✅ ADD THIS IMPORT
 import com.hrms.jeejateamozy.feature.face.data.EmbeddingExtractor
 import com.hrms.jeejateamozy.feature.face.presentation.FaceCaptureScreen
 import kotlinx.coroutines.Dispatchers
@@ -40,14 +41,8 @@ import android.content.Context
 import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
 import org.koin.androidx.compose.koinViewModel
 
-
 private const val TAG = "HomePage"
 
-// ❌ REMOVED: SimpleFaceStore object - We don't store face locally, it comes from API
-
-/**
- * Calculate elapsed seconds from last check-in time to now
- */
 private fun calculateElapsedSeconds(lastCheckInTime: String?): Int {
     if (lastCheckInTime.isNullOrBlank()) return 0
 
@@ -69,14 +64,6 @@ fun rememberAttendanceViewModel(context: android.content.Context): AttendanceVie
     return koinViewModel()
 }
 
-/**
- * HomePage - Shows ONLY home content
- *
- * ✅ CORRECTED:
- * - No SimpleFaceStore (face vector comes from API)
- * - No Face Registration (moved to ProfileScreen)
- * - Only shows: Check-in/out, Timer, Quick Access, Face Verification
- */
 @Composable
 fun HomePage(
     onLogout: () -> Unit,
@@ -85,23 +72,18 @@ fun HomePage(
 ) {
     val context = LocalContext.current
     val vm = rememberAttendanceViewModel(context)
-    val ui = vm.ui.collectAsState().value
+    val ui by vm.ui.collectAsState()
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val prefs = remember { PreferencesManager.getInstance(context) }
 
-    // ❌ REMOVED: showRegistration state - Face Registration moved to ProfileScreen
-
-    // Face verification state with generation counter
     var faceVerifyBusy by remember { mutableStateOf(false) }
     var faceVerifyError by remember { mutableStateOf<String?>(null) }
     var faceVerificationGeneration by remember { mutableIntStateOf(0) }
 
-    // Timer state for tracking work hours
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var isTimerRunning by remember { mutableStateOf(false) }
 
-    // Permission checkers for Check In and Check Out
     val checkInPermissionChecker = rememberPermissionChecker(
         context = context,
         onPermissionsGranted = {
@@ -118,7 +100,6 @@ fun HomePage(
         }
     )
 
-    // Start/Continue timer based on check-in state
     LaunchedEffect(ui.currentState) {
         if (ui.currentState == "CHECK_OUT_NEEDED") {
             if (!isTimerRunning) {
@@ -151,7 +132,6 @@ fun HomePage(
         }
     }
 
-    // Timer tick effect
     LaunchedEffect(isTimerRunning) {
         while (isTimerRunning) {
             delay(1000)
@@ -163,20 +143,35 @@ fun HomePage(
         vm.refreshStatus()
     }
 
-    LaunchedEffect(ui.errorMessage) {
-        ui.errorMessage?.let { error ->
-            snack.showSnackbar(error)
-        }
-    }
-
-    LaunchedEffect(ui.successMessage) {
-        ui.successMessage?.let { success ->
-            snack.showSnackbar(success)
+    // ✅ LISTEN TO ONE-TIME EVENTS FROM VIEWMODEL
+    LaunchedEffect(Unit) {
+        vm.events.collect { event ->
+            when (event) {
+                is AttendanceEvent.ShowError -> {
+                    Log.d(TAG, "🔴 Event received: ${event.message}")
+                    snack.showSnackbar(
+                        message = event.message,
+                        duration = SnackbarDuration.Long
+                    )
+                }
+                is AttendanceEvent.ShowSuccess -> {
+                    Log.d(TAG, "🟢 Event received: ${event.message}")
+                    snack.showSnackbar(
+                        message = event.message,
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
         }
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snack) }
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snack,
+                modifier = Modifier.padding(bottom = 80.dp)
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -184,7 +179,6 @@ fun HomePage(
                 .padding(padding)
                 .padding(paddingValues)
         ) {
-            // Static Top Bar
             HomeTopBar(
                 context = context,
                 companyName = prefs.companyName,
@@ -195,7 +189,6 @@ fun HomePage(
                 onProfileClick = onNavigateToProfile
             )
 
-            // Scrollable Content
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -203,7 +196,6 @@ fun HomePage(
             ) {
                 Spacer(Modifier.height(24.dp))
 
-                // Warning Messages
                 if (ui.checkInMessage != null || ui.checkOutMessage != null) {
                     val message = ui.checkInMessage ?: ui.checkOutMessage
                     Spacer(Modifier.height(8.dp))
@@ -238,7 +230,6 @@ fun HomePage(
 
                 Spacer(Modifier.height(32.dp))
 
-                // Check-in/out Card with Timer
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -256,7 +247,6 @@ fun HomePage(
                         horizontalArrangement = Arrangement.spacedBy(20.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Timer Display
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier.size(130.dp)
@@ -299,7 +289,6 @@ fun HomePage(
                             }
                         }
 
-                        // Check-in/out Buttons
                         when (ui.currentState) {
                             "CHECK_IN_NEEDED" -> {
                                 Button(
@@ -390,14 +379,13 @@ fun HomePage(
 
                 Spacer(Modifier.height(24.dp))
 
-                // Quick Access Section
                 QuickAccessSection(
-                    onCircularClick = { /* TODO */ },
-                    onApplyLeavesClick = { /* TODO */ },
-                    onWorkReportClick = { /* TODO */ },
-                    onTasksClick = { /* TODO */ },
-                    onPayslipClick = { /* TODO */ },
-                    onDocumentsClick = { /* TODO */ }
+                    onCircularClick = { },
+                    onApplyLeavesClick = { },
+                    onWorkReportClick = { },
+                    onTasksClick = { },
+                    onPayslipClick = { },
+                    onDocumentsClick = { }
                 )
 
                 Spacer(Modifier.height(24.dp))
@@ -405,7 +393,6 @@ fun HomePage(
         }
     }
 
-    // Reset busy state when screens are dismissed
     LaunchedEffect(ui.showFaceVerification, ui.showReasonDialog) {
         if (!ui.showFaceVerification && !ui.showReasonDialog && faceVerifyBusy) {
             Log.d(TAG, "✅ Screens dismissed, resetting faceVerifyBusy = false")
@@ -414,7 +401,6 @@ fun HomePage(
         }
     }
 
-    // ✅ Face Verification Screen (for Check-in/out)
     if (ui.showFaceVerification) {
         key(faceVerificationGeneration) {
             FaceCaptureScreen(
@@ -425,7 +411,7 @@ fun HomePage(
                     faceVerifyBusy = false
                     faceVerifyError = null
                 },
-                onCaptured = { /* unused */ },
+                onCaptured = { },
                 onBitmapCaptured = { bitmap ->
                     if (faceVerifyBusy) {
                         bitmap.recycle()
@@ -450,7 +436,6 @@ fun HomePage(
                                 return@launch
                             }
 
-                            // Get face_vector from API
                             val storedFaceVector = ui.checkInFaceVector ?: ui.checkOutFaceVector
 
                             if (storedFaceVector == null) {
@@ -505,7 +490,6 @@ fun HomePage(
         }
     }
 
-    // Reason Dialog
     if (ui.showReasonDialog) {
         val isCheckIn = ui.checkInTToken != null
         val isLateOrEarly = if (isCheckIn) ui.checkInIsLate else ui.checkOutIsEarly
@@ -529,11 +513,7 @@ fun HomePage(
             }
         )
     }
-
-    // ❌ REMOVED: Face Registration Screen - Moved to ProfileScreen.kt
 }
-
-// ==================== UI COMPONENTS ====================
 
 @Composable
 private fun QuickAccessSection(
