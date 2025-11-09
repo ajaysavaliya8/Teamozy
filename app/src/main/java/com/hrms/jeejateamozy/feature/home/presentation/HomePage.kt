@@ -657,14 +657,26 @@ fun ReasonDialog(
     onDismiss: () -> Unit,
     onSubmit: (lateOrEarlyReason: String?, outOfRangeReason: String?) -> Unit
 ) {
-    var lateOrEarlyReason by remember { mutableStateOf("") }
-    var outOfRangeReason by remember { mutableStateOf("") }
+    // Single reason state variable
+    var reason by remember { mutableStateOf("") }
+
+    // Determine if any reason is required
+    val reasonRequired = lateOrEarlyReasonRequired || outOfRangeReasonRequired
+
+    // Determine the label for the input box
+    val inputLabel = when {
+        lateOrEarlyReasonRequired && outOfRangeReasonRequired -> "Reason *"
+        lateOrEarlyReasonRequired -> if (isCheckIn) "Late Reason *" else "Early Check-Out Reason *"
+        outOfRangeReasonRequired -> "Out of Range Reason *"
+        else -> "Reason"
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Attendance Note") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Show warning messages
                 if (isLateOrEarly) {
                     Text(
                         text = if (isCheckIn) "You are checking in late" else "You are checking out early",
@@ -679,27 +691,32 @@ fun ReasonDialog(
                         color = Color(0xFFFF9800)
                     )
                 }
-                if (lateOrEarlyReasonRequired) {
+
+                // Single input box (shown only if reason is required)
+                if (reasonRequired) {
                     OutlinedTextField(
-                        value = lateOrEarlyReason,
-                        onValueChange = { lateOrEarlyReason = it },
-                        label = { Text(if (isCheckIn) "Late Reason *" else "Early Check-Out Reason *") },
+                        value = reason,
+                        onValueChange = { reason = it },
+                        label = { Text(inputLabel) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
-                        maxLines = 4
+                        maxLines = 4,
+                        placeholder = {
+                            Text(
+                                text = when {
+                                    lateOrEarlyReasonRequired && outOfRangeReasonRequired ->
+                                        "Please provide reason for late/early and being out of range"
+                                    lateOrEarlyReasonRequired ->
+                                        if (isCheckIn) "Why are you late?" else "Why are you leaving early?"
+                                    outOfRangeReasonRequired ->
+                                        "Why are you outside the designated area?"
+                                    else -> "Enter reason"
+                                }
+                            )
+                        }
                     )
-                }
-                if (outOfRangeReasonRequired) {
-                    OutlinedTextField(
-                        value = outOfRangeReason,
-                        onValueChange = { outOfRangeReason = it },
-                        label = { Text("Out of Range Reason *") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 4
-                    )
-                }
-                if (!lateOrEarlyReasonRequired && !outOfRangeReasonRequired) {
+                } else {
+                    // No reason required
                     Text(
                         text = if (isCheckIn) "Tap Continue to complete check-in" else "Tap Continue to complete check-out",
                         style = MaterialTheme.typography.bodySmall,
@@ -711,14 +728,41 @@ fun ReasonDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val lateOrEarly = if (lateOrEarlyReasonRequired && lateOrEarlyReason.isNotBlank()) lateOrEarlyReason else null
-                    val outRange = if (outOfRangeReasonRequired && outOfRangeReason.isNotBlank()) outOfRangeReason else null
-                    if (lateOrEarlyReasonRequired && lateOrEarlyReason.isBlank()) return@Button
-                    if (outOfRangeReasonRequired && outOfRangeReason.isBlank()) return@Button
+                    // Smart parameter passing logic
+                    val lateOrEarly: String?
+                    val outRange: String?
+
+                    when {
+                        // Both reasons required → pass same value to both
+                        lateOrEarlyReasonRequired && outOfRangeReasonRequired -> {
+                            lateOrEarly = if (reason.isNotBlank()) reason else null
+                            outRange = if (reason.isNotBlank()) reason else null
+                        }
+                        // Only late/early reason required
+                        lateOrEarlyReasonRequired -> {
+                            lateOrEarly = if (reason.isNotBlank()) reason else null
+                            outRange = null
+                        }
+                        // Only out of range reason required
+                        outOfRangeReasonRequired -> {
+                            lateOrEarly = null
+                            outRange = if (reason.isNotBlank()) reason else null
+                        }
+                        // No reason required
+                        else -> {
+                            lateOrEarly = null
+                            outRange = null
+                        }
+                    }
+
+                    // Validate: if reason is required, it must not be blank
+                    if (reasonRequired && reason.isBlank()) {
+                        return@Button
+                    }
+
                     onSubmit(lateOrEarly, outRange)
                 },
-                enabled = (!lateOrEarlyReasonRequired || lateOrEarlyReason.isNotBlank()) &&
-                        (!outOfRangeReasonRequired || outOfRangeReason.isNotBlank())
+                enabled = !reasonRequired || reason.isNotBlank()
             ) {
                 Text("Continue")
             }
