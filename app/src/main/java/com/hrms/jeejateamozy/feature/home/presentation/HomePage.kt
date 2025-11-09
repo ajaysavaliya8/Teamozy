@@ -383,9 +383,7 @@ fun HomePage(
                     onCircularClick = { },
                     onApplyLeavesClick = { },
                     onWorkReportClick = { },
-                    onTasksClick = { },
-                    onPayslipClick = { },
-                    onDocumentsClick = { }
+                    onTasksClick = { }
                 )
 
                 Spacer(Modifier.height(24.dp))
@@ -520,9 +518,7 @@ private fun QuickAccessSection(
     onCircularClick: () -> Unit = {},
     onApplyLeavesClick: () -> Unit = {},
     onWorkReportClick: () -> Unit = {},
-    onTasksClick: () -> Unit = {},
-    onPayslipClick: () -> Unit = {},
-    onDocumentsClick: () -> Unit = {}
+    onTasksClick: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -535,7 +531,7 @@ private fun QuickAccessSection(
         ) {
             Text(
                 text = "Quick Access",
-                fontSize = 24.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -544,7 +540,7 @@ private fun QuickAccessSection(
                 Icons.Outlined.TouchApp,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(20.dp)
             )
         }
 
@@ -552,66 +548,45 @@ private fun QuickAccessSection(
 
         Text(
             text = "All Your Work Related Tools.",
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
 
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                QuickAccessItem(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.Receipt,
-                    title = "Circular",
-                    iconColor = Color(0xFF00C896),
-                    onClick = onCircularClick
-                )
-                QuickAccessItem(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.EventNote,
-                    title = "Apply Leaves",
-                    iconColor = Color(0xFF3B82F6),
-                    onClick = onApplyLeavesClick
-                )
-                QuickAccessItem(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.EditNote,
-                    title = "Work Report",
-                    iconColor = Color(0xFF00C896),
-                    onClick = onWorkReportClick
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                QuickAccessItem(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.CheckCircle,
-                    title = "Tasks",
-                    iconColor = Color(0xFF00C896),
-                    onClick = onTasksClick
-                )
-                QuickAccessItem(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.ReceiptLong,
-                    title = "Payslip",
-                    iconColor = Color(0xFF3B5998),
-                    onClick = onPayslipClick
-                )
-                QuickAccessItem(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.Description,
-                    title = "Documents",
-                    iconColor = Color(0xFF00C896),
-                    onClick = onDocumentsClick
-                )
-            }
+        // 4×1 Horizontal Row Layout
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            QuickAccessItem(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Outlined.Receipt,
+                title = "Circular",
+                iconColor = Color(0xFF00C896),
+                onClick = onCircularClick
+            )
+            QuickAccessItem(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Outlined.EventNote,
+                title = "Apply Leaves",
+                iconColor = Color(0xFF3B82F6),
+                onClick = onApplyLeavesClick
+            )
+            QuickAccessItem(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Outlined.EditNote,
+                title = "Work Report",
+                iconColor = Color(0xFF00C896),
+                onClick = onWorkReportClick
+            )
+            QuickAccessItem(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Outlined.CheckCircle,
+                title = "Tasks",
+                iconColor = Color(0xFF00C896),
+                onClick = onTasksClick
+            )
         }
     }
 }
@@ -632,7 +607,7 @@ private fun QuickAccessItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
             ),
@@ -642,39 +617,32 @@ private fun QuickAccessItem(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
+                // Icon background circle
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    iconColor,
-                                    iconColor.copy(alpha = 0.7f)
-                                )
-                            )
-                        ),
+                        .background(iconColor.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                        tint = Color.White
+                        modifier = Modifier.size(24.dp),
+                        tint = iconColor
                     )
                 }
             }
         }
-
         Spacer(Modifier.height(8.dp))
-
         Text(
             text = title,
-            fontSize = 14.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
-            maxLines = 1
+            maxLines = 2,
+            lineHeight = 13.sp
         )
     }
 }
