@@ -86,9 +86,9 @@ data class CheckOutResponse(
     val is_early: Boolean? = null,
     val is_out_of_range: Boolean? = null,
     val early_reason_required: Boolean? = null,
-    val out_of_range_reason_required: Boolean? = null
+    val out_of_range_reason_required: Boolean? = null,
+    val work_report_require: Boolean? = null
 )
-
 // -------- Check-Out Signature Response --------
 data class CheckOutSignatureResponse(
     val status: String,           // "success" | "error"

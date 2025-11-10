@@ -1,6 +1,7 @@
 package com.hrms.jeejateamozy.feature.attendance.data
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
@@ -9,6 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 sealed class AttendanceOutcome {
     data class Success(
@@ -57,6 +61,7 @@ sealed class CheckOutOutcome {
         val isOutOfRange: Boolean,
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
+        val workReportRequired: Boolean,  // ✅ NEW
         val message: String
     ) : CheckOutOutcome()
 
@@ -67,6 +72,7 @@ sealed class CheckOutOutcome {
         val isOutOfRange: Boolean,
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
+        val workReportRequired: Boolean,  // ✅ NEW
         val message: String
     ) : CheckOutOutcome()
 
@@ -89,7 +95,6 @@ class AttendanceRepository(private val context: Context) {
     private val api = NetworkModule.apiService
     private val pm = PreferencesManager.getInstance(context)
 
-    // ===== FIX: Get CURRENT device ID from system, not saved one =====
     private fun deviceId(): String {
         val id = android.provider.Settings.Secure.getString(
             context.contentResolver,
@@ -157,7 +162,6 @@ class AttendanceRepository(private val context: Context) {
 
     /**
      * Initial check-in request
-     * Returns whether face verification is required and violation flags
      */
     suspend fun checkIn(
         latitude: Double,
@@ -209,7 +213,6 @@ class AttendanceRepository(private val context: Context) {
                             }
                         }
 
-                        // Determine what's needed next
                         when {
                             faceVerificationRequired -> {
                                 CheckInOutcome.RequiresFaceVerification(
@@ -236,7 +239,6 @@ class AttendanceRepository(private val context: Context) {
                             }
 
                             else -> {
-                                // No face verification or reasons needed, but still need to call signature
                                 CheckInOutcome.RequiresReasons(
                                     tToken = body.t_token,
                                     isLate = false,
@@ -267,7 +269,6 @@ class AttendanceRepository(private val context: Context) {
 
     /**
      * Complete check-in with signature
-     * Called after face verification and/or collecting violation reasons
      */
     suspend fun checkInSignature(
         tToken: String,
@@ -334,7 +335,6 @@ class AttendanceRepository(private val context: Context) {
 
     /**
      * Initial check-out request
-     * Returns whether face verification is required and violation flags
      */
     suspend fun checkOut(
         latitude: Double,
@@ -364,6 +364,7 @@ class AttendanceRepository(private val context: Context) {
                         val isOutOfRange = body.is_out_of_range ?: false
                         val earlyReasonRequired = body.early_reason_required ?: false
                         val outOfRangeReasonRequired = body.out_of_range_reason_required ?: false
+                        val workReportRequired = body.work_report_require ?: false  // ✅ NEW
                         val message = body.message ?: "Ready for check-out"
 
                         Log.d("NET", "Check-out initial success:")
@@ -374,6 +375,7 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  is_out_of_range: $isOutOfRange")
                         Log.d("NET", "  early_reason_required: $earlyReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
+                        Log.d("NET", "  work_report_required: $workReportRequired")  // ✅ NEW
 
                         val faceVector = body.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
@@ -388,8 +390,6 @@ class AttendanceRepository(private val context: Context) {
                             }
                         }
 
-
-                        // Determine what's needed next
                         when {
                             faceVerificationRequired -> {
                                 CheckOutOutcome.RequiresFaceVerification(
@@ -401,11 +401,12 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = isOutOfRange,
                                     earlyReasonRequired = earlyReasonRequired,
                                     outOfRangeReasonRequired = outOfRangeReasonRequired,
+                                    workReportRequired = workReportRequired,  // ✅ NEW
                                     message = message
                                 )
                             }
 
-                            earlyReasonRequired || outOfRangeReasonRequired -> {
+                            earlyReasonRequired || outOfRangeReasonRequired || workReportRequired -> {  // ✅ MODIFIED
                                 CheckOutOutcome.RequiresReasons(
                                     tToken = body.t_token,
                                     workHours = workHours,
@@ -413,12 +414,12 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = isOutOfRange,
                                     earlyReasonRequired = earlyReasonRequired,
                                     outOfRangeReasonRequired = outOfRangeReasonRequired,
+                                    workReportRequired = workReportRequired,  // ✅ NEW
                                     message = message
                                 )
                             }
 
                             else -> {
-                                // No face verification or reasons needed, but still need to call signature
                                 CheckOutOutcome.RequiresReasons(
                                     tToken = body.t_token,
                                     workHours = workHours,
@@ -426,6 +427,7 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = false,
                                     earlyReasonRequired = false,
                                     outOfRangeReasonRequired = false,
+                                    workReportRequired = false,  // ✅ NEW
                                     message = message
                                 )
                             }
@@ -453,15 +455,16 @@ class AttendanceRepository(private val context: Context) {
     }
 
     /**
-     * Complete check-out with signature
-     * Called after face verification and/or collecting violation reasons
+     * Complete check-out with signature and optional work report
      */
     suspend fun checkOutSignature(
         tToken: String,
         faceRecognitionQualityScore: Float? = null,
         faceVerify: Boolean = false,
         earlyReason: String? = null,
-        outOfRangeReason: String? = null
+        outOfRangeReason: String? = null,
+        workReport: String? = null,  // ✅ NEW
+        workReportFileUri: Uri? = null  // ✅ NEW
     ): SignatureOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("NET", "checkOutSignature called:")
@@ -470,13 +473,50 @@ class AttendanceRepository(private val context: Context) {
             Log.d("NET", "  face_verify: $faceVerify")
             Log.d("NET", "  early_reason: ${earlyReason?.take(50)}")
             Log.d("NET", "  out_of_range_reason: ${outOfRangeReason?.take(50)}")
+            Log.d("NET", "  work_report: ${workReport?.take(50)}")  // ✅ NEW
+
+            // Prepare multipart request bodies
+            val tTokenBody = tToken.toRequestBody("text/plain".toMediaTypeOrNull())
+            val faceScoreBody = faceRecognitionQualityScore?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val faceVerifyBody = faceVerify.toString().toRequestBody("text/plain".toMediaTypeOrNull())
+            val earlyReasonBody = earlyReason?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val outOfRangeReasonBody = outOfRangeReason?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val workReportBody = workReport?.toRequestBody("text/plain".toMediaTypeOrNull())
+
+            // Prepare file part if provided
+            var filePart: MultipartBody.Part? = null
+            workReportFileUri?.let { uri ->
+                try {
+                    val contentResolver = context.contentResolver
+                    val inputStream = contentResolver.openInputStream(uri)
+                    val fileBytes = inputStream?.readBytes()
+                    inputStream?.close()
+
+                    fileBytes?.let { bytes ->
+                        val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+                        val fileName = getFileName(uri) ?: "work_report_${System.currentTimeMillis()}"
+
+                        val requestBody = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
+                        filePart = MultipartBody.Part.createFormData(
+                            "work_report_file",
+                            fileName,
+                            requestBody
+                        )
+                        Log.d("NET", "  work_report_file: $fileName (${bytes.size} bytes)")
+                    }
+                } catch (e: Exception) {
+                    Log.e("NET", "Error preparing file: ${e.message}")
+                }
+            }
 
             val res = api.checkOutSignature(
-                tToken = tToken,
-                faceRecognitionQualityScore = faceRecognitionQualityScore,
-                faceVerify = faceVerify,
-                earlyReason = earlyReason,
-                outOfRangeReason = outOfRangeReason,
+                tToken = tTokenBody,
+                faceRecognitionQualityScore = faceScoreBody,
+                faceVerify = faceVerifyBody,
+                earlyReason = earlyReasonBody,
+                outOfRangeReason = outOfRangeReasonBody,
+                workReport = workReportBody,
+                work_report_file = filePart,
                 token = token()
             )
 
@@ -491,7 +531,6 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  work_hours: ${body.work_hours}")
                         Log.d("NET", "  attendance_status: ${body.attendance_status}")
 
-                        // Use check_out_time for attendance record, work details in message
                         SignatureOutcome.Success(
                             message = body.message,
                             attendanceRecordId = null,
@@ -523,25 +562,80 @@ class AttendanceRepository(private val context: Context) {
         }
     }
 
-    private fun extractError(res: retrofit2.Response<*>): String {
-        return try {
-            val raw = res.errorBody()?.string().orEmpty()
-            if (raw.isBlank()) {
-                "Request failed with ${res.code()}"
-            } else {
-                val j = JSONObject(raw)
-                j.optString("message", "").ifBlank {
-                    "Request failed with ${res.code()}"
+    // Helper function to get file name from URI
+    private fun getFileName(uri: Uri): String? {
+        var fileName: String? = null
+        if (uri.scheme == "content") {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        fileName = it.getString(nameIndex)
+                    }
                 }
             }
-        } catch (_: Exception) {
-            "Request failed with ${res.code()}"
+        }
+        if (fileName == null) {
+            fileName = uri.path?.let { path ->
+                val cut = path.lastIndexOf('/')
+                if (cut != -1) path.substring(cut + 1) else path
+            }
+        }
+        return fileName
+    }
+
+    private fun extractError(res: retrofit2.Response<*>): String {
+        return try {
+            val errorBody = res.errorBody()?.string()
+            if (!errorBody.isNullOrBlank()) {
+                val json = JSONObject(errorBody)
+
+                // Check for FastAPI validation errors (detail array)
+                if (json.has("detail")) {
+                    val detail = json.get("detail")
+
+                    // If detail is an array (FastAPI validation errors)
+                    if (detail is org.json.JSONArray && detail.length() > 0) {
+                        val firstError = detail.getJSONObject(0)
+                        val msg = firstError.optString("msg", "")
+                        val input = firstError.optString("input", "")
+
+                        // Create a user-friendly message
+                        return when {
+                            msg.contains("at least 10 characters", ignoreCase = true) ->
+                                "Work description must be at least 10 characters"
+                            msg.contains("required", ignoreCase = true) -> {
+                                val field = firstError.optJSONArray("loc")?.getString(1) ?: "Field"
+                                "$field is required"
+                            }
+                            else -> msg.ifEmpty { "Validation error" }
+                        }
+                    }
+
+                    // If detail is a string
+                    if (detail is String) {
+                        return detail
+                    }
+                }
+
+                // Fallback to message field
+                json.optString("message", "Unknown error")
+            } else {
+                "Server error (${res.code()})"
+            }
+        } catch (e: Exception) {
+            Log.e("NET", "Error parsing error response", e)
+            "Server error (${res.code()})"
         }
     }
 
-    private fun friendlyNetError(e: Throwable): String = when (e) {
-        is java.net.UnknownHostException -> "Can't reach server. Check your internet connection."
-        is java.net.SocketTimeoutException -> "Server timed out. Please try again."
-        else -> e.message ?: "Network error, please try again."
+    private fun friendlyNetError(e: Exception): String {
+        return when (e) {
+            is java.net.UnknownHostException -> "No internet connection"
+            is java.net.SocketTimeoutException -> "Request timed out"
+            is javax.net.ssl.SSLException -> "Secure connection failed"
+            else -> e.message ?: "Network error occurred"
+        }
     }
 }

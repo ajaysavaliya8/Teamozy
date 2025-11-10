@@ -89,14 +89,16 @@ interface ApiService {
         @Query("token") token: String
     ): Response<CheckOutResponse>
 
-    @FormUrlEncoded
+    @Multipart
     @POST("check-out-signature")
     suspend fun checkOutSignature(
-        @Field("t_token") tToken: String,
-        @Field("face_recognition_quality_score") faceRecognitionQualityScore: Float? = null,
-        @Field("face_verify") faceVerify: Boolean = false,
-        @Field("early_reason") earlyReason: String? = null,
-        @Field("out_of_range_reason") outOfRangeReason: String? = null,
+        @Part("t_token") tToken: RequestBody,
+        @Part("face_recognition_quality_score") faceRecognitionQualityScore: RequestBody? = null,
+        @Part("face_verify") faceVerify: RequestBody? = null,
+        @Part("early_reason") earlyReason: RequestBody? = null,
+        @Part("out_of_range_reason") outOfRangeReason: RequestBody? = null,
+        @Part("work_description") workReport: RequestBody? = null,
+        @Part work_report_file: MultipartBody.Part? = null,
         @Query("token") token: String
     ): Response<CheckOutSignatureResponse>
 

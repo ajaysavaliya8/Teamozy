@@ -44,6 +44,17 @@ import org.koin.androidx.compose.koinViewModel
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.text.style.TextOverflow
+import android.os.Environment
+import androidx.core.content.FileProvider
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import androidx.compose.material.icons.filled.CameraAlt
 
 private const val TAG = "HomePage"
 
@@ -409,7 +420,7 @@ fun HomePage(
                 generation = faceVerificationGeneration,
                 onDismiss = {
                     Log.d(TAG, "🔙 Face capture dismissed")
-                    vm.onFaceVerificationCancelled()
+                    vm.onFaceVerificationComplete(0f, false)
                     faceVerifyBusy = false
                     faceVerifyError = null
                 },
@@ -507,11 +518,16 @@ fun HomePage(
             outOfRangeReasonRequired = outOfRangeReasonRequired,
             onDismiss = { vm.onReasonDialogDismissed() },
             onSubmit = { lateOrEarlyReason, outOfRangeReason ->
-                if (isCheckIn) {
-                    vm.completeCheckIn(lateOrEarlyReason, outOfRangeReason)
-                } else {
-                    vm.completeCheckOut(lateOrEarlyReason, outOfRangeReason)
-                }
+                vm.onReasonSubmitted(lateOrEarlyReason, outOfRangeReason)
+            }
+        )
+    }
+
+    if (ui.showWorkReportDialog) {
+        WorkReportBottomSheet(
+            onDismiss = { vm.onWorkReportDialogDismissed() },
+            onSubmit = { workReport, fileUri ->
+                vm.onWorkReportSubmitted(workReport, fileUri)
             }
         )
     }
@@ -1007,4 +1023,343 @@ fun HomeTopBar(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WorkReportBottomSheet(
+    onDismiss: () -> Unit,
+    onSubmit: (workReport: String, fileUri: Uri?) -> Unit
+) {
+    var workReport by remember { mutableStateOf("") }
+    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedFileName by remember { mutableStateOf<String?>(null) }
+    var showError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+
+    // ✅ Add this: Store the camera URI separately
+    val cameraPhotoUri = remember { mutableStateOf<Uri?>(null) }
+
+    val context = LocalContext.current
+
+    // File Picker Launcher
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        selectedFileUri = uri
+        uri?.let {
+            val cursor = context.contentResolver.query(it, null, null, null, null)
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        selectedFileName = c.getString(nameIndex)
+                    }
+                }
+            }
+        }
+    }
+
+    // Camera Launcher
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            // Photo was captured successfully
+            selectedFileUri = cameraPhotoUri.value
+            selectedFileName = "Photo_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.jpg"
+        } else {
+            // User cancelled or error occurred
+            cameraPhotoUri.value = null
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Title
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Work Report",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Work Report Text Field with Character Counter
+            Column {
+                OutlinedTextField(
+                    value = workReport,
+                    onValueChange = {
+                        workReport = it
+                        showError = false
+                    },
+                    label = { Text("Describe your work") },
+                    placeholder = { Text("What did you accomplish today?") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp),
+                    minLines = 4,
+                    maxLines = 8,
+                    shape = RoundedCornerShape(12.dp),
+                    isError = showError,
+                    supportingText = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Minimum 10 characters",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${workReport.trim().length} / 10",
+                                fontSize = 12.sp,
+                                color = if (workReport.trim().length >= 10)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (workReport.trim().length >= 10)
+                                    FontWeight.SemiBold
+                                else
+                                    FontWeight.Normal
+                            )
+                        }
+                    }
+                )
+            }
+
+            // Error Message
+            if (showError) {
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = errorMessage,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Attachment Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        text = "Attach Document/Photo (Optional)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Two buttons: Camera and Files
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Camera Button - ✅ FIXED VERSION
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    val photoFile = createImageFile(context)
+                                    val photoUri = FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.provider",
+                                        photoFile
+                                    )
+                                    cameraPhotoUri.value = photoUri
+                                    cameraLauncher.launch(photoUri)
+                                } catch (e: Exception) {
+                                    Log.e("WorkReport", "Error opening camera", e)
+                                    showError = true
+                                    errorMessage = "Failed to open camera"
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Camera", fontSize = 14.sp)
+                        }
+
+                        // File Picker Button
+                        OutlinedButton(
+                            onClick = {
+                                filePickerLauncher.launch("*/*")
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AttachFile,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Files", fontSize = 14.sp)
+                        }
+                    }
+
+                    // Show selected file/photo
+                    if (selectedFileName != null) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    MaterialTheme.colorScheme.surface,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Show camera or document icon based on file name
+                            Icon(
+                                imageVector = if (selectedFileName?.startsWith("Photo_") == true)
+                                    Icons.Default.CameraAlt
+                                else
+                                    Icons.Default.Description,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = selectedFileName ?: "",
+                                fontSize = 13.sp,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            IconButton(
+                                onClick = {
+                                    selectedFileUri = null
+                                    selectedFileName = null
+                                    cameraPhotoUri.value = null
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove file",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // Submit Button with Validation
+            Button(
+                onClick = {
+                    showError = false
+                    errorMessage = ""
+
+                    val trimmedReport = workReport.trim()
+
+                    when {
+                        trimmedReport.isEmpty() -> {
+                            showError = true
+                            errorMessage = "Work description cannot be empty"
+                        }
+                        trimmedReport.length < 10 -> {
+                            showError = true
+                            errorMessage = "Work description must be at least 10 characters (currently ${trimmedReport.length})"
+                        }
+                        else -> {
+                            onSubmit(trimmedReport, selectedFileUri)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = workReport.trim().isNotEmpty(),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(vertical = 16.dp)
+            ) {
+                Text(
+                    text = "Submit Work Report",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+// Helper function to create image file
+private fun createImageFile(context: Context): File {
+    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+    return File.createTempFile(
+        "WORK_REPORT_${timeStamp}_",
+        ".jpg",
+        storageDir
+    )
 }
