@@ -38,8 +38,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.content.Context
+import androidx.compose.foundation.BorderStroke
 import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
 import org.koin.androidx.compose.koinViewModel
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 
 private const val TAG = "HomePage"
 
@@ -495,7 +499,7 @@ fun HomePage(
         val lateOrEarlyReasonRequired = if (isCheckIn) ui.checkInLateReasonRequired else ui.checkOutEarlyReasonRequired
         val outOfRangeReasonRequired = if (isCheckIn) ui.checkInOutOfRangeReasonRequired else ui.checkOutOutOfRangeReasonRequired
 
-        ReasonDialog(
+        ReasonBottomSheet(
             isCheckIn = isCheckIn,
             isLateOrEarly = isLateOrEarly,
             isOutOfRange = isOutOfRange,
@@ -647,8 +651,9 @@ private fun QuickAccessItem(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReasonDialog(
+fun ReasonBottomSheet(
     isCheckIn: Boolean,
     isLateOrEarly: Boolean,
     isOutOfRange: Boolean,
@@ -665,115 +670,262 @@ fun ReasonDialog(
 
     // Determine the label for the input box
     val inputLabel = when {
-        lateOrEarlyReasonRequired && outOfRangeReasonRequired -> "Reason *"
-        lateOrEarlyReasonRequired -> if (isCheckIn) "Late Reason *" else "Early Check-Out Reason *"
-        outOfRangeReasonRequired -> "Out of Range Reason *"
+        lateOrEarlyReasonRequired && outOfRangeReasonRequired -> "Reason"
+        lateOrEarlyReasonRequired -> if (isCheckIn) "Late Reason" else "Early Check-Out Reason"
+        outOfRangeReasonRequired -> "Out of Range Reason"
         else -> "Reason"
     }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text("Attendance Note") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Show warning messages
-                if (isLateOrEarly) {
-                    Text(
-                        text = if (isCheckIn) "You are checking in late" else "You are checking out early",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFFF9800)
-                    )
-                }
-                if (isOutOfRange) {
-                    Text(
-                        text = "You are outside the designated area",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFFF9800)
-                    )
-                }
-
-                // Single input box (shown only if reason is required)
-                if (reasonRequired) {
-                    OutlinedTextField(
-                        value = reason,
-                        onValueChange = { reason = it },
-                        label = { Text(inputLabel) },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 4,
-                        placeholder = {
-                            Text(
-                                text = when {
-                                    lateOrEarlyReasonRequired && outOfRangeReasonRequired ->
-                                        "Please provide reason for late/early and being out of range"
-                                    lateOrEarlyReasonRequired ->
-                                        if (isCheckIn) "Why are you late?" else "Why are you leaving early?"
-                                    outOfRangeReasonRequired ->
-                                        "Why are you outside the designated area?"
-                                    else -> "Enter reason"
-                                }
-                            )
-                        }
-                    )
-                } else {
-                    // No reason required
-                    Text(
-                        text = if (isCheckIn) "Tap Continue to complete check-in" else "Tap Continue to complete check-out",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    // Smart parameter passing logic
-                    val lateOrEarly: String?
-                    val outRange: String?
-
-                    when {
-                        // Both reasons required → pass same value to both
-                        lateOrEarlyReasonRequired && outOfRangeReasonRequired -> {
-                            lateOrEarly = if (reason.isNotBlank()) reason else null
-                            outRange = if (reason.isNotBlank()) reason else null
-                        }
-                        // Only late/early reason required
-                        lateOrEarlyReasonRequired -> {
-                            lateOrEarly = if (reason.isNotBlank()) reason else null
-                            outRange = null
-                        }
-                        // Only out of range reason required
-                        outOfRangeReasonRequired -> {
-                            lateOrEarly = null
-                            outRange = if (reason.isNotBlank()) reason else null
-                        }
-                        // No reason required
-                        else -> {
-                            lateOrEarly = null
-                            outRange = null
-                        }
-                    }
-
-                    // Validate: if reason is required, it must not be blank
-                    if (reasonRequired && reason.isBlank()) {
-                        return@Button
-                    }
-
-                    onSubmit(lateOrEarly, outRange)
-                },
-                enabled = !reasonRequired || reason.isNotBlank()
+        containerColor = MaterialTheme.colorScheme.surface,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            // Title
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Continue")
+                Text(
+                    text = "Attendance Note",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+
+            Spacer(Modifier.height(8.dp))
+
+            // Warning messages
+            if (isLateOrEarly || isOutOfRange) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFFF3E0)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (isLateOrEarly) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.AccessTime,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF9800),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = if (isCheckIn) "You are checking in late" else "You are checking out early",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFE65100)
+                                )
+                            }
+                        }
+                        if (isOutOfRange) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.LocationOff,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF9800),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "You are outside the designated area",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFE65100)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+            }
+
+            // Single input box (shown only if reason is required)
+            if (reasonRequired) {
+                Text(
+                    text = "$inputLabel *",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 5,
+                    placeholder = {
+                        Text(
+                            text = when {
+                                lateOrEarlyReasonRequired && outOfRangeReasonRequired ->
+                                    "Provide reason for both violations"
+                                lateOrEarlyReasonRequired ->
+                                    if (isCheckIn) "Why are you late?" else "Why are you leaving early?"
+                                outOfRangeReasonRequired ->
+                                    "Why are you outside the designated area?"
+                                else -> "Enter reason"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
+                )
+
+                Spacer(Modifier.height(24.dp))
+            } else {
+                // No reason required
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = if (isCheckIn) "Tap Continue to complete check-in" else "Tap Continue to complete check-out",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+            }
+
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Cancel Button
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline)
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp
+                    )
+                }
+
+                // Continue Button
+                Button(
+                    onClick = {
+                        // Smart parameter passing logic
+                        val lateOrEarly: String?
+                        val outRange: String?
+
+                        when {
+                            // Both reasons required → pass same value to both
+                            lateOrEarlyReasonRequired && outOfRangeReasonRequired -> {
+                                lateOrEarly = if (reason.isNotBlank()) reason else null
+                                outRange = if (reason.isNotBlank()) reason else null
+                            }
+                            // Only late/early reason required
+                            lateOrEarlyReasonRequired -> {
+                                lateOrEarly = if (reason.isNotBlank()) reason else null
+                                outRange = null
+                            }
+                            // Only out of range reason required
+                            outOfRangeReasonRequired -> {
+                                lateOrEarly = null
+                                outRange = if (reason.isNotBlank()) reason else null
+                            }
+                            // No reason required
+                            else -> {
+                                lateOrEarly = null
+                                outRange = null
+                            }
+                        }
+
+                        // Validate: if reason is required, it must not be blank
+                        if (reasonRequired && reason.isBlank()) {
+                            return@Button
+                        }
+
+                        onSubmit(lateOrEarly, outRange)
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !reasonRequired || reason.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Continue",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
         }
-    )
+    }
 }
+
+
+
 
 @Composable
 fun HomeTopBar(
