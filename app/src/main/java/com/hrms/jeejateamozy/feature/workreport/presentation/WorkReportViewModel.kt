@@ -18,7 +18,7 @@ import java.time.YearMonth
 
 data class WorkReportUiState(
     // Tab selection
-    val selectedTab: WorkReportTab = WorkReportTab.ADD_NEW,
+    val selectedTab: WorkReportTab = WorkReportTab.HISTORY,  // ⭐ CHANGED: Default to HISTORY
 
     // Date selection
     val selectedDate: LocalDate = LocalDate.now(),

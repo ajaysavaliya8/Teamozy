@@ -15,18 +15,10 @@ import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentDetailSc
 import com.hrms.jeejateamozy.feature.profile.presentation.EditBankingInfoScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentIdentityScreen
 import com.hrms.jeejateamozy.feature.profile.presentation.ViewShiftDetailsScreen
-/**
- * Main Screen Component
- * Manages navigation between Home, Attendance, and Profile screens
- * Uses BottomNavigationBar for navigation
- *
- * ✅ CORRECTED STRUCTURE:
- * - HOME tab → HomePage (only home content)
- * - ATTENDANCE tab → AttendanceScreen (placeholder)
- * - PROFILE tab → ProfileScreen (directly)
- *
- * Note: Face Registration is now handled inside ProfileScreen
- */
+import com.hrms.jeejateamozy.feature.workreport.presentation.WorkReportScreen
+import com.hrms.jeejateamozy.feature.workreport.presentation.WorkReportViewModel
+import org.koin.androidx.compose.koinViewModel
+
 @Composable
 fun MainScreen(
     onLogout: () -> Unit
@@ -43,8 +35,6 @@ fun MainScreen(
     var showViewEmploymentIdentity by remember { mutableStateOf(false) }
     var showViewShiftDetails by remember { mutableStateOf(false) }
     var showWorkReport by remember { mutableStateOf(false) }
-
-
 
     Scaffold(
         bottomBar = {
@@ -102,7 +92,6 @@ fun MainScreen(
                 )
             }
 
-            // NEW - Banking Info Screen
             showEditBankingInfo -> {
                 EditBankingInfoScreen(
                     onBack = {
@@ -120,11 +109,25 @@ fun MainScreen(
                     }
                 )
             }
+
             showViewShiftDetails -> {
                 ViewShiftDetailsScreen(
                     onBack = {
                         showViewShiftDetails = false
                         currentNavigationScreen = NavigationScreen.PROFILE
+                    }
+                )
+            }
+
+            // ⭐ WORK REPORT SCREEN ⭐
+            showWorkReport -> {
+                val workReportViewModel: WorkReportViewModel = koinViewModel()
+
+                WorkReportScreen(
+                    viewModel = workReportViewModel,
+                    onNavigateBack = {
+                        showWorkReport = false
+                        currentNavigationScreen = NavigationScreen.HOME
                     }
                 )
             }
@@ -137,6 +140,9 @@ fun MainScreen(
                             onLogout = onLogout,
                             onNavigateToProfile = {
                                 currentNavigationScreen = NavigationScreen.PROFILE
+                            },
+                            onNavigateToWorkReport = {
+                                showWorkReport = true
                             },
                             paddingValues = paddingValues
                         )
@@ -159,36 +165,32 @@ fun MainScreen(
                     }
 
                     NavigationScreen.PROFILE -> {
-                        // ✅ Directly show ProfileScreen
-                        // Face Registration is handled inside ProfileScreen
+                        // ✅ ProfileScreen with ALL required parameters
                         ProfileScreen(
                             onNavigateToFaceChange = {
                                 // No action needed - ProfileScreen handles it internally
                             },
                             onNavigateToEditSocialMedia = {
-                                // Show EditSocialMedia screen
                                 showEditSocialMedia = true
                             },
                             onNavigateToEditContactDetail = {
-                                // Show EditContactDetail screen
                                 showEditContactDetail = true
                             },
-                            onNavigateToEditPersonalInfo = {                  // Keep name for compatibility
-                                // Show EditPersonalInfo screen (editable)
+                            onNavigateToEditPersonalInfo = {
                                 showEditPersonalInfo = true
                             },
                             onNavigateToViewEmploymentDetail = {
-                                // Show ViewEmploymentDetail screen
                                 showViewEmploymentDetail = true
                             },
-                            onNavigateToEditBankingInfo = {                   // NEW
-                                // Show EditBankingInfo screen
+                            onNavigateToEditBankingInfo = {
                                 showEditBankingInfo = true
                             },
-                            onNavigateToViewEmploymentIdentity = {  // NEW
+                            onNavigateToViewEmploymentIdentity = {
                                 showViewEmploymentIdentity = true
                             },
-                            onNavigateToViewShiftDetails = { showViewShiftDetails = true },
+                            onNavigateToViewShiftDetails = {
+                                showViewShiftDetails = true
+                            },
                             onLogout = onLogout,
                             onBack = {
                                 // Go back to HOME tab

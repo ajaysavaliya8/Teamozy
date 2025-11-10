@@ -154,9 +154,7 @@ data class ProfilePictureUpdateResponse(
     val filename: String? = null
 )
 
-/**
- * Work Report Data Model
- */
+
 data class WorkReport(
     val id: Int,
     val reportDate: String,
@@ -192,7 +190,7 @@ data class WorkReportDto(
     val id: Int,
     val report_date: String,
     val work_description: String,
-    val attachments: List<String>,
+    val attachments: String,  // ⭐ CHANGED: String instead of List<String>
     val report_status: String,
     val branch_name: String?,
     val submitted_at: String?,
@@ -205,12 +203,13 @@ data class WorkReportDto(
 ) {
     /**
      * Convert DTO to domain model
+     * Parses attachments JSON string to List
      */
     fun toDomain() = WorkReport(
         id = id,
         reportDate = report_date,
         workDescription = work_description,
-        attachments = attachments,
+        attachments = parseAttachments(attachments),
         reportStatus = report_status,
         branchName = branch_name,
         submittedAt = submitted_at,
@@ -221,6 +220,25 @@ data class WorkReportDto(
         createdAt = created_at,
         updatedAt = updated_at
     )
+
+    /**
+     * Parse attachments from JSON string to List
+     */
+    private fun parseAttachments(attachmentsJson: String): List<String> {
+        return try {
+            if (attachmentsJson.isBlank() || attachmentsJson == "[]") {
+                emptyList()
+            } else {
+                // Parse JSON array string
+                val gson = com.google.gson.Gson()
+                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
+                gson.fromJson(attachmentsJson, type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            // If parsing fails, return empty list
+            emptyList()
+        }
+    }
 }
 
 /**

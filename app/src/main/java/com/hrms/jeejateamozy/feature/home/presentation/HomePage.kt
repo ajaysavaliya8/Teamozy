@@ -83,8 +83,9 @@ fun rememberAttendanceViewModel(context: android.content.Context): AttendanceVie
 fun HomePage(
     onLogout: () -> Unit,
     onNavigateToProfile: () -> Unit,
-    paddingValues: PaddingValues = PaddingValues(0.dp),
-    onNavigateToWorkReport: () -> Unit = {}
+    onNavigateToWorkReport: () -> Unit = {},
+    paddingValues: PaddingValues,
+    vm: AttendanceViewModel = koinViewModel()
     ) {
     val context = LocalContext.current
     val vm = rememberAttendanceViewModel(context)
@@ -641,7 +642,7 @@ private fun QuickAccessItem(
                 // Icon background circle
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(50.dp)
                         .clip(CircleShape)
                         .background(iconColor.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
@@ -649,21 +650,23 @@ private fun QuickAccessItem(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = iconColor
+                        tint = iconColor,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
         }
+
         Spacer(Modifier.height(8.dp))
+
         Text(
             text = title,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
-            maxLines = 2,
-            lineHeight = 13.sp
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
