@@ -83,8 +83,9 @@ fun rememberAttendanceViewModel(context: android.content.Context): AttendanceVie
 fun HomePage(
     onLogout: () -> Unit,
     onNavigateToProfile: () -> Unit,
-    paddingValues: PaddingValues = PaddingValues(0.dp)
-) {
+    paddingValues: PaddingValues = PaddingValues(0.dp),
+    onNavigateToWorkReport: () -> Unit = {}
+    ) {
     val context = LocalContext.current
     val vm = rememberAttendanceViewModel(context)
     val ui by vm.ui.collectAsState()
@@ -397,7 +398,7 @@ fun HomePage(
                 QuickAccessSection(
                     onCircularClick = { },
                     onApplyLeavesClick = { },
-                    onWorkReportClick = { },
+                    onWorkReportClick = onNavigateToWorkReport,
                     onTasksClick = { }
                 )
 

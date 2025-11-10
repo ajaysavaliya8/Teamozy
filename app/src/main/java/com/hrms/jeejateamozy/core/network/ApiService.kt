@@ -10,6 +10,8 @@ import com.hrms.jeejateamozy.feature.profile.data.PersonalInfoResponse
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentDetailResponse
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityResponse
 import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsResponse
+import com.hrms.jeejateamozy.core.network.WorkReportListResponse
+import com.hrms.jeejateamozy.core.network.CreateWorkReportResponse
 
 data class DeviceChangeResponse(
     val detail: String
@@ -186,5 +188,18 @@ interface ApiService {
 
     @GET("employee-shift")
     suspend fun getEmploymentShift(): Response<ShiftDetailsResponse>
+
+    @GET("work-report")
+    suspend fun getWorkReports(
+        @Query("month") month: Int,
+        @Query("year") year: Int
+    ): Response<WorkReportListResponse>
+
+    @Multipart
+    @POST("work-report")
+    suspend fun createWorkReport(
+        @Part("work_description") workDescription: RequestBody,
+        @Part attachments: List<MultipartBody.Part>? = null
+    ): Response<CreateWorkReportResponse>
 
 }

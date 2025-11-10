@@ -153,3 +153,92 @@ data class ProfilePictureUpdateResponse(
     val profile_url: String? = null,
     val filename: String? = null
 )
+
+/**
+ * Work Report Data Model
+ */
+data class WorkReport(
+    val id: Int,
+    val reportDate: String,
+    val workDescription: String,
+    val attachments: List<String>,
+    val reportStatus: String,
+    val branchName: String?,
+    val submittedAt: String?,
+    val reviewedAt: String?,
+    val reviewedByName: String?,
+    val reviewerComments: String?,
+    val rejectionReason: String?,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+/**
+ * API Response for GET /work-report
+ */
+data class WorkReportListResponse(
+    val status: String,
+    val message: String,
+    val month: Int,
+    val year: Int,
+    val total_reports: Int,
+    val reports: List<WorkReportDto>
+)
+
+/**
+ * Work Report DTO from API
+ */
+data class WorkReportDto(
+    val id: Int,
+    val report_date: String,
+    val work_description: String,
+    val attachments: List<String>,
+    val report_status: String,
+    val branch_name: String?,
+    val submitted_at: String?,
+    val reviewed_at: String?,
+    val reviewed_by_name: String?,
+    val reviewer_comments: String?,
+    val rejection_reason: String?,
+    val created_at: String,
+    val updated_at: String
+) {
+    /**
+     * Convert DTO to domain model
+     */
+    fun toDomain() = WorkReport(
+        id = id,
+        reportDate = report_date,
+        workDescription = work_description,
+        attachments = attachments,
+        reportStatus = report_status,
+        branchName = branch_name,
+        submittedAt = submitted_at,
+        reviewedAt = reviewed_at,
+        reviewedByName = reviewed_by_name,
+        reviewerComments = reviewer_comments,
+        rejectionReason = rejection_reason,
+        createdAt = created_at,
+        updatedAt = updated_at
+    )
+}
+
+/**
+ * API Response for POST /work-report
+ */
+data class CreateWorkReportResponse(
+    val status: String,
+    val message: String,
+    val work_report: CreatedWorkReportDto?,
+    val reports_today: Int?,
+    val remaining_reports_today: Int?
+)
+
+data class CreatedWorkReportDto(
+    val id: Int,
+    val report_date: String,
+    val work_description: String,
+    val attachments_count: Int,
+    val report_status: String,
+    val submitted_at: String
+)

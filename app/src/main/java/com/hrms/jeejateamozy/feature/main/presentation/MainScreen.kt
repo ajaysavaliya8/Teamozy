@@ -42,6 +42,9 @@ fun MainScreen(
     var showEditBankingInfo by remember { mutableStateOf(false) }
     var showViewEmploymentIdentity by remember { mutableStateOf(false) }
     var showViewShiftDetails by remember { mutableStateOf(false) }
+    var showWorkReport by remember { mutableStateOf(false) }
+
+
 
     Scaffold(
         bottomBar = {

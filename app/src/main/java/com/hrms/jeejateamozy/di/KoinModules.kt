@@ -4,6 +4,9 @@ import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceViewModel
 import com.hrms.jeejateamozy.feature.auth.domain.usecase.LoginUseCase
+import com.hrms.jeejateamozy.feature.workreport.data.WorkReportRepository
+import com.hrms.jeejateamozy.feature.workreport.domain.usecase.WorkReportUseCase
+import com.hrms.jeejateamozy.feature.workreport.presentation.WorkReportViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
@@ -22,4 +25,8 @@ val attendanceModule = module {
 }
 
 val permissionsModule = module { }
-val homeModule = module { }
+val homeModule = module {
+    single { WorkReportRepository(androidContext()) }
+    factory { WorkReportUseCase(get()) }
+    viewModel { WorkReportViewModel(get()) }
+}
