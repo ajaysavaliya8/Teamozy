@@ -122,6 +122,9 @@ dependencies {
 
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+
+    implementation("com.google.accompanist:accompanist-systemuicontroller:0.32.0")
+
     // Core dependencies from libs
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

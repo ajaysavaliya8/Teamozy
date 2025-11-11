@@ -1,84 +1,58 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 package com.hrms.jeejateamozy.feature.home.presentation
 
 import android.graphics.Bitmap
 import android.util.Log
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
+import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceEvent
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceViewModel
-import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceEvent  // ✅ ADD THIS IMPORT
 import com.hrms.jeejateamozy.feature.face.data.EmbeddingExtractor
 import com.hrms.jeejateamozy.feature.face.presentation.FaceCaptureScreen
+import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
+import com.hrms.jeejateamozy.feature.home.presentation.components.AttendanceStatusCard
+import com.hrms.jeejateamozy.feature.home.presentation.components.MessageCard
+import com.hrms.jeejateamozy.feature.home.presentation.components.QuickAccessSection
+import com.hrms.jeejateamozy.feature.home.presentation.dialogs.ReasonBottomSheet
+import com.hrms.jeejateamozy.feature.home.presentation.dialogs.WorkReportBottomSheet
+import com.hrms.jeejateamozy.feature.home.presentation.utils.calculateElapsedSeconds
+import com.hrms.jeejateamozy.feature.home.presentation.utils.rememberPermissionChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.content.Context
-import androidx.compose.foundation.BorderStroke
-import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
 import org.koin.androidx.compose.koinViewModel
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.text.style.TextOverflow
-import android.os.Environment
-import androidx.core.content.FileProvider
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import androidx.compose.material.icons.filled.CameraAlt
 
 private const val TAG = "HomePage"
 
-private fun calculateElapsedSeconds(lastCheckInTime: String?): Int {
-    if (lastCheckInTime.isNullOrBlank()) return 0
-
-    try {
-        val formatter = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-        val checkInDate = formatter.parse(lastCheckInTime) ?: return 0
-        val now = java.util.Date()
-        val elapsedMillis = now.time - checkInDate.time
-        val elapsedSeconds = (elapsedMillis / 1000).toInt()
-        return if (elapsedSeconds >= 0) elapsedSeconds else 0
-    } catch (e: Exception) {
-        android.util.Log.e(TAG, "Error parsing last_check_in_time: $lastCheckInTime", e)
-        return 0
-    }
-}
-
-@Composable
-fun rememberAttendanceViewModel(context: android.content.Context): AttendanceViewModel {
-    return koinViewModel()
-}
-
+/**
+ * HomePage - Refactored Main Screen
+ *
+ * This file now only contains:
+ * - Main HomePage composable
+ * - ViewModel integration
+ * - State management
+ * - Timer logic
+ *
+ * UI Components moved to:
+ * - components/AttendanceStatusCard.kt
+ * - components/QuickAccessSection.kt
+ * - components/MessageCard.kt
+ * - components/HomeTopBar.kt
+ * - dialogs/ReasonBottomSheet.kt
+ * - dialogs/WorkReportBottomSheet.kt
+ *
+ * Utilities moved to:
+ * - utils/HomeUtils.kt
+ * - utils/PermissionChecker.kt
+ */
 @Composable
 fun HomePage(
     onLogout: () -> Unit,
@@ -86,21 +60,23 @@ fun HomePage(
     onNavigateToWorkReport: () -> Unit = {},
     paddingValues: PaddingValues,
     vm: AttendanceViewModel = koinViewModel()
-    ) {
+) {
     val context = LocalContext.current
-    val vm = rememberAttendanceViewModel(context)
     val ui by vm.ui.collectAsState()
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val prefs = remember { PreferencesManager.getInstance(context) }
 
+    // Face verification state
     var faceVerifyBusy by remember { mutableStateOf(false) }
     var faceVerifyError by remember { mutableStateOf<String?>(null) }
     var faceVerificationGeneration by remember { mutableIntStateOf(0) }
 
+    // Timer state
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var isTimerRunning by remember { mutableStateOf(false) }
 
+    // Permission checkers
     val checkInPermissionChecker = rememberPermissionChecker(
         context = context,
         onPermissionsGranted = {
@@ -117,6 +93,7 @@ fun HomePage(
         }
     )
 
+    // Timer management
     LaunchedEffect(ui.currentState) {
         if (ui.currentState == "CHECK_OUT_NEEDED") {
             if (!isTimerRunning) {
@@ -156,11 +133,12 @@ fun HomePage(
         }
     }
 
+    // Initial status refresh
     LaunchedEffect(Unit) {
         vm.refreshStatus()
     }
 
-    // ✅ LISTEN TO ONE-TIME EVENTS FROM VIEWMODEL
+    // Listen to ViewModel events
     LaunchedEffect(Unit) {
         vm.events.collect { event ->
             when (event) {
@@ -196,6 +174,7 @@ fun HomePage(
                 .padding(padding)
                 .padding(paddingValues)
         ) {
+            // Top Bar
             HomeTopBar(
                 context = context,
                 companyName = prefs.companyName,
@@ -206,6 +185,7 @@ fun HomePage(
                 onProfileClick = onNavigateToProfile
             )
 
+            // Scrollable Content
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -213,298 +193,113 @@ fun HomePage(
             ) {
                 Spacer(Modifier.height(24.dp))
 
-                if (ui.checkInMessage != null || ui.checkOutMessage != null) {
-                    val message = ui.checkInMessage ?: ui.checkOutMessage
-                    Spacer(Modifier.height(8.dp))
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFFFFF3CD)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                Icons.Filled.Warning,
-                                contentDescription = null,
-                                tint = Color(0xFF856404)
-                            )
-                            Text(
-                                text = message ?: "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF856404)
-                            )
-                        }
+                // Attendance Status Card
+                AttendanceStatusCard(
+                    currentState = ui.currentState,
+                    isTimerRunning = isTimerRunning,
+                    elapsedSeconds = elapsedSeconds,
+                    isLoading = ui.isLoading,
+                    isFaceVerifyBusy = faceVerifyBusy,
+                    onCheckInClick = {
+                        Log.d(TAG, "CHECK IN BUTTON CLICKED")
+                        faceVerificationGeneration++
+                        checkInPermissionChecker()
+                    },
+                    onCheckOutClick = {
+                        Log.d(TAG, "CHECK OUT BUTTON CLICKED")
+                        faceVerificationGeneration++
+                        checkOutPermissionChecker()
                     }
-                }
-
-                Spacer(Modifier.height(32.dp))
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(20.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.size(130.dp)
-                        ) {
-                            val workdaySeconds = 8 * 60 * 60
-                            val progress = if (isTimerRunning) {
-                                (elapsedSeconds.toFloat() / workdaySeconds).coerceIn(0f, 1f)
-                            } else {
-                                0f
-                            }
-
-                            CircularProgressIndicator(
-                                progress = { progress },
-                                modifier = Modifier.size(130.dp),
-                                color = if (isTimerRunning) Color(0xFF00C896) else Color(0xFF4DD0B8),
-                                strokeWidth = 10.dp,
-                                trackColor = Color(0xFFE0F2F1),
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(100.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surface),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                val hours = elapsedSeconds / 3600
-                                val minutes = (elapsedSeconds % 3600) / 60
-                                val seconds = elapsedSeconds % 60
-
-                                Text(
-                                    text = "%02d:%02d:%02d".format(hours, minutes, seconds),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isTimerRunning) {
-                                        Color(0xFF00C896)
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
-                                )
-                            }
-                        }
-
-                        when (ui.currentState) {
-                            "CHECK_IN_NEEDED" -> {
-                                Button(
-                                    onClick = {
-                                        Log.d(TAG, "CHECK IN BUTTON CLICKED")
-                                        faceVerificationGeneration++
-                                        checkInPermissionChecker()
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                    enabled = !ui.isLoading && !faceVerifyBusy,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF00C896)
-                                    ),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    if (ui.isLoading) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            color = Color.White,
-                                            strokeWidth = 2.dp
-                                        )
-                                    } else {
-                                        Text(
-                                            "Check In",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                            "CHECK_OUT_NEEDED" -> {
-                                Button(
-                                    onClick = {
-                                        Log.d(TAG, "CHECK OUT BUTTON CLICKED")
-                                        faceVerificationGeneration++
-                                        checkOutPermissionChecker()
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                    enabled = !ui.isLoading && !faceVerifyBusy,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFFFF6B6B)
-                                    ),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    if (ui.isLoading) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            color = Color.White,
-                                            strokeWidth = 2.dp
-                                        )
-                                    } else {
-                                        Text(
-                                            "Check Out",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                            "COMPLETED" -> {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(32.dp),
-                                        tint = Color(0xFF00C896)
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        text = "Completed",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF00C896)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
-
-                QuickAccessSection(
-                    onCircularClick = { },
-                    onApplyLeavesClick = { },
-                    onWorkReportClick = onNavigateToWorkReport,
-                    onTasksClick = { }
                 )
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(40.dp))
+
+                // Quick Access Section
+                QuickAccessSection(
+                    onCircularClick = {
+                        Log.d(TAG, "Circular clicked - Coming Soon")
+                    },
+                    onApplyLeavesClick = {
+                        Log.d(TAG, "Apply Leaves clicked - Coming Soon")
+                    },
+                    onWorkReportClick = {
+                        Log.d(TAG, "Work Report clicked")
+                        onNavigateToWorkReport()
+                    }
+                )
+
+                Spacer(Modifier.height(40.dp))
             }
         }
     }
 
-    LaunchedEffect(ui.showFaceVerification, ui.showReasonDialog) {
-        if (!ui.showFaceVerification && !ui.showReasonDialog && faceVerifyBusy) {
-            Log.d(TAG, "✅ Screens dismissed, resetting faceVerifyBusy = false")
-            faceVerifyBusy = false
-            faceVerifyError = null
-        }
-    }
-
+    // Face Capture Dialog
     if (ui.showFaceVerification) {
-        key(faceVerificationGeneration) {
-            FaceCaptureScreen(
-                generation = faceVerificationGeneration,
-                onDismiss = {
-                    Log.d(TAG, "🔙 Face capture dismissed")
-                    vm.onFaceVerificationComplete(0f, false)
-                    faceVerifyBusy = false
-                    faceVerifyError = null
-                },
-                onCaptured = { },
-                onBitmapCaptured = { bitmap ->
-                    if (faceVerifyBusy) {
-                        bitmap.recycle()
-                        return@FaceCaptureScreen
-                    }
+        val isCheckIn = ui.checkInFaceVector != null
+        val faceVector = if (isCheckIn) ui.checkInFaceVector else ui.checkOutFaceVector
+        val minimumThreshold = if (isCheckIn) ui.checkInMinimumQualityScore else ui.checkOutMinimumQualityScore
 
-                    faceVerifyBusy = true
-                    faceVerifyError = null
+        FaceCaptureScreen(
+            generation = faceVerificationGeneration,
+            onDismiss = {
+                faceVerifyBusy = false
+                vm.onFaceVerificationComplete(0f, false)
+            },
+            onCaptured = { }, // Empty lambda - we use onBitmapCaptured
+            onBitmapCaptured = { bitmap ->
+                scope.launch {
+                    try {
+                        faceVerifyBusy = true
+                        faceVerifyError = null
 
-                    scope.launch {
-                        try {
-                            val extractor = EmbeddingExtractor.getInstance(context)
-                            val liveEmbedding = withContext(Dispatchers.Default) {
-                                extractor.extractOrNull(bitmap)
-                            }
-                            bitmap.recycle()
-
-                            if (liveEmbedding == null) {
-                                Log.e(TAG, "No face detected")
-                                faceVerifyError = "No face detected. Please try again."
-                                faceVerifyBusy = false
-                                return@launch
-                            }
-
-                            val storedFaceVector = ui.checkInFaceVector ?: ui.checkOutFaceVector
-
-                            if (storedFaceVector == null) {
-                                Log.e(TAG, "❌ No stored face vector from API")
-                                faceVerifyError = "Face verification data not available. Please contact support."
-                                faceVerifyBusy = false
-                                return@launch
-                            }
-
-                            if (!FaceVectorUtil.isValidFaceVector(storedFaceVector)) {
-                                Log.e(TAG, "❌ Invalid stored face vector from API")
-                                faceVerifyError = "Invalid face data. Please contact support."
-                                faceVerifyBusy = false
-                                return@launch
-                            }
-
-                            Log.d(TAG, "✅ Stored face vector loaded from API: ${storedFaceVector.size} dimensions")
-
-                            val similarity = FaceVectorUtil.calculateSimilarity(liveEmbedding, storedFaceVector)
-
-                            Log.d(TAG, "📊 Face similarity score: $similarity")
-
-                            val minimumThreshold = ui.checkInMinimumQualityScore ?: ui.checkOutMinimumQualityScore ?: 0.55f
-
-                            val isVerified = similarity >= minimumThreshold
-
-                            if (isVerified) {
-                                Log.d(TAG, "✅ Face VERIFIED! Similarity: $similarity >= $minimumThreshold")
-                                vm.onFaceVerificationComplete(
-                                    qualityScore = similarity,
-                                    verified = true
-                                )
-                            } else {
-                                Log.e(TAG, "❌ Face NOT verified! Similarity: $similarity < $minimumThreshold")
-                                faceVerifyError = "Face does not match (${String.format("%.2f", similarity * 100)}% match). Please try again."
-                                faceVerifyBusy = false
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Face capture error: ${e.message}", e)
-                            faceVerifyError = "Face capture failed: ${e.message}"
-                            faceVerifyBusy = false
-                            bitmap.recycle()
+                        val extractor = EmbeddingExtractor.getInstance(context)
+                        val embedding = withContext(Dispatchers.Default) {
+                            extractor.extractOrNull(bitmap)
                         }
+                        bitmap.recycle()
+
+                        if (embedding == null) {
+                            faceVerifyError = "No face detected or face is unclear. Please try again."
+                            faceVerifyBusy = false
+                            return@launch
+                        }
+
+                        if (faceVector == null) {
+                            faceVerifyError = "No registered face vector. Please contact admin."
+                            faceVerifyBusy = false
+                            return@launch
+                        }
+
+                        val similarity = EmbeddingExtractor.cosineSimilarity(faceVector, embedding)
+                        Log.d(TAG, "Face similarity score: $similarity (threshold: $minimumThreshold)")
+
+                        if (similarity >= (minimumThreshold ?: 0.55f)) {
+                            Log.d(TAG, "✅ Face verified! Similarity: $similarity >= $minimumThreshold")
+                            vm.onFaceVerificationComplete(
+                                qualityScore = similarity,
+                                verified = true
+                            )
+                        } else {
+                            Log.e(TAG, "❌ Face NOT verified! Similarity: $similarity < $minimumThreshold")
+                            faceVerifyError = "Face does not match (${String.format("%.2f", similarity * 100)}% match). Please try again."
+                            faceVerifyBusy = false
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Face capture error: ${e.message}", e)
+                        faceVerifyError = "Face capture failed: ${e.message}"
+                        faceVerifyBusy = false
                     }
-                },
-                showReasonField = false,
-                reasonMessage = null,
-                isSubmitting = faceVerifyBusy,
-                onSubmit = { },
-                serverError = faceVerifyError
-            )
-        }
+                }
+            },
+            showReasonField = false,
+            reasonMessage = null,
+            isSubmitting = faceVerifyBusy,
+            onSubmit = { },
+            serverError = faceVerifyError
+        )
     }
 
+    // Reason Bottom Sheet
     if (ui.showReasonDialog) {
         val isCheckIn = ui.checkInTToken != null
         val isLateOrEarly = if (isCheckIn) ui.checkInIsLate else ui.checkOutIsEarly
@@ -525,6 +320,7 @@ fun HomePage(
         )
     }
 
+    // Work Report Bottom Sheet
     if (ui.showWorkReportDialog) {
         WorkReportBottomSheet(
             onDismiss = { vm.onWorkReportDialogDismissed() },
@@ -533,837 +329,4 @@ fun HomePage(
             }
         )
     }
-}
-
-@Composable
-private fun QuickAccessSection(
-    onCircularClick: () -> Unit = {},
-    onApplyLeavesClick: () -> Unit = {},
-    onWorkReportClick: () -> Unit = {},
-    onTasksClick: () -> Unit = {}
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Quick Access",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.width(8.dp))
-            Icon(
-                Icons.Outlined.TouchApp,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-
-        Spacer(Modifier.height(4.dp))
-
-        Text(
-            text = "All Your Work Related Tools.",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        // 4×1 Horizontal Row Layout
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            QuickAccessItem(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Outlined.Receipt,
-                title = "Circular",
-                iconColor = Color(0xFF00C896),
-                onClick = onCircularClick
-            )
-            QuickAccessItem(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Outlined.EventNote,
-                title = "Apply Leaves",
-                iconColor = Color(0xFF3B82F6),
-                onClick = onApplyLeavesClick
-            )
-            QuickAccessItem(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Outlined.EditNote,
-                title = "Work Report",
-                iconColor = Color(0xFF00C896),
-                onClick = onWorkReportClick
-            )
-            QuickAccessItem(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Outlined.CheckCircle,
-                title = "Tasks",
-                iconColor = Color(0xFF00C896),
-                onClick = onTasksClick
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuickAccessItem(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    title: String,
-    iconColor: Color = Color(0xFF00C896),
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                // Icon background circle
-                Box(
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(CircleShape)
-                        .background(iconColor.copy(alpha = 0.1f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconColor,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = title,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ReasonBottomSheet(
-    isCheckIn: Boolean,
-    isLateOrEarly: Boolean,
-    isOutOfRange: Boolean,
-    lateOrEarlyReasonRequired: Boolean,
-    outOfRangeReasonRequired: Boolean,
-    onDismiss: () -> Unit,
-    onSubmit: (lateOrEarlyReason: String?, outOfRangeReason: String?) -> Unit
-) {
-    // Single reason state variable
-    var reason by remember { mutableStateOf("") }
-
-    // Determine if any reason is required
-    val reasonRequired = lateOrEarlyReasonRequired || outOfRangeReasonRequired
-
-    // Determine the label for the input box
-    val inputLabel = when {
-        lateOrEarlyReasonRequired && outOfRangeReasonRequired -> "Reason"
-        lateOrEarlyReasonRequired -> if (isCheckIn) "Late Reason" else "Early Check-Out Reason"
-        outOfRangeReasonRequired -> "Out of Range Reason"
-        else -> "Reason"
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp)
-        ) {
-            // Title
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Attendance Note",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Warning messages
-            if (isLateOrEarly || isOutOfRange) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFFF3E0)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (isLateOrEarly) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.AccessTime,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFF9800),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = if (isCheckIn) "You are checking in late" else "You are checking out early",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFFE65100)
-                                )
-                            }
-                        }
-                        if (isOutOfRange) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.LocationOff,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFF9800),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = "You are outside the designated area",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFFE65100)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(20.dp))
-            }
-
-            // Single input box (shown only if reason is required)
-            if (reasonRequired) {
-                Text(
-                    text = "$inputLabel *",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                OutlinedTextField(
-                    value = reason,
-                    onValueChange = { reason = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 5,
-                    placeholder = {
-                        Text(
-                            text = when {
-                                lateOrEarlyReasonRequired && outOfRangeReasonRequired ->
-                                    "Provide reason for both violations"
-                                lateOrEarlyReasonRequired ->
-                                    if (isCheckIn) "Why are you late?" else "Why are you leaving early?"
-                                outOfRangeReasonRequired ->
-                                    "Why are you outside the designated area?"
-                                else -> "Enter reason"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                    )
-                )
-
-                Spacer(Modifier.height(24.dp))
-            } else {
-                // No reason required
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = if (isCheckIn) "Tap Continue to complete check-in" else "Tap Continue to complete check-out",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
-            }
-
-            // Action Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Cancel Button
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline)
-                ) {
-                    Text(
-                        text = "Cancel",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp
-                    )
-                }
-
-                // Continue Button
-                Button(
-                    onClick = {
-                        // Smart parameter passing logic
-                        val lateOrEarly: String?
-                        val outRange: String?
-
-                        when {
-                            // Both reasons required → pass same value to both
-                            lateOrEarlyReasonRequired && outOfRangeReasonRequired -> {
-                                lateOrEarly = if (reason.isNotBlank()) reason else null
-                                outRange = if (reason.isNotBlank()) reason else null
-                            }
-                            // Only late/early reason required
-                            lateOrEarlyReasonRequired -> {
-                                lateOrEarly = if (reason.isNotBlank()) reason else null
-                                outRange = null
-                            }
-                            // Only out of range reason required
-                            outOfRangeReasonRequired -> {
-                                lateOrEarly = null
-                                outRange = if (reason.isNotBlank()) reason else null
-                            }
-                            // No reason required
-                            else -> {
-                                lateOrEarly = null
-                                outRange = null
-                            }
-                        }
-
-                        // Validate: if reason is required, it must not be blank
-                        if (reasonRequired && reason.isBlank()) {
-                            return@Button
-                        }
-
-                        onSubmit(lateOrEarly, outRange)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = !reasonRequired || reason.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                    )
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Continue",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
-                        Icon(
-                            imageVector = Icons.Default.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-
-
-@Composable
-fun HomeTopBar(
-    context: Context,
-    companyName: String?,
-    userName: String?,
-    profileUrl: String?,
-    isRefreshing: Boolean,
-    onRefreshClick: () -> Unit,
-    onProfileClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = companyName ?: "Company Name",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "Welcome, ${userName ?: "User"}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onRefreshClick,
-                enabled = !isRefreshing
-            ) {
-                if (isRefreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        Icons.Outlined.Refresh,
-                        contentDescription = "Refresh",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onProfileClick)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!profileUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = profileUrl,
-                        contentDescription = "Profile",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = "Profile",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun WorkReportBottomSheet(
-    onDismiss: () -> Unit,
-    onSubmit: (workReport: String, fileUri: Uri?) -> Unit
-) {
-    var workReport by remember { mutableStateOf("") }
-    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
-    var selectedFileName by remember { mutableStateOf<String?>(null) }
-    var showError by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf("") }
-
-    // ✅ Add this: Store the camera URI separately
-    val cameraPhotoUri = remember { mutableStateOf<Uri?>(null) }
-
-    val context = LocalContext.current
-
-    // File Picker Launcher
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        selectedFileUri = uri
-        uri?.let {
-            val cursor = context.contentResolver.query(it, null, null, null, null)
-            cursor?.use { c ->
-                if (c.moveToFirst()) {
-                    val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex != -1) {
-                        selectedFileName = c.getString(nameIndex)
-                    }
-                }
-            }
-        }
-    }
-
-    // Camera Launcher
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) {
-            // Photo was captured successfully
-            selectedFileUri = cameraPhotoUri.value
-            selectedFileName = "Photo_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.jpg"
-        } else {
-            // User cancelled or error occurred
-            cameraPhotoUri.value = null
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Title
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Work Report",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Work Report Text Field with Character Counter
-            Column {
-                OutlinedTextField(
-                    value = workReport,
-                    onValueChange = {
-                        workReport = it
-                        showError = false
-                    },
-                    label = { Text("Describe your work") },
-                    placeholder = { Text("What did you accomplish today?") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp),
-                    minLines = 4,
-                    maxLines = 8,
-                    shape = RoundedCornerShape(12.dp),
-                    isError = showError,
-                    supportingText = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Minimum 10 characters",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "${workReport.trim().length} / 10",
-                                fontSize = 12.sp,
-                                color = if (workReport.trim().length >= 10)
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (workReport.trim().length >= 10)
-                                    FontWeight.SemiBold
-                                else
-                                    FontWeight.Normal
-                            )
-                        }
-                    }
-                )
-            }
-
-            // Error Message
-            if (showError) {
-                Spacer(Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Error,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = errorMessage,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Attachment Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Attach Document/Photo (Optional)",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    // Two buttons: Camera and Files
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Camera Button - ✅ FIXED VERSION
-                        OutlinedButton(
-                            onClick = {
-                                try {
-                                    val photoFile = createImageFile(context)
-                                    val photoUri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.provider",
-                                        photoFile
-                                    )
-                                    cameraPhotoUri.value = photoUri
-                                    cameraLauncher.launch(photoUri)
-                                } catch (e: Exception) {
-                                    Log.e("WorkReport", "Error opening camera", e)
-                                    showError = true
-                                    errorMessage = "Failed to open camera"
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Camera", fontSize = 14.sp)
-                        }
-
-                        // File Picker Button
-                        OutlinedButton(
-                            onClick = {
-                                filePickerLauncher.launch("*/*")
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AttachFile,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Files", fontSize = 14.sp)
-                        }
-                    }
-
-                    // Show selected file/photo
-                    if (selectedFileName != null) {
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    MaterialTheme.colorScheme.surface,
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Show camera or document icon based on file name
-                            Icon(
-                                imageVector = if (selectedFileName?.startsWith("Photo_") == true)
-                                    Icons.Default.CameraAlt
-                                else
-                                    Icons.Default.Description,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = selectedFileName ?: "",
-                                fontSize = 13.sp,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            IconButton(
-                                onClick = {
-                                    selectedFileUri = null
-                                    selectedFileName = null
-                                    cameraPhotoUri.value = null
-                                },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Remove file",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // Submit Button with Validation
-            Button(
-                onClick = {
-                    showError = false
-                    errorMessage = ""
-
-                    val trimmedReport = workReport.trim()
-
-                    when {
-                        trimmedReport.isEmpty() -> {
-                            showError = true
-                            errorMessage = "Work description cannot be empty"
-                        }
-                        trimmedReport.length < 10 -> {
-                            showError = true
-                            errorMessage = "Work description must be at least 10 characters (currently ${trimmedReport.length})"
-                        }
-                        else -> {
-                            onSubmit(trimmedReport, selectedFileUri)
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = workReport.trim().isNotEmpty(),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(vertical = 16.dp)
-            ) {
-                Text(
-                    text = "Submit Work Report",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-    }
-}
-
-// Helper function to create image file
-private fun createImageFile(context: Context): File {
-    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-    val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-    return File.createTempFile(
-        "WORK_REPORT_${timeStamp}_",
-        ".jpg",
-        storageDir
-    )
 }
