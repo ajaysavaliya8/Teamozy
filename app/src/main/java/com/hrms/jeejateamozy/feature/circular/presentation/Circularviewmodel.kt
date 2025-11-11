@@ -4,8 +4,15 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hrms.jeejateamozy.feature.circular.data.*
+
+import com.hrms.jeejateamozy.core.network.Circular
+import com.hrms.jeejateamozy.core.network.CircularDetail
+import com.hrms.jeejateamozy.core.network.CircularStats
+import com.hrms.jeejateamozy.core.network.PaginationInfo
+
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+
 
 /**
  * UI State for Circular List Screen

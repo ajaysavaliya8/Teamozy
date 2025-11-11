@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hrms.jeejateamozy.feature.circular.data.CircularDetail
+import com.hrms.jeejateamozy.core.network.CircularDetail
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 

@@ -4,6 +4,12 @@ import android.content.Context
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.state.AppStateManager
+
+import com.hrms.jeejateamozy.core.network.Circular
+import com.hrms.jeejateamozy.core.network.CircularDetail
+import com.hrms.jeejateamozy.core.network.CircularStats
+import com.hrms.jeejateamozy.core.network.PaginationInfo
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject

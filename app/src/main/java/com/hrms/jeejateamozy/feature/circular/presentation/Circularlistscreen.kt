@@ -11,9 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,8 +20,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hrms.jeejateamozy.feature.circular.data.Circular
-import com.hrms.jeejateamozy.feature.circular.data.CircularStats
+import com.hrms.jeejateamozy.core.network.Circular
+import com.hrms.jeejateamozy.core.network.CircularStats
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -58,13 +55,6 @@ fun CircularListScreen(
         }
     }
 
-    // Pull to refresh state
-    val refreshing = uiState.isLoading
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = refreshing,
-        onRefresh = { viewModel.refresh() }
-    )
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -95,7 +85,6 @@ fun CircularListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .pullRefresh(pullRefreshState)
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -154,12 +143,6 @@ fun CircularListScreen(
                 }
             }
 
-            // Pull to refresh indicator
-            PullRefreshIndicator(
-                refreshing = refreshing,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
         }
     }
 

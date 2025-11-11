@@ -58,6 +58,7 @@ fun HomePage(
     onLogout: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToWorkReport: () -> Unit = {},
+    onNavigateToCircular: () -> Unit = {},
     paddingValues: PaddingValues,
     vm: AttendanceViewModel = koinViewModel()
 ) {
@@ -217,7 +218,8 @@ fun HomePage(
                 // Quick Access Section
                 QuickAccessSection(
                     onCircularClick = {
-                        Log.d(TAG, "Circular clicked - Coming Soon")
+                        Log.d(TAG, "Circular clicked - navigating...")
+                        onNavigateToCircular()
                     },
                     onApplyLeavesClick = {
                         Log.d(TAG, "Apply Leaves clicked - Coming Soon")
@@ -227,7 +229,6 @@ fun HomePage(
                         onNavigateToWorkReport()
                     }
                 )
-
                 Spacer(Modifier.height(40.dp))
             }
         }
