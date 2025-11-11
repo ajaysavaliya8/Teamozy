@@ -4,7 +4,8 @@ package com.hrms.jeejateamozy.feature.home.presentation
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,7 +20,6 @@ import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
 import com.hrms.jeejateamozy.feature.home.presentation.components.AttendanceStatusCard
 import com.hrms.jeejateamozy.feature.home.presentation.components.MessageCard
 import com.hrms.jeejateamozy.feature.home.presentation.components.QuickAccessSection
-import com.hrms.jeejateamozy.feature.home.presentation.components.HomeTopBar
 import com.hrms.jeejateamozy.feature.home.presentation.dialogs.ReasonBottomSheet
 import com.hrms.jeejateamozy.feature.home.presentation.dialogs.WorkReportBottomSheet
 import com.hrms.jeejateamozy.feature.home.presentation.utils.calculateElapsedSeconds
@@ -33,20 +33,31 @@ import org.koin.androidx.compose.koinViewModel
 private const val TAG = "HomePage"
 
 /**
- * HomePage - Main Home Screen
+ * HomePage - Refactored Main Screen
  *
- * Features:
- * - Attendance check-in/check-out with face verification
- * - Quick Access to Circular, Apply Leaves, Work Report
- * - Timer for tracking work hours
- * - Status cards and messages
+ * This file now only contains:
+ * - Main HomePage composable
+ * - ViewModel integration
+ * - State management
+ * - Timer logic
+ *
+ * UI Components moved to:
+ * - components/AttendanceStatusCard.kt
+ * - components/QuickAccessSection.kt
+ * - components/MessageCard.kt
+ * - components/HomeTopBar.kt
+ * - dialogs/ReasonBottomSheet.kt
+ * - dialogs/WorkReportBottomSheet.kt
+ *
+ * Utilities moved to:
+ * - utils/HomeUtils.kt
+ * - utils/PermissionChecker.kt
  */
 @Composable
 fun HomePage(
     onLogout: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToWorkReport: () -> Unit = {},
-    onNavigateToCircular: () -> Unit = {},  // ⭐ NEW: Circular navigation callback
     paddingValues: PaddingValues,
     vm: AttendanceViewModel = koinViewModel()
 ) {
@@ -62,64 +73,91 @@ fun HomePage(
     var faceVerificationGeneration by remember { mutableIntStateOf(0) }
 
     // Timer state
-    val isTimerRunning = ui.currentState == "CHECK_OUT_NEEDED"
-    val elapsedSeconds = calculateElapsedSeconds(ui.lastCheckInTime, isTimerRunning)
-
-    // Reason dialog states
-    var showLateReasonDialog by remember { mutableStateOf(false) }
-    var showOutOfRangeCheckInDialog by remember { mutableStateOf(false) }
-    var showEarlyReasonDialog by remember { mutableStateOf(false) }
-    var showOutOfRangeCheckOutDialog by remember { mutableStateOf(false) }
-    var showWorkReportDialog by remember { mutableStateOf(false) }
+    var elapsedSeconds by remember { mutableIntStateOf(0) }
+    var isTimerRunning by remember { mutableStateOf(false) }
 
     // Permission checkers
     val checkInPermissionChecker = rememberPermissionChecker(
-        onAllGranted = {
-            Log.d(TAG, "All check-in permissions granted, calling checkIn")
-            vm.checkIn()
-        },
-        onDenied = {
-            scope.launch {
-                snack.showSnackbar("Location permission is required for attendance")
-            }
+        context = context,
+        onPermissionsGranted = {
+            Log.d(TAG, "✅ Permissions granted for Check In")
+            vm.startCheckIn(context)
         }
     )
 
     val checkOutPermissionChecker = rememberPermissionChecker(
-        onAllGranted = {
-            Log.d(TAG, "All check-out permissions granted, calling checkOut")
-            vm.checkOut()
-        },
-        onDenied = {
-            scope.launch {
-                snack.showSnackbar("Location permission is required for attendance")
-            }
+        context = context,
+        onPermissionsGranted = {
+            Log.d(TAG, "✅ Permissions granted for Check Out")
+            vm.startCheckOut(context)
         }
     )
 
-    // Listen to events
-    LaunchedEffect(Unit) {
-        vm.events.collect { event ->
-            when (event) {
-                is AttendanceEvent.ShowError -> {
-                    Log.e(TAG, "AttendanceEvent.ShowError: ${event.message}")
-                    snack.showSnackbar(event.message)
+    // Timer management
+    LaunchedEffect(ui.currentState) {
+        if (ui.currentState == "CHECK_OUT_NEEDED") {
+            if (!isTimerRunning) {
+                val lastCheckInTime = try {
+                    ui::class.java.getDeclaredField("lastCheckInTime").let { field ->
+                        field.isAccessible = true
+                        field.get(ui) as? String
+                    }
+                } catch (e: Exception) {
+                    null
                 }
-                is AttendanceEvent.ShowSuccess -> {
-                    Log.d(TAG, "AttendanceEvent.ShowSuccess: ${event.message}")
-                    snack.showSnackbar(event.message)
+
+                val elapsed = calculateElapsedSeconds(lastCheckInTime)
+                elapsedSeconds = elapsed
+                isTimerRunning = true
+
+                if (lastCheckInTime != null) {
+                    Log.d(TAG, "✅ Continuing timer from last_check_in_time: $lastCheckInTime")
+                    Log.d(TAG, "⏱️ Elapsed time: ${elapsed}s (${elapsed/3600}h ${(elapsed%3600)/60}m)")
+                } else {
+                    Log.d(TAG, "✅ Timer started (lastCheckInTime not available yet)")
                 }
+            }
+        } else {
+            if (isTimerRunning) {
+                isTimerRunning = false
+                elapsedSeconds = 0
+                Log.d(TAG, "⏹️ Timer stopped")
             }
         }
     }
 
-    // Show dialogs based on UI state
-    LaunchedEffect(ui.showLateReasonDialog, ui.showOutOfRangeCheckInDialog, ui.showEarlyReasonDialog, ui.showOutOfRangeCheckOutDialog, ui.showWorkReportDialog) {
-        showLateReasonDialog = ui.showLateReasonDialog
-        showOutOfRangeCheckInDialog = ui.showOutOfRangeCheckInDialog
-        showEarlyReasonDialog = ui.showEarlyReasonDialog
-        showOutOfRangeCheckOutDialog = ui.showOutOfRangeCheckOutDialog
-        showWorkReportDialog = ui.showWorkReportDialog
+    LaunchedEffect(isTimerRunning) {
+        while (isTimerRunning) {
+            delay(1000)
+            elapsedSeconds++
+        }
+    }
+
+    // Initial status refresh
+    LaunchedEffect(Unit) {
+        vm.refreshStatus()
+    }
+
+    // Listen to ViewModel events
+    LaunchedEffect(Unit) {
+        vm.events.collect { event ->
+            when (event) {
+                is AttendanceEvent.ShowError -> {
+                    Log.d(TAG, "🔴 Event received: ${event.message}")
+                    snack.showSnackbar(
+                        message = event.message,
+                        duration = SnackbarDuration.Long
+                    )
+                }
+                is AttendanceEvent.ShowSuccess -> {
+                    Log.d(TAG, "🟢 Event received: ${event.message}")
+                    snack.showSnackbar(
+                        message = event.message,
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -148,61 +186,49 @@ fun HomePage(
             )
 
             // Scrollable Content
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
             ) {
-                item { Spacer(Modifier.height(8.dp)) }
+                Spacer(Modifier.height(24.dp))
 
                 // Attendance Status Card
-                item {
-                    AttendanceStatusCard(
-                        currentState = ui.currentState,
-                        isTimerRunning = isTimerRunning,
-                        elapsedSeconds = elapsedSeconds,
-                        isLoading = ui.isLoading,
-                        isFaceVerifyBusy = faceVerifyBusy,
-                        onCheckInClick = {
-                            Log.d(TAG, "CHECK IN BUTTON CLICKED")
-                            faceVerificationGeneration++
-                            checkInPermissionChecker()
-                        },
-                        onCheckOutClick = {
-                            Log.d(TAG, "CHECK OUT BUTTON CLICKED")
-                            faceVerificationGeneration++
-                            checkOutPermissionChecker()
-                        }
-                    )
-                }
-
-                // Message Card (if needed)
-                if (ui.message.isNotBlank()) {
-                    item {
-                        MessageCard(message = ui.message)
+                AttendanceStatusCard(
+                    currentState = ui.currentState,
+                    isTimerRunning = isTimerRunning,
+                    elapsedSeconds = elapsedSeconds,
+                    isLoading = ui.isLoading,
+                    isFaceVerifyBusy = faceVerifyBusy,
+                    onCheckInClick = {
+                        Log.d(TAG, "CHECK IN BUTTON CLICKED")
+                        faceVerificationGeneration++
+                        checkInPermissionChecker()
+                    },
+                    onCheckOutClick = {
+                        Log.d(TAG, "CHECK OUT BUTTON CLICKED")
+                        faceVerificationGeneration++
+                        checkOutPermissionChecker()
                     }
-                }
+                )
 
-                item { Spacer(Modifier.height(8.dp)) }
+                Spacer(Modifier.height(40.dp))
 
                 // Quick Access Section
-                item {
-                    QuickAccessSection(
-                        onCircularClick = {
-                            Log.d(TAG, "Circular clicked")
-                            onNavigateToCircular()  // ⭐ NEW: Navigate to Circular
-                        },
-                        onApplyLeavesClick = {
-                            Log.d(TAG, "Apply Leaves clicked - Coming Soon")
-                        },
-                        onWorkReportClick = {
-                            Log.d(TAG, "Work Report clicked")
-                            onNavigateToWorkReport()
-                        }
-                    )
-                }
+                QuickAccessSection(
+                    onCircularClick = {
+                        Log.d(TAG, "Circular clicked - Coming Soon")
+                    },
+                    onApplyLeavesClick = {
+                        Log.d(TAG, "Apply Leaves clicked - Coming Soon")
+                    },
+                    onWorkReportClick = {
+                        Log.d(TAG, "Work Report clicked")
+                        onNavigateToWorkReport()
+                    }
+                )
 
-                item { Spacer(Modifier.height(8.dp)) }
+                Spacer(Modifier.height(40.dp))
             }
         }
     }
@@ -255,91 +281,51 @@ fun HomePage(
                             )
                         } else {
                             Log.e(TAG, "❌ Face NOT verified! Similarity: $similarity < $minimumThreshold")
-                            faceVerifyError = "Face verification failed. Please try again."
-                            delay(2000)
-                            faceVerificationGeneration++
+                            faceVerifyError = "Face does not match (${String.format("%.2f", similarity * 100)}% match). Please try again."
+                            faceVerifyBusy = false
                         }
-
-                        faceVerifyBusy = false
                     } catch (e: Exception) {
-                        Log.e(TAG, "Face verification exception", e)
-                        faceVerifyError = "Face verification error: ${e.message}"
+                        Log.e(TAG, "Face capture error: ${e.message}", e)
+                        faceVerifyError = "Face capture failed: ${e.message}"
                         faceVerifyBusy = false
                     }
                 }
-            }
+            },
+            showReasonField = false,
+            reasonMessage = null,
+            isSubmitting = faceVerifyBusy,
+            onSubmit = { },
+            serverError = faceVerifyError
         )
-
-        // Show error if face verification failed
-        faceVerifyError?.let { error ->
-            AlertDialog(
-                onDismissRequest = { faceVerifyError = null },
-                title = { Text("Face Verification Failed") },
-                text = { Text(error) },
-                confirmButton = {
-                    TextButton(onClick = { faceVerifyError = null }) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
     }
 
-    // Late Reason Dialog
-    if (showLateReasonDialog) {
+    // Reason Bottom Sheet
+    if (ui.showReasonDialog) {
+        val isCheckIn = ui.checkInTToken != null
+        val isLateOrEarly = if (isCheckIn) ui.checkInIsLate else ui.checkOutIsEarly
+        val isOutOfRange = if (isCheckIn) ui.checkInIsOutOfRange else ui.checkOutIsOutOfRange
+        val lateOrEarlyReasonRequired = if (isCheckIn) ui.checkInLateReasonRequired else ui.checkOutEarlyReasonRequired
+        val outOfRangeReasonRequired = if (isCheckIn) ui.checkInOutOfRangeReasonRequired else ui.checkOutOutOfRangeReasonRequired
+
         ReasonBottomSheet(
-            title = "Late Arrival Reason",
-            onDismiss = { showLateReasonDialog = false },
-            onSubmit = { reason ->
-                vm.submitLateReason(reason)
-                showLateReasonDialog = false
+            isCheckIn = isCheckIn,
+            isLateOrEarly = isLateOrEarly,
+            isOutOfRange = isOutOfRange,
+            lateOrEarlyReasonRequired = lateOrEarlyReasonRequired,
+            outOfRangeReasonRequired = outOfRangeReasonRequired,
+            onDismiss = { vm.onReasonDialogDismissed() },
+            onSubmit = { lateOrEarlyReason, outOfRangeReason ->
+                vm.onReasonSubmitted(lateOrEarlyReason, outOfRangeReason)
             }
         )
     }
 
-    // Out of Range Check-In Dialog
-    if (showOutOfRangeCheckInDialog) {
-        ReasonBottomSheet(
-            title = "Out of Range Check-In Reason",
-            onDismiss = { showOutOfRangeCheckInDialog = false },
-            onSubmit = { reason ->
-                vm.submitOutOfRangeCheckInReason(reason)
-                showOutOfRangeCheckInDialog = false
-            }
-        )
-    }
-
-    // Early Reason Dialog
-    if (showEarlyReasonDialog) {
-        ReasonBottomSheet(
-            title = "Early Checkout Reason",
-            onDismiss = { showEarlyReasonDialog = false },
-            onSubmit = { reason ->
-                vm.submitEarlyReason(reason)
-                showEarlyReasonDialog = false
-            }
-        )
-    }
-
-    // Out of Range Check-Out Dialog
-    if (showOutOfRangeCheckOutDialog) {
-        ReasonBottomSheet(
-            title = "Out of Range Check-Out Reason",
-            onDismiss = { showOutOfRangeCheckOutDialog = false },
-            onSubmit = { reason ->
-                vm.submitOutOfRangeCheckOutReason(reason)
-                showOutOfRangeCheckOutDialog = false
-            }
-        )
-    }
-
-    // Work Report Dialog
-    if (showWorkReportDialog) {
+    // Work Report Bottom Sheet
+    if (ui.showWorkReportDialog) {
         WorkReportBottomSheet(
-            onDismiss = { showWorkReportDialog = false },
+            onDismiss = { vm.onWorkReportDialogDismissed() },
             onSubmit = { workReport, fileUri ->
-                vm.submitWorkReport(workReport, fileUri)
-                showWorkReportDialog = false
+                vm.onWorkReportSubmitted(workReport, fileUri)
             }
         )
     }
