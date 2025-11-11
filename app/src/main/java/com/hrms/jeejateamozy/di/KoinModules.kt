@@ -13,6 +13,8 @@ import org.koin.dsl.module
 
 import com.hrms.jeejateamozy.feature.circular.data.CircularRepository
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularViewModel
+import com.hrms.jeejateamozy.feature.leave.data.LeaveRepository
+import com.hrms.jeejateamozy.feature.leave.presentation.LeaveViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
@@ -40,4 +42,9 @@ val homeModule = module {
 val circularModule = module {
     single { CircularRepository(androidContext()) }
     viewModel { CircularViewModel(get()) }
+}
+
+val leaveModule = module {
+    single { LeaveRepository(androidContext()) }
+    viewModel { LeaveViewModel(get()) }
 }

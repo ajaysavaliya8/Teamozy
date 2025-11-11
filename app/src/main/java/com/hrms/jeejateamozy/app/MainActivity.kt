@@ -34,6 +34,7 @@ import com.hrms.jeejateamozy.di.attendanceModule
 import com.hrms.jeejateamozy.di.circularModule
 import com.hrms.jeejateamozy.di.permissionsModule
 import com.hrms.jeejateamozy.di.homeModule
+import com.hrms.jeejateamozy.di.leaveModule
 
 private enum class AppScreen {
     SPLASH,
@@ -57,7 +58,8 @@ class MainActivity : ComponentActivity() {
                     attendanceModule,
                     permissionsModule,
                     homeModule,
-                    circularModule
+                    circularModule,
+                    leaveModule
                 )
             }
         }

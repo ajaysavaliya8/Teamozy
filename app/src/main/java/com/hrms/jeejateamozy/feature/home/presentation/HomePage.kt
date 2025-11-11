@@ -59,6 +59,7 @@ fun HomePage(
     onNavigateToProfile: () -> Unit,
     onNavigateToWorkReport: () -> Unit = {},
     onNavigateToCircular: () -> Unit = {},
+    onNavigateToApplyLeaves: () -> Unit = {},
     paddingValues: PaddingValues,
     vm: AttendanceViewModel = koinViewModel()
 ) {
@@ -223,6 +224,7 @@ fun HomePage(
                     },
                     onApplyLeavesClick = {
                         Log.d(TAG, "Apply Leaves clicked - Coming Soon")
+                        onNavigateToApplyLeaves()
                     },
                     onWorkReportClick = {
                         Log.d(TAG, "Work Report clicked")

@@ -481,3 +481,299 @@ data class CreatedWorkReportDto(
     val report_status: String,
     val submitted_at: String
 )
+
+/**
+ * Leave Type
+ */
+data class LeaveType(
+    val id: Int,
+    val leaveTypeName: String,
+    val code: String,
+    val requiresApproval: Boolean,
+    val applyOnHolidays: Boolean,
+    val isPaid: Boolean,
+    val applicableFor: String,
+    val description: String?
+)
+
+/**
+ * Leave Application
+ */
+data class LeaveApplication(
+    val id: Int,
+    val leaveType: LeaveTypeInfo,
+    val startDate: String,
+    val endDate: String,
+    val numDays: Int,
+    val leaveReason: String,
+    val supportingDocumentUrl: String?,
+    val alternateContact: String?,
+    val taskDependedOnYou: Boolean,
+    val dependencyHandledBy: String?,
+    val status: String,
+    val appliedAt: String,
+    val approver: ApproverInfo?,
+    val rejectionReason: String?,
+    val cancelledAt: String?,
+    val cancellationReason: String?,
+    val withdrawnAt: String?,
+    val withdrawalReason: String?,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+data class LeaveTypeInfo(
+    val id: Int,
+    val name: String,
+    val code: String,
+    val isPaid: Boolean
+)
+
+data class ApproverInfo(
+    val name: String?,
+    val status: String?,
+    val remarks: String?,
+    val approvedAt: String?
+)
+
+/**
+ * Leave Summary
+ */
+data class LeaveSummary(
+    val year: Int,
+    val totalDaysTaken: Int,
+    val byStatus: Map<String, StatusCount>,
+    val byType: List<TypeCount>,
+    val upcomingLeaves: List<UpcomingLeave>
+)
+
+data class StatusCount(
+    val count: Int,
+    val totalDays: Int
+)
+
+data class TypeCount(
+    val leaveType: String,
+    val isPaid: Boolean,
+    val count: Int,
+    val totalDays: Int
+)
+
+data class UpcomingLeave(
+    val id: Int,
+    val leaveType: String,
+    val startDate: String,
+    val endDate: String,
+    val numDays: Int,
+    val status: String
+)
+
+// -------- API Response Models --------
+
+/**
+ * GET /leave-types Response
+ */
+data class LeaveTypesResponse(
+    val status: String,
+    val data: List<LeaveTypeDto>
+)
+
+data class LeaveTypeDto(
+    val id: Int,
+    val leave_type_name: String,
+    val code: String,
+    val requires_approval: Boolean,
+    val apply_on_holidays: Boolean,
+    val is_paid: Boolean,
+    val applicable_for: String,
+    val description: String?
+) {
+    fun toDomain() = LeaveType(
+        id = id,
+        leaveTypeName = leave_type_name,
+        code = code,
+        requiresApproval = requires_approval,
+        applyOnHolidays = apply_on_holidays,
+        isPaid = is_paid,
+        applicableFor = applicable_for,
+        description = description
+    )
+}
+
+/**
+ * POST /apply-leave Response
+ */
+data class ApplyLeaveResponse(
+    val status: String,
+    val message: String,
+    val data: ApplyLeaveData?
+)
+
+data class ApplyLeaveData(
+    val application_id: Int,
+    val applied_at: String,
+    val num_days: Int,
+    val status: String,
+    val requires_approval: Boolean
+)
+
+/**
+ * GET /leave-applications Response
+ */
+data class LeaveApplicationsResponse(
+    val status: String,
+    val data: LeaveApplicationsData
+)
+
+data class LeaveApplicationsData(
+    val applications: List<LeaveApplicationDto>,
+    val pagination: PaginationDto
+)
+
+data class LeaveApplicationDto(
+    val id: Int,
+    val leave_type: LeaveTypeInfoDto,
+    val start_date: String,
+    val end_date: String,
+    val num_days: Int,
+    val leave_reason: String,
+    val supporting_document_url: String?,
+    val alternate_contact: String?,
+    val task_depended_on_you: Boolean,
+    val dependency_handled_by: String?,
+    val status: String,
+    val applied_at: String,
+    val approver: ApproverInfoDto?,
+    val rejection_reason: String?,
+    val cancelled_at: String?,
+    val cancellation_reason: String?,
+    val withdrawn_at: String?,
+    val withdrawal_reason: String?,
+    val created_at: String,
+    val updated_at: String
+) {
+    fun toDomain() = LeaveApplication(
+        id = id,
+        leaveType = leave_type.toDomain(),
+        startDate = start_date,
+        endDate = end_date,
+        numDays = num_days,
+        leaveReason = leave_reason,
+        supportingDocumentUrl = supporting_document_url,
+        alternateContact = alternate_contact,
+        taskDependedOnYou = task_depended_on_you,
+        dependencyHandledBy = dependency_handled_by,
+        status = status,
+        appliedAt = applied_at,
+        approver = approver?.toDomain(),
+        rejectionReason = rejection_reason,
+        cancelledAt = cancelled_at,
+        cancellationReason = cancellation_reason,
+        withdrawnAt = withdrawn_at,
+        withdrawalReason = withdrawal_reason,
+        createdAt = created_at,
+        updatedAt = updated_at
+    )
+}
+
+data class LeaveTypeInfoDto(
+    val id: Int,
+    val name: String,
+    val code: String,
+    val is_paid: Boolean
+) {
+    fun toDomain() = LeaveTypeInfo(
+        id = id,
+        name = name,
+        code = code,
+        isPaid = is_paid
+    )
+}
+
+data class ApproverInfoDto(
+    val name: String?,
+    val status: String?,
+    val remarks: String?,
+    val approved_at: String?
+) {
+    fun toDomain() = ApproverInfo(
+        name = name,
+        status = status,
+        remarks = remarks,
+        approvedAt = approved_at
+    )
+}
+
+/**
+ * GET /leave-summary Response
+ */
+data class LeaveSummaryResponse(
+    val status: String,
+    val data: LeaveSummaryDto
+)
+
+data class LeaveSummaryDto(
+    val year: Int,
+    val total_days_taken: Int,
+    val by_status: Map<String, StatusCountDto>,
+    val by_type: List<TypeCountDto>,
+    val upcoming_leaves: List<UpcomingLeaveDto>
+) {
+    fun toDomain() = LeaveSummary(
+        year = year,
+        totalDaysTaken = total_days_taken,
+        byStatus = by_status.mapValues { it.value.toDomain() },
+        byType = by_type.map { it.toDomain() },
+        upcomingLeaves = upcoming_leaves.map { it.toDomain() }
+    )
+}
+
+data class StatusCountDto(
+    val count: Int,
+    val total_days: Int
+) {
+    fun toDomain() = StatusCount(
+        count = count,
+        totalDays = total_days
+    )
+}
+
+data class TypeCountDto(
+    val leave_type: String,
+    val is_paid: Boolean,
+    val count: Int,
+    val total_days: Int
+) {
+    fun toDomain() = TypeCount(
+        leaveType = leave_type,
+        isPaid = is_paid,
+        count = count,
+        totalDays = total_days
+    )
+}
+
+data class UpcomingLeaveDto(
+    val id: Int,
+    val leave_type: String,
+    val start_date: String,
+    val end_date: String,
+    val num_days: Int,
+    val status: String
+) {
+    fun toDomain() = UpcomingLeave(
+        id = id,
+        leaveType = leave_type,
+        startDate = start_date,
+        endDate = end_date,
+        numDays = num_days,
+        status = status
+    )
+}
+
+/**
+ * POST /withdraw-leave Response
+ */
+data class WithdrawLeaveResponse(
+    val status: String,
+    val message: String
+)

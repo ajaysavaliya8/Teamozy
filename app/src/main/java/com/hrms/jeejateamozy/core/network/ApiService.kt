@@ -220,4 +220,63 @@ interface ApiService {
     @GET("circulars/stats/summary")
     suspend fun getCircularStats(): Response<CircularStatsResponse>
 
+    /**
+     * Get all available leave types
+     */
+    @GET("leave-types")
+    suspend fun getLeaveTypes(): Response<LeaveTypesResponse>
+
+    /**
+     * Apply for leave
+     */
+    @Multipart
+    @POST("apply-leave")
+    suspend fun applyLeave(
+        @Part("leave_type_id") leaveTypeId: Int,
+        @Part("start_date") startDate: RequestBody,
+        @Part("end_date") endDate: RequestBody,
+        @Part("leave_reason") leaveReason: RequestBody,
+        @Part("alternate_contact") alternateContact: RequestBody?,
+        @Part("task_depended_on_you") taskDependedOnYou: Boolean,
+        @Part("dependency_handled_by") dependencyHandledBy: RequestBody?,
+        @Part supportingDocument: MultipartBody.Part?
+    ): Response<ApplyLeaveResponse>
+
+    /**
+     * Get leave applications history
+     */
+    @GET("leave-applications")
+    suspend fun getLeaveApplications(
+        @Query("status") status: String? = null,
+        @Query("start_date") startDate: String? = null,
+        @Query("end_date") endDate: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 10
+    ): Response<LeaveApplicationsResponse>
+
+    /**
+     * Get leave application detail
+     */
+    @GET("leave-applications/{application_id}")
+    suspend fun getLeaveApplicationDetail(
+        @Path("application_id") applicationId: Int
+    ): Response<BasicResponse>  // Uses same structure as LeaveApplicationDto
+
+    /**
+     * Withdraw leave application
+     */
+    @FormUrlEncoded
+    @POST("withdraw-leave/{application_id}")
+    suspend fun withdrawLeave(
+        @Path("application_id") applicationId: Int,
+        @Field("withdrawal_reason") withdrawalReason: String
+    ): Response<WithdrawLeaveResponse>
+
+    /**
+     * Get leave summary
+     */
+    @GET("leave-summary")
+    suspend fun getLeaveSummary(
+        @Query("year") year: Int? = null
+    ): Response<LeaveSummaryResponse>
 }
