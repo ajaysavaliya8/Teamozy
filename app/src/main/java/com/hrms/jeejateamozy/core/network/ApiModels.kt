@@ -183,6 +183,227 @@ data class WorkReportListResponse(
     val reports: List<WorkReportDto>
 )
 
+data class Circular(
+    val id: Int,
+    val title: String,
+    val description: String,
+    val circularType: String,
+    val priority: String,
+    val attachments: List<String>,
+    val effectiveDate: String?,
+    val expiryDate: String?,
+    val publishedDate: String?,
+    val status: String,
+    val isCompanyWide: Boolean,
+    val createdBy: String?,
+    val approvedBy: String?,
+    val approvedAt: String?,
+    val createdAt: String?
+)
+
+/**
+ * Circular detail data model (includes additional fields)
+ */
+data class CircularDetail(
+    val id: Int,
+    val title: String,
+    val description: String,
+    val circularType: String,
+    val priority: String,
+    val attachments: List<String>,
+    val effectiveDate: String?,
+    val expiryDate: String?,
+    val publishedDate: String?,
+    val status: String,
+    val isCompanyWide: Boolean,
+    val approvalComments: String?,
+    val createdBy: CreatedBy?,
+    val approvedBy: ApprovedBy?,
+    val approvedAt: String?,
+    val createdAt: String?,
+    val updatedAt: String?
+)
+
+data class CreatedBy(
+    val name: String?,
+    val email: String?
+)
+
+data class ApprovedBy(
+    val name: String?,
+    val email: String?
+)
+
+/**
+ * Circular statistics
+ */
+data class CircularStats(
+    val totalCirculars: Int,
+    val highPriority: Int,
+    val recent7Days: Int,
+    val byType: Map<String, Int>
+)
+
+/**
+ * Pagination info
+ */
+data class PaginationInfo(
+    val currentPage: Int,
+    val pageSize: Int,
+    val totalCount: Int,
+    val totalPages: Int
+)
+
+// -------- API Response Models --------
+
+/**
+ * API Response for GET /circulars
+ */
+data class CircularListResponse(
+    val status: String,
+    val data: CircularListData
+)
+
+data class CircularListData(
+    val circulars: List<CircularDto>,
+    val pagination: PaginationDto
+)
+
+/**
+ * Circular DTO from API
+ */
+data class CircularDto(
+    val id: Int,
+    val title: String,
+    val description: String,
+    val circular_type: String,
+    val priority: String,
+    val attachments: List<String>,
+    val effective_date: String?,
+    val expiry_date: String?,
+    val published_date: String?,
+    val status: String,
+    val is_company_wide: Boolean,
+    val created_by: String?,
+    val approved_by: String?,
+    val approved_at: String?,
+    val created_at: String?
+) {
+    /**
+     * Convert DTO to domain model
+     */
+    fun toDomain() = Circular(
+        id = id,
+        title = title,
+        description = description,
+        circularType = circular_type,
+        priority = priority,
+        attachments = attachments,
+        effectiveDate = effective_date,
+        expiryDate = expiry_date,
+        publishedDate = published_date,
+        status = status,
+        isCompanyWide = is_company_wide,
+        createdBy = created_by,
+        approvedBy = approved_by,
+        approvedAt = approved_at,
+        createdAt = created_at
+    )
+}
+
+data class PaginationDto(
+    val current_page: Int,
+    val page_size: Int,
+    val total_count: Int,
+    val total_pages: Int
+) {
+    fun toDomain() = PaginationInfo(
+        currentPage = current_page,
+        pageSize = page_size,
+        totalCount = total_count,
+        totalPages = total_pages
+    )
+}
+
+/**
+ * API Response for GET /circulars/{circular_id}
+ */
+data class CircularDetailResponse(
+    val status: String,
+    val data: CircularDetailDto
+)
+
+data class CircularDetailDto(
+    val id: Int,
+    val title: String,
+    val description: String,
+    val circular_type: String,
+    val priority: String,
+    val attachments: List<String>,
+    val effective_date: String?,
+    val expiry_date: String?,
+    val published_date: String?,
+    val status: String,
+    val is_company_wide: Boolean,
+    val approval_comments: String?,
+    val created_by: CreatedByDto?,
+    val approved_by: ApprovedByDto?,
+    val approved_at: String?,
+    val created_at: String?,
+    val updated_at: String?
+) {
+    fun toDomain() = CircularDetail(
+        id = id,
+        title = title,
+        description = description,
+        circularType = circular_type,
+        priority = priority,
+        attachments = attachments,
+        effectiveDate = effective_date,
+        expiryDate = expiry_date,
+        publishedDate = published_date,
+        status = status,
+        isCompanyWide = is_company_wide,
+        approvalComments = approval_comments,
+        createdBy = created_by?.let { CreatedBy(it.name, it.email) },
+        approvedBy = approved_by?.let { ApprovedBy(it.name, it.email) },
+        approvedAt = approved_at,
+        createdAt = created_at,
+        updatedAt = updated_at
+    )
+}
+
+data class CreatedByDto(
+    val name: String?,
+    val email: String?
+)
+
+data class ApprovedByDto(
+    val name: String?,
+    val email: String?
+)
+
+/**
+ * API Response for GET /circulars/stats/summary
+ */
+data class CircularStatsResponse(
+    val status: String,
+    val data: CircularStatsDto
+)
+
+data class CircularStatsDto(
+    val total_circulars: Int,
+    val high_priority: Int,
+    val recent_7_days: Int,
+    val by_type: Map<String, Int>
+) {
+    fun toDomain() = CircularStats(
+        totalCirculars = total_circulars,
+        highPriority = high_priority,
+        recent7Days = recent_7_days,
+        byType = by_type
+    )
+}
 /**
  * Work Report DTO from API
  */

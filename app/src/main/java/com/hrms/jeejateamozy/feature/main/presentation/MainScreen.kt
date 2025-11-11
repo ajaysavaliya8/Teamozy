@@ -17,6 +17,9 @@ import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentIdentity
 import com.hrms.jeejateamozy.feature.profile.presentation.ViewShiftDetailsScreen
 import com.hrms.jeejateamozy.feature.workreport.presentation.WorkReportScreen
 import com.hrms.jeejateamozy.feature.workreport.presentation.WorkReportViewModel
+import com.hrms.jeejateamozy.feature.circular.presentation.CircularListScreen
+import com.hrms.jeejateamozy.feature.circular.presentation.CircularDetailScreen
+import com.hrms.jeejateamozy.feature.circular.presentation.CircularViewModel
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -36,12 +39,17 @@ fun MainScreen(
     var showViewShiftDetails by remember { mutableStateOf(false) }
     var showWorkReport by remember { mutableStateOf(false) }
 
+    // ⭐ NEW: Circular navigation states
+    var showCircularList by remember { mutableStateOf(false) }
+    var showCircularDetail by remember { mutableStateOf<Int?>(null) }
+
     Scaffold(
         bottomBar = {
             BottomNavigationBar(
                 currentScreen = currentNavigationScreen,
                 onScreenSelected = { screen ->
                     currentNavigationScreen = screen
+
                     // Reset child navigation when switching tabs
                     showEditSocialMedia = false
                     showEditContactDetail = false
@@ -50,12 +58,47 @@ fun MainScreen(
                     showEditBankingInfo = false
                     showViewEmploymentIdentity = false
                     showViewShiftDetails = false
+                    showWorkReport = false
+                    // ⭐ NEW: Reset circular navigation
+                    showCircularList = false
+                    showCircularDetail = null
                 }
             )
         }
     ) { paddingValues ->
         // Handle child screens (full screen overlays)
         when {
+            // ⭐ NEW: Circular Detail Screen
+            showCircularDetail != null -> {
+                val circularViewModel: CircularViewModel = koinViewModel()
+
+                CircularDetailScreen(
+                    viewModel = circularViewModel,
+                    circularId = showCircularDetail!!,
+                    onNavigateBack = {
+                        showCircularDetail = null
+                        showCircularList = true
+                    }
+                )
+            }
+
+            // ⭐ NEW: Circular List Screen
+            showCircularList -> {
+                val circularViewModel: CircularViewModel = koinViewModel()
+
+                CircularListScreen(
+                    viewModel = circularViewModel,
+                    onNavigateToDetail = { circularId ->
+                        showCircularDetail = circularId
+                        showCircularList = false
+                    },
+                    onNavigateBack = {
+                        showCircularList = false
+                        currentNavigationScreen = NavigationScreen.HOME
+                    }
+                )
+            }
+
             showEditSocialMedia -> {
                 EditSocialMediaScreen(
                     onBack = {
@@ -143,6 +186,10 @@ fun MainScreen(
                             },
                             onNavigateToWorkReport = {
                                 showWorkReport = true
+                            },
+                            // ⭐ NEW: Circular navigation callback
+                            onNavigateToCircular = {
+                                showCircularList = true
                             },
                             paddingValues = paddingValues
                         )

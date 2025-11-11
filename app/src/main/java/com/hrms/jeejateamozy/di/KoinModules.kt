@@ -11,6 +11,13 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
+import com.hrms.jeejateamozy.feature.circular.data.CircularRepository
+import com.hrms.jeejateamozy.feature.circular.presentation.CircularViewModel
+import org.koin.android.ext.koin.androidContext
+import org.koin.androidx.viewmodel.dsl.viewModel
+import org.koin.dsl.module
+
+
 val authModule = module {
     // Provide the repo from Context
     single { AuthRepository(androidContext()) }
@@ -29,4 +36,8 @@ val homeModule = module {
     single { WorkReportRepository(androidContext()) }
     factory { WorkReportUseCase(get()) }
     viewModel { WorkReportViewModel(get()) }
+}
+val circularModule = module {
+    single { CircularRepository(androidContext()) }
+    viewModel { CircularViewModel(get()) }
 }

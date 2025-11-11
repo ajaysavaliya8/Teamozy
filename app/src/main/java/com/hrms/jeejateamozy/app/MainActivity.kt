@@ -31,6 +31,7 @@ import com.hrms.jeejateamozy.feature.permissions.presentation.arePermissionsGran
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.di.authModule
 import com.hrms.jeejateamozy.di.attendanceModule
+import com.hrms.jeejateamozy.di.circularModule
 import com.hrms.jeejateamozy.di.permissionsModule
 import com.hrms.jeejateamozy.di.homeModule
 
@@ -55,7 +56,8 @@ class MainActivity : ComponentActivity() {
                     authModule,
                     attendanceModule,
                     permissionsModule,
-                    homeModule
+                    homeModule,
+                    circularModule
                 )
             }
         }

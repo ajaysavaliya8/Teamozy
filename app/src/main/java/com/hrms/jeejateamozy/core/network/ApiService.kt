@@ -202,4 +202,22 @@ interface ApiService {
         @Part attachments: List<MultipartBody.Part>? = null
     ): Response<CreateWorkReportResponse>
 
+    // ---------- CIRCULARS ----------
+    @GET("circulars")
+    suspend fun getCirculars(
+        @Query("status") status: String? = null,
+        @Query("circular_type") circularType: String? = null,
+        @Query("priority") priority: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 10
+    ): Response<CircularListResponse>
+
+    @GET("circulars/{circular_id}")
+    suspend fun getCircularDetail(
+        @Path("circular_id") circularId: Int
+    ): Response<CircularDetailResponse>
+
+    @GET("circulars/stats/summary")
+    suspend fun getCircularStats(): Response<CircularStatsResponse>
+
 }
