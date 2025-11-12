@@ -35,6 +35,7 @@ import com.hrms.jeejateamozy.di.circularModule
 import com.hrms.jeejateamozy.di.permissionsModule
 import com.hrms.jeejateamozy.di.homeModule
 import com.hrms.jeejateamozy.di.leaveModule
+import com.hrms.jeejateamozy.di.attendanceHistoryModule  // ⭐ ADD THIS IMPORT
 
 private enum class AppScreen {
     SPLASH,
@@ -59,7 +60,8 @@ class MainActivity : ComponentActivity() {
                     permissionsModule,
                     homeModule,
                     circularModule,
-                    leaveModule
+                    leaveModule,
+                    attendanceHistoryModule  // ⭐ ADD THIS MODULE
                 )
             }
         }
@@ -152,16 +154,12 @@ private fun HomeWithPermissions(
             onDismiss = {
                 // User dismissed without granting all
                 showPermissionDialog = false
-                // Mark that we've shown the dialog
                 preferencesManager.hasShownPermissions = true
-                Log.d("MainActivity", "Permission dialog dismissed")
             },
             onPermissionsHandled = {
-                // All permissions granted successfully
+                // User granted all permissions
                 showPermissionDialog = false
-                // Mark that we've shown and handled permissions
                 preferencesManager.hasShownPermissions = true
-                Log.d("MainActivity", "All permissions granted")
             }
         )
     }
@@ -171,29 +169,44 @@ private fun HomeWithPermissions(
 private fun InlineSplash(
     authRepository: AuthRepository,
     preferencesManager: PreferencesManager,
-    onComplete: (Boolean) -> Unit
+    onComplete: (isAuthorized: Boolean) -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        delay(1500) // Short splash delay
+        // Minimum splash duration (1 second)
+        delay(1000)
 
-        scope.launch {
-            // Check if user is logged in (has token)
-            val isLoggedIn = preferencesManager.isLoggedIn()
+        // Check if user has auth token
+        val hasToken = preferencesManager.authToken != null && preferencesManager.authToken!!.isNotBlank()
 
-            if (isLoggedIn) {
-                // For now, assume token is valid if it exists
-                // You can add token validation logic here if needed
+        if (!hasToken) {
+            Log.d("Splash", "No token found, navigating to Login")
+            onComplete(false)
+            return@LaunchedEffect
+        }
+
+        // Verify the token
+        Log.d("Splash", "Token found, verifying with server...")
+        when (val outcome = authRepository.verifyToken()) {
+            is AuthOutcome.Success -> {
+                Log.d("Splash", "Token is valid, navigating to Home")
                 onComplete(true)
-            } else {
-                // Not logged in
+            }
+            is AuthOutcome.Error -> {
+                Log.d("Splash", "Token is invalid or expired, clearing preferences, navigating to Login")
+                preferencesManager.clearAll()
+                onComplete(false)
+            }
+            is AuthOutcome.DeviceNotRegistered -> {
+                Log.d("Splash", "Device not registered, clearing preferences, navigating to Login")
+                preferencesManager.clearAll()
                 onComplete(false)
             }
         }
     }
 
-    // Simple splash screen UI
+    // Simple Splash UI
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -202,11 +215,12 @@ private fun InlineSplash(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Teamozy",
-                style = MaterialTheme.typography.headlineLarge
-            )
             CircularProgressIndicator()
+            Text(
+                text = "Loading...",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }

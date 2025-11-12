@@ -21,13 +21,12 @@ import com.hrms.jeejateamozy.feature.circular.presentation.CircularListScreen
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularDetailScreen
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularViewModel
 import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
-import org.koin.androidx.compose.koinViewModel
 import com.hrms.jeejateamozy.feature.leave.presentation.ApplyLeaveScreen
-import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
 import com.hrms.jeejateamozy.feature.leave.presentation.LeaveViewModel
-var showAttendanceHistory by remember { mutableStateOf(false) }
-var selectedAttendanceDate by remember { mutableStateOf<String?>(null) }
-
+import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryViewModel
+import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryScreen
+import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceDayDetailScreen
+import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun MainScreen(
@@ -52,6 +51,10 @@ fun MainScreen(
     var showApplyLeave by remember { mutableStateOf(false) }
     var showLeaveHistory by remember { mutableStateOf(false) }
 
+    // ⭐ Attendance History States - MOVED INSIDE @Composable function
+    var showAttendanceHistory by remember { mutableStateOf(false) }
+    var selectedAttendanceDate by remember { mutableStateOf<String?>(null) }
+
     Scaffold(
         bottomBar = {
             BottomNavigationBar(
@@ -68,17 +71,33 @@ fun MainScreen(
                     showViewEmploymentIdentity = false
                     showViewShiftDetails = false
                     showWorkReport = false
-                    // ⭐ NEW: Reset circular navigation
                     showCircularList = false
                     showCircularDetail = null
                     showApplyLeave = false
                     showLeaveHistory = false
+                    showAttendanceHistory = false  // ⭐ ADD THIS
+                    selectedAttendanceDate = null  // ⭐ ADD THIS
                 }
             )
         }
     ) { paddingValues ->
         // Handle child screens (full screen overlays)
         when {
+            // ⭐ ATTENDANCE DAY DETAIL SCREEN
+            selectedAttendanceDate != null -> {
+                val attendanceHistoryViewModel: AttendanceHistoryViewModel = koinViewModel()
+
+                AttendanceDayDetailScreen(
+                    date = selectedAttendanceDate!!,
+                    viewModel = attendanceHistoryViewModel,
+                    onNavigateBack = {
+                        selectedAttendanceDate = null
+                        showAttendanceHistory = false
+                        currentNavigationScreen = NavigationScreen.ATTENDANCE
+                    }
+                )
+            }
+
             // Leave History Screen
             showLeaveHistory -> {
                 val leaveViewModel: LeaveViewModel = koinViewModel()
@@ -112,6 +131,7 @@ fun MainScreen(
                     }
                 )
             }
+
             // ⭐ NEW: Circular Detail Screen
             showCircularDetail != null -> {
                 val circularViewModel: CircularViewModel = koinViewModel()
@@ -243,19 +263,19 @@ fun MainScreen(
                     }
 
                     NavigationScreen.ATTENDANCE -> {
-                        // Attendance screen placeholder (coming soon)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(paddingValues),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Attendance Screen\n(Coming Soon)",
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        // ⭐ ATTENDANCE HISTORY SCREEN
+                        val attendanceHistoryViewModel: AttendanceHistoryViewModel = koinViewModel()
+
+                        AttendanceHistoryScreen(
+                            viewModel = attendanceHistoryViewModel,
+                            onNavigateBack = {
+                                currentNavigationScreen = NavigationScreen.HOME
+                            },
+                            onNavigateToDayDetail = { date ->
+                                selectedAttendanceDate = date
+                                showAttendanceHistory = true
+                            }
+                        )
                     }
 
                     NavigationScreen.PROFILE -> {

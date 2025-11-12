@@ -1,7 +1,9 @@
 package com.hrms.jeejateamozy.di
 
+import com.hrms.jeejateamozy.feature.attendance.data.AttendanceHistoryRepository
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
+import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryViewModel
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceViewModel
 import com.hrms.jeejateamozy.feature.auth.domain.usecase.LoginUseCase
 import com.hrms.jeejateamozy.feature.workreport.data.WorkReportRepository
