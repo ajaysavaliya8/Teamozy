@@ -20,7 +20,14 @@ import com.hrms.jeejateamozy.feature.workreport.presentation.WorkReportViewModel
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularListScreen
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularDetailScreen
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularViewModel
+import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
 import org.koin.androidx.compose.koinViewModel
+import com.hrms.jeejateamozy.feature.leave.presentation.ApplyLeaveScreen
+import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
+import com.hrms.jeejateamozy.feature.leave.presentation.LeaveViewModel
+var showAttendanceHistory by remember { mutableStateOf(false) }
+var selectedAttendanceDate by remember { mutableStateOf<String?>(null) }
+
 
 @Composable
 fun MainScreen(
@@ -39,9 +46,11 @@ fun MainScreen(
     var showViewShiftDetails by remember { mutableStateOf(false) }
     var showWorkReport by remember { mutableStateOf(false) }
 
-    // ⭐ NEW: Circular navigation states
     var showCircularList by remember { mutableStateOf(false) }
     var showCircularDetail by remember { mutableStateOf<Int?>(null) }
+
+    var showApplyLeave by remember { mutableStateOf(false) }
+    var showLeaveHistory by remember { mutableStateOf(false) }
 
     Scaffold(
         bottomBar = {
@@ -62,12 +71,47 @@ fun MainScreen(
                     // ⭐ NEW: Reset circular navigation
                     showCircularList = false
                     showCircularDetail = null
+                    showApplyLeave = false
+                    showLeaveHistory = false
                 }
             )
         }
     ) { paddingValues ->
         // Handle child screens (full screen overlays)
         when {
+            // Leave History Screen
+            showLeaveHistory -> {
+                val leaveViewModel: LeaveViewModel = koinViewModel()
+
+                LeaveHistoryScreen(
+                    viewModel = leaveViewModel,
+                    onNavigateBack = {
+                        showLeaveHistory = false
+                        currentNavigationScreen = NavigationScreen.HOME
+                    },
+                    onNavigateToApplyLeave = {
+                        showLeaveHistory = false
+                        showApplyLeave = true
+                    }
+                )
+            }
+
+            // Apply Leave Screen
+            showApplyLeave -> {
+                val leaveViewModel: LeaveViewModel = koinViewModel()
+
+                ApplyLeaveScreen(
+                    viewModel = leaveViewModel,
+                    onNavigateBack = {
+                        showApplyLeave = false
+                        currentNavigationScreen = NavigationScreen.HOME
+                    },
+                    onNavigateToHistory = { applicationId ->
+                        showApplyLeave = false
+                        showLeaveHistory = true
+                    }
+                )
+            }
             // ⭐ NEW: Circular Detail Screen
             showCircularDetail != null -> {
                 val circularViewModel: CircularViewModel = koinViewModel()
@@ -190,6 +234,9 @@ fun MainScreen(
                             // ⭐ NEW: Circular navigation callback
                             onNavigateToCircular = {
                                 showCircularList = true
+                            },
+                            onNavigateToApplyLeaves = {
+                                showApplyLeave = true
                             },
                             paddingValues = paddingValues
                         )

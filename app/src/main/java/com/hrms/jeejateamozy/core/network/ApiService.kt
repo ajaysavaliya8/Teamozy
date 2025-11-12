@@ -279,4 +279,15 @@ interface ApiService {
     suspend fun getLeaveSummary(
         @Query("year") year: Int? = null
     ): Response<LeaveSummaryResponse>
+
+    @GET("timesheet/monthly")
+    suspend fun getMonthlyTimesheet(
+        @Query("year") year: Int? = null,
+        @Query("month") month: Int? = null
+    ): Response<MonthlyTimesheetResponse>
+
+    @GET("timesheet/day/{attendance_date}")
+    suspend fun getDayTimesheet(
+        @Path("attendance_date") attendanceDate: String
+    ): Response<DayTimesheetResponse>
 }

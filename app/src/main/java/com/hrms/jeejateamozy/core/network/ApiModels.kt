@@ -101,6 +101,241 @@ data class CheckOutSignatureResponse(
     val location_violation: Boolean? = null
 )
 
+// -------- ATTENDANCE HISTORY / TIMESHEET MODELS --------
+
+/**
+ * GET /timesheet/monthly Response
+ */
+data class MonthlyTimesheetResponse(
+    val status: String,
+    val data: MonthlyTimesheetData
+)
+
+data class MonthlyTimesheetData(
+    val month: Int,
+    val year: Int,
+    val month_name: String,
+    val calendar_days: List<CalendarDayDto>,
+    val summary: MonthSummaryDto,
+    val chart_data: ChartDataDto
+)
+
+data class CalendarDayDto(
+    val day: Int,
+    val date: String,  // ISO format: "2025-01-15"
+    val status: String,  // "PRESENT", "ABSENT", "LEAVE", "PENDING", or null
+    val color: String,  // "red", "orange", "gray", "white"
+    val is_complete: Boolean,
+    val has_irregularity: Boolean,
+    val punch_count: Int
+) {
+    fun toDomain() = CalendarDay(
+        day = day,
+        date = date,
+        status = status,
+        color = color,
+        isComplete = is_complete,
+        hasIrregularity = has_irregularity,
+        punchCount = punch_count
+    )
+}
+
+data class MonthSummaryDto(
+    val total_time: String,  // "120 hr 30 min"
+    val total_minutes: Int,
+    val total_hours: Int,
+    val monthly_hours_spent: Int,
+    val present_days: Int,
+    val irregular_days: Int
+) {
+    fun toDomain() = MonthSummary(
+        totalTime = total_time,
+        totalMinutes = total_minutes,
+        totalHours = total_hours,
+        monthlyHoursSpent = monthly_hours_spent,
+        presentDays = present_days,
+        irregularDays = irregular_days
+    )
+}
+
+data class ChartDataDto(
+    val days: Int,
+    val irregularities: Int
+) {
+    fun toDomain() = ChartData(
+        days = days,
+        irregularities = irregularities
+    )
+}
+
+/**
+ * GET /timesheet/day/{attendance_date} Response
+ */
+data class DayTimesheetResponse(
+    val status: String,
+    val data: DayTimesheetData
+)
+
+data class DayTimesheetData(
+    val has_attendance: Boolean,
+    val date: String,  // ISO format
+    val day_name: String,  // "Monday", "Tuesday", etc.
+    val formatted_date: String?,  // "15th January 2025"
+    val message: String?,  // For no attendance days
+    val status: DayStatusDto?,
+    val shift: ShiftInfoDto?,
+    val hours: HoursInfoDto?,
+    val punches: List<PunchRecordDto>?,
+    val is_complete: Boolean?
+)
+
+data class DayStatusDto(
+    val text: String,  // "Present", "Absent", "On Leave", "Pending Attendance"
+    val color: String,  // "green", "red", "blue", "orange", "gray"
+    val raw_status: String  // "PRESENT", "ABSENT", "LEAVE", "PENDING"
+) {
+    fun toDomain() = DayStatus(
+        text = text,
+        color = color,
+        rawStatus = raw_status
+    )
+}
+
+data class ShiftInfoDto(
+    val name: String,
+    val hours: String,  // "08 hr 00 min"
+    val start_time: String,  // "09:00 AM"
+    val end_time: String,  // "05:00 PM"
+    val timing_display: String  // Full formatted string
+) {
+    fun toDomain() = ShiftInfo(
+        name = name,
+        hours = hours,
+        startTime = start_time,
+        endTime = end_time,
+        timingDisplay = timing_display
+    )
+}
+
+data class HoursInfoDto(
+    val total: String,  // "08:30"
+    val total_display: String,  // "8 hr 30 min"
+    val productive: String,  // "08:00"
+    val productive_display: String  // "8 hr 0 min"
+) {
+    fun toDomain() = HoursInfo(
+        total = total,
+        totalDisplay = total_display,
+        productive = productive,
+        productiveDisplay = productive_display
+    )
+}
+
+data class PunchRecordDto(
+    val type: String,  // "PUNCH IN" or "PUNCH OUT"
+    val time: String?,  // "09:15:30 AM"
+    val location: PunchLocationDto?
+) {
+    fun toDomain() = PunchRecord(
+        type = type,
+        time = time,
+        location = location?.toDomain()
+    )
+}
+
+data class PunchLocationDto(
+    val latitude: Double?,
+    val longitude: Double?
+) {
+    fun toDomain() = PunchLocation(
+        latitude = latitude,
+        longitude = longitude
+    )
+}
+
+// -------- DOMAIN MODELS (for ViewModel/UI) --------
+
+data class CalendarDay(
+    val day: Int,
+    val date: String,
+    val status: String,
+    val color: String,
+    val isComplete: Boolean,
+    val hasIrregularity: Boolean,
+    val punchCount: Int
+)
+
+data class MonthSummary(
+    val totalTime: String,
+    val totalMinutes: Int,
+    val totalHours: Int,
+    val monthlyHoursSpent: Int,
+    val presentDays: Int,
+    val irregularDays: Int
+)
+
+data class ChartData(
+    val days: Int,
+    val irregularities: Int
+)
+
+data class MonthlyTimesheet(
+    val month: Int,
+    val year: Int,
+    val monthName: String,
+    val calendarDays: List<CalendarDay>,
+    val summary: MonthSummary,
+    val chartData: ChartData
+)
+
+data class DayStatus(
+    val text: String,
+    val color: String,
+    val rawStatus: String
+)
+
+data class ShiftInfo(
+    val name: String,
+    val hours: String,
+    val startTime: String,
+    val endTime: String,
+    val timingDisplay: String
+)
+
+data class HoursInfo(
+    val total: String,
+    val totalDisplay: String,
+    val productive: String,
+    val productiveDisplay: String
+)
+
+data class PunchRecord(
+    val type: String,
+    val time: String?,
+    val location: PunchLocation?
+)
+
+data class PunchLocation(
+    val latitude: Double?,
+    val longitude: Double?
+)
+
+data class DayTimesheet(
+    val hasAttendance: Boolean,
+    val date: String,
+    val dayName: String,
+    val formattedDate: String?,
+    val message: String?,
+    val status: DayStatus?,
+    val shift: ShiftInfo?,
+    val hours: HoursInfo?,
+    val punches: List<PunchRecord>?,
+    val isComplete: Boolean?
+)
+
+
+
+
 // Verify token endpoint response
 data class VerifyTokenResponse(
     val status: String,

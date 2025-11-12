@@ -48,3 +48,8 @@ val leaveModule = module {
     single { LeaveRepository(androidContext()) }
     viewModel { LeaveViewModel(get()) }
 }
+
+val attendanceHistoryModule = module {
+    single { AttendanceHistoryRepository(androidContext()) }
+    viewModel { AttendanceHistoryViewModel(get()) }
+}
