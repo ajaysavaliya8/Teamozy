@@ -36,7 +36,7 @@ interface ApiService {
 
     @GET("verify-token")
     suspend fun verifyToken(
-        @Query("token") token: String
+        @Query("app_version") appVersion: String
     ): Response<VerifyTokenResponse>
 
     @FormUrlEncoded

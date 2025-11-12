@@ -102,8 +102,12 @@ class AuthRepository(private val context: Context) {
     suspend fun verifyToken(): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val token = pm.authToken ?: return@withContext AuthOutcome.Error("No token found")
-            val res = api.verifyToken(token)
-            Log.d("NET", "verifyToken -> code=${res.code()}")
+
+            // Use the app version from BuildConfig
+            val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
+
+            val res = api.verifyToken(appVersion)
+            Log.d("NET", "verifyToken -> app_version=$appVersion, code=${res.code()}")
 
             // Handle VerifyTokenResponse separately
             if (res.isSuccessful && res.code() == 200) {
