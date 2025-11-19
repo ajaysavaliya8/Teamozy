@@ -7,13 +7,13 @@ plugins {
 
 android {
     namespace = "com.hrms.jeejateamozy"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
 
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 7
         versionName = "1.7.1"
 
@@ -44,6 +44,7 @@ android {
 }
 
 dependencies {
+    implementation("com.onesignal:OneSignal:[5.1.0, 5.1.99]")
 
     implementation(platform("io.insert-koin:koin-bom:4.1.1"))
     implementation("io.insert-koin:koin-android")
