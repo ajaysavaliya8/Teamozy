@@ -62,6 +62,7 @@ import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.auth.domain.usecase.LoginUseCase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
@@ -69,8 +70,8 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
 
-    val repo = remember(context) { AuthRepository(context) }
-    val useCase = remember(repo) { LoginUseCase(repo) }
+    val useCase: LoginUseCase = koinInject()
+    val repo: AuthRepository = koinInject()
     val scope = rememberCoroutineScope()
 
     // Focus requesters

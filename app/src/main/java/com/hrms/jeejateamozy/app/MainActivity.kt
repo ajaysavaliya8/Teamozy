@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
@@ -35,7 +36,11 @@ import com.hrms.jeejateamozy.di.circularModule
 import com.hrms.jeejateamozy.di.permissionsModule
 import com.hrms.jeejateamozy.di.homeModule
 import com.hrms.jeejateamozy.di.leaveModule
-import com.hrms.jeejateamozy.di.attendanceHistoryModule  // ⭐ ADD THIS IMPORT
+import com.hrms.jeejateamozy.di.attendanceHistoryModule
+
+// OneSignal imports
+import com.onesignal.OneSignal
+import com.onesignal.debug.LogLevel
 
 private enum class AppScreen {
     SPLASH,
@@ -50,6 +55,11 @@ class MainActivity : ComponentActivity() {
         // Initialize NetworkModule with context for auth interceptor
         NetworkModule.initialize(applicationContext)
 
+        // ============================================
+        // INITIALIZE ONESIGNAL
+        // ============================================
+        initializeOneSignal()
+
         // Start Koin here (since there's no Application class now)
         if (GlobalContext.getOrNull() == null) {
             startKoin {
@@ -61,7 +71,7 @@ class MainActivity : ComponentActivity() {
                     homeModule,
                     circularModule,
                     leaveModule,
-                    attendanceHistoryModule  // ⭐ ADD THIS MODULE
+                    attendanceHistoryModule
                 )
             }
         }
@@ -71,6 +81,39 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface { AppRoot() }
             }
+        }
+    }
+
+    /**
+     * Initialize OneSignal Push Notifications
+     */
+    private fun initializeOneSignal() {
+        try {
+            // Enable verbose logging for debugging (disable in production)
+            OneSignal.Debug.logLevel = LogLevel.VERBOSE
+
+            // Initialize OneSignal with your App ID
+            OneSignal.initWithContext(this, "d28eccbe-be33-48f3-a12d-fc5d75b4ac69")
+
+
+            // Request notification permission (Android 13+) - using lifecycleScope
+            lifecycleScope.launch {
+                try {
+                    OneSignal.Notifications.requestPermission(true)
+                    Log.d("OneSignal", "✅ Notification permission requested")
+                } catch (e: Exception) {
+                    Log.e("OneSignal", "Failed to request permission", e)
+                }
+            }
+
+            // Log the player ID when available
+            OneSignal.User.pushSubscription.id?.let { playerId ->
+                Log.d("OneSignal", "✅ Player ID: $playerId")
+            }
+
+            Log.d("OneSignal", "✅ OneSignal initialized successfully")
+        } catch (e: Exception) {
+            Log.e("OneSignal", "❌ Failed to initialize OneSignal", e)
         }
     }
 }
@@ -127,6 +170,8 @@ private fun HomeWithPermissions(
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repo: AuthRepository = koinInject()
     var showPermissionDialog by remember { mutableStateOf(false) }
 
     // Check if we should show permission dialog
@@ -134,79 +179,83 @@ private fun HomeWithPermissions(
         // Only check on first time or if permissions not granted
         if (!preferencesManager.hasShownPermissions) {
             // Check if permissions are already granted
-            if (arePermissionsGranted(context)) {
-                // All permissions already granted - mark as handled
-                preferencesManager.hasShownPermissions = true
-            } else {
-                // Some permissions missing - show dialog
-                // The dialog will check again internally
+            val permissionsGranted = arePermissionsGranted(context)
+            if (!permissionsGranted) {
                 showPermissionDialog = true
+            } else {
+                // If permissions are already granted, mark as shown
+                preferencesManager.hasShownPermissions = true
             }
         }
     }
 
-    // Main home screen
-    MainScreen(onLogout = onLogout)
-
-    // Show permission dialog overlay if needed
     if (showPermissionDialog) {
         PermissionDialog(
             onDismiss = {
-                // User dismissed without granting all
                 showPermissionDialog = false
                 preferencesManager.hasShownPermissions = true
             },
             onPermissionsHandled = {
-                // User granted all permissions
                 showPermissionDialog = false
                 preferencesManager.hasShownPermissions = true
             }
         )
     }
+
+    MainScreen(
+        onLogout = {
+            // Call logout API
+            scope.launch {
+                Log.d("MainActivity", "Logout requested")
+
+                when (val outcome = repo.logout(clearPushToken = true)) {
+                    is AuthOutcome.Success -> {
+                        Log.d("MainActivity", "✅ Logout successful: ${outcome.message}")
+                        onLogout()
+                    }
+                    is AuthOutcome.Error -> {
+                        Log.e("MainActivity", "❌ Logout error: ${outcome.message}")
+                        // Still logout locally
+                        onLogout()
+                    }
+                    else -> {
+                        onLogout()
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable
 private fun InlineSplash(
     authRepository: AuthRepository,
     preferencesManager: PreferencesManager,
-    onComplete: (isAuthorized: Boolean) -> Unit
+    onComplete: (Boolean) -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        // Minimum splash duration (1 second)
-        delay(1000)
+        delay(1000)  // Show splash for 1 second
 
-        // Check if user has auth token
-        val hasToken = preferencesManager.authToken != null && preferencesManager.authToken!!.isNotBlank()
-
-        if (!hasToken) {
-            Log.d("Splash", "No token found, navigating to Login")
+        val token = preferencesManager.authToken
+        if (token.isNullOrBlank()) {
             onComplete(false)
-            return@LaunchedEffect
-        }
-
-        // Verify the token
-        Log.d("Splash", "Token found, verifying with server...")
-        when (val outcome = authRepository.verifyToken()) {
-            is AuthOutcome.Success -> {
-                Log.d("Splash", "Token is valid, navigating to Home")
-                onComplete(true)
-            }
-            is AuthOutcome.Error -> {
-                Log.d("Splash", "Token is invalid or expired, clearing preferences, navigating to Login")
-                preferencesManager.clearAll()
-                onComplete(false)
-            }
-            is AuthOutcome.DeviceNotRegistered -> {
-                Log.d("Splash", "Device not registered, clearing preferences, navigating to Login")
-                preferencesManager.clearAll()
-                onComplete(false)
+        } else {
+            when (authRepository.verifyToken()) {
+                is AuthOutcome.Success -> onComplete(true)
+                is AuthOutcome.Error -> {
+                    preferencesManager.clearAll()
+                    onComplete(false)
+                }
+                is AuthOutcome.DeviceNotRegistered -> {
+                    preferencesManager.clearAll()
+                    onComplete(false)
+                }
             }
         }
     }
 
-    // Simple Splash UI
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -215,11 +264,15 @@ private fun InlineSplash(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(
+                modifier = Modifier.size(48.dp),
+                strokeWidth = 4.dp
+            )
             Text(
                 text = "Loading...",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center
             )
         }
     }

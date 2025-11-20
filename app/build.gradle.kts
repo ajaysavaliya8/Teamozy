@@ -3,17 +3,19 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.google.gms.google.services)
+    alias(libs.plugins.google.firebase.crashlytics)
 }
 
 android {
     namespace = "com.hrms.jeejateamozy"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
 
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 7
         versionName = "1.7.1"
 
@@ -53,7 +55,7 @@ dependencies {
 // TensorFlow Lite
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
-    // GPU delegate + CompatibilityList  👈 fixes "GpuDelegate"/"CompatibilityList" unresolved
+
     implementation("org.tensorflow:tensorflow-lite-gpu:2.14.0")
 
 
@@ -68,6 +70,8 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.crashlytics)
 
     // Chucker (network inspector) — debug only
     debugImplementation("com.github.chuckerteam.chucker:library:4.0.0")

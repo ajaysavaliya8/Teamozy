@@ -6,8 +6,7 @@ data class BasicResponse(
     val message: String? = null,
     val token: String? = null,    // present on verify-login success
 
-    // ===== NEW FIELDS FROM UPDATED API =====
-    // Employee Information
+    // ===== Employee Information =====
     val mobile_number: Long? = null,
     val full_name: String? = null,
     val profile_url: String? = null,
@@ -15,14 +14,14 @@ data class BasicResponse(
     val department_name: String? = null,
     val shift_name: String? = null,
 
-    // Social Media Links
+    // ===== Social Media Links =====
     val facebook: String? = null,
     val linkedin: String? = null,
     val x: String? = null,  // Twitter/X
     val instagram: String? = null,
     val snapchat: String? = null,
 
-    // Company Information
+    // ===== Company Information =====
     val company_name: String? = null,
     val company_address: String? = null,
     val company_email: String? = null,
@@ -30,11 +29,26 @@ data class BasicResponse(
     val company_website: String? = null,
     val company_logo_url: String? = null,
 
-    // Support Information
+    // ===== Support Information =====
     val hr_email: String? = null,
     val technical_support_number: String? = null,
-    val technical_support_email: String? = null
+    val technical_support_email: String? = null,
+
+    // ===== NEW: Push Notification Status =====
+    val push_notifications: PushNotificationStatus? = null
 )
+
+data class PushNotificationStatus(
+    val registered: Boolean,
+    val enabled: Boolean,
+    val onesignal_player_id: String? = null,
+    val onesignal_subscription_id: String? = null,
+    val has_fcm_backup: Boolean,
+    val registered_at: String? = null,
+    val last_notification_sent: String? = null,
+    val failure_count: Int
+)
+
 
 
 // -------- Check Status Response --------
@@ -1011,4 +1025,18 @@ data class UpcomingLeaveDto(
 data class WithdrawLeaveResponse(
     val status: String,
     val message: String
+
+)
+
+data class LogoutResponse(
+    val status: String,
+    val message: String,
+    val logout_time: String? = null,
+    val device_id: String? = null,
+    val push_notifications: LogoutPushNotifications? = null
+)
+
+data class LogoutPushNotifications(
+    val cleared: Boolean,
+    val message: String? = null
 )

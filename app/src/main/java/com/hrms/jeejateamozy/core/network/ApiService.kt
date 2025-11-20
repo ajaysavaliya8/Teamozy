@@ -26,13 +26,19 @@ interface ApiService {
         @Query("device_id") deviceId: String
     ): Response<BasicResponse>
 
+    @FormUrlEncoded
     @POST("verify-login")
     suspend fun verifyLogin(
         @Query("mobile_number") mobileNumber: Long,
         @Query("device_id") deviceId: String,
         @Query("password") password: String? = null,
-        @Query("otp") otp: String? = null
+        @Query("otp") otp: String? = null,
+        @Query("app_version") appVersion: String? = null,
+        @Field("onesignal_player_id") onesignalPlayerId: String? = null,
+        @Field("onesignal_subscription_id") onesignalSubscriptionId: String? = null,
+        @Field("fcm_token") fcmToken: String? = null
     ): Response<BasicResponse>
+
 
     @GET("verify-token")
     suspend fun verifyToken(
@@ -290,4 +296,12 @@ interface ApiService {
     suspend fun getDayTimesheet(
         @Path("attendance_date") attendanceDate: String
     ): Response<DayTimesheetResponse>
+
+
+    @FormUrlEncoded
+    @POST("logout")
+    suspend fun logout(
+        @Field("device_id") deviceId: String,
+        @Field("clear_push_token") clearPushToken: Boolean = true
+    ): Response<LogoutResponse>
 }
