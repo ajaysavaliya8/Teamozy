@@ -1,6 +1,7 @@
 package com.hrms.jeejateamozy.di
 
 import com.hrms.jeejateamozy.core.network.NetworkModule
+import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceHistoryRepository
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
@@ -19,8 +20,14 @@ import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
 val authModule = module {
-    // Provide AuthRepository with both context and api
-    single { AuthRepository(androidContext(), NetworkModule.apiService) }
+    // Provide AuthRepository with correct parameter order: (api, pm, context)
+    single {
+        AuthRepository(
+            api = NetworkModule.apiService,
+            pm = PreferencesManager.getInstance(androidContext()),
+            ctx = androidContext()
+        )
+    }
 
     // Provide LoginUseCase with the repo
     factory { LoginUseCase(get<AuthRepository>()) }

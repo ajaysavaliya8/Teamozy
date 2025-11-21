@@ -34,11 +34,11 @@ interface ApiService {
         @Query("password") password: String? = null,
         @Query("otp") otp: String? = null,
         @Query("app_version") appVersion: String? = null,
-        @Field("onesignal_player_id") onesignalPlayerId: String? = null,
-        @Field("onesignal_subscription_id") onesignalSubscriptionId: String? = null,
-        @Field("fcm_token") fcmToken: String? = null
+        @Field("fcm_token") fcmToken: String? = null,
+        @Field("device_manufacturer") deviceManufacturer: String? = null,
+        @Field("device_model") deviceModel: String? = null,
+        @Field("device_os_version") deviceOsVersion: String? = null
     ): Response<BasicResponse>
-
 
     @GET("verify-token")
     suspend fun verifyToken(

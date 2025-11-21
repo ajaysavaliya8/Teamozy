@@ -1,88 +1,97 @@
 package com.hrms.jeejateamozy.feature.auth.data
 
-import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.ApiService
 import com.hrms.jeejateamozy.core.network.BasicResponse
-import com.hrms.jeejateamozy.core.state.AppStateManager
-import com.hrms.jeejateamozy.core.utils.DeviceInfoHelper
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
-import com.onesignal.OneSignal
-import com.onesignal.debug.LogLevel
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import retrofit2.Response
 
+// ============================================
+// AUTH OUTCOME SEALED CLASS
+// ============================================
+
+/**
+ * Sealed class representing authentication operation outcomes
+ */
 sealed class AuthOutcome {
     data class Success(val message: String) : AuthOutcome()
     data class Error(val message: String) : AuthOutcome()
     data class DeviceNotRegistered(val message: String) : AuthOutcome()
 }
 
+// ============================================
+// AUTH REPOSITORY
+// ============================================
+
 class AuthRepository(
-    private val context: Context,
-    private val api: ApiService
+    private val api: ApiService,
+    private val pm: PreferencesManager,
+    private val ctx: Context
 ) {
-    private val pm = PreferencesManager.getInstance(context)
 
-    @SuppressLint("HardwareIds")
     private fun androidId(): String {
-        return Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ANDROID_ID
-        ) ?: "UNKNOWN"
+        return Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown_device"
     }
 
-    private fun extractMessage(res: Response<BasicResponse>): String {
-        return try {
-            val errBody = res.errorBody()?.string()
-            if (errBody.isNullOrBlank()) res.message()
-            else {
-                val gson = com.google.gson.Gson()
-                val obj = gson.fromJson(errBody, BasicResponse::class.java)
-                obj.message ?: res.message()
-            }
-        } catch (e: Exception) {
-            res.message()
-        }
+    /**
+     * Get device manufacturer (e.g., Samsung, Google, Xiaomi)
+     */
+    private fun getDeviceManufacturer(): String {
+        return Build.MANUFACTURER.replaceFirstChar { it.uppercaseChar() }
     }
 
-    private fun extractDetailMessage(res: Response<*>): String {
+    /**
+     * Get device model (e.g., Galaxy S21, Pixel 6)
+     */
+    private fun getDeviceModel(): String {
+        return Build.MODEL
+    }
+
+    /**
+     * Get Android OS version (e.g., Android 13, Android 11)
+     */
+    private fun getDeviceOSVersion(): String {
+        return "Android ${Build.VERSION.RELEASE}"
+    }
+
+    /**
+     * Extract error message from response
+     */
+    private fun extractMessage(res: Response<*>): String {
         return try {
             val errBody = res.errorBody()?.string()
-            if (errBody.isNullOrBlank()) res.message()
-            else {
-                val gson = com.google.gson.Gson()
+            if (errBody.isNullOrBlank()) {
+                res.message()
+            } else {
+                val gson = Gson()
                 val map = gson.fromJson(errBody, Map::class.java)
-                map["detail"]?.toString() ?: res.message()
+                map["message"]?.toString() ?: res.message()
             }
         } catch (e: Exception) {
             res.message()
         }
     }
 
+    /**
+     * Send login code (OTP) to user's mobile number
+     */
     suspend fun sendLoginCode(phone: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val deviceId = androidId()
             Log.d("AUTH", "sendLoginCode - deviceId: $deviceId, phone: $phone")
 
-            val res = api.sendLogin(
-                mobileNumber = phone.toLong(),
-                deviceId = deviceId
-            )
+            val res = api.sendLogin(mobileNumber = phone.toLong(), deviceId = deviceId)
             Log.d("NET", "sendLogin -> code=${res.code()}")
 
-            when (res.code()) {
-                409 -> {
-                    val msg = extractMessage(res)
-                    AuthOutcome.DeviceNotRegistered(msg)
-                }
-                else -> toOutcome(res, requireToken = false)
-            }
+            toOutcome(res, requireToken = false)
         } catch (e: Exception) {
+            Log.e("AUTH", "sendLoginCode error", e)
             AuthOutcome.Error(e.message ?: "Failed to send login code")
         }
     }
@@ -90,19 +99,27 @@ class AuthRepository(
     // Alias for backward compatibility
     suspend fun sendOtp(phone: String): AuthOutcome = sendLoginCode(phone)
 
+    /**
+     * Login with password - includes FCM token
+     */
     suspend fun loginWithPassword(phone: String, password: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val deviceId = androidId()
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
 
-            // Get OneSignal tokens if available (waits up to 15 seconds for real Player ID)
-            val onesignalPlayerId = getOneSignalPlayerId()  // Real OneSignal UUID
-            val onesignalSubscriptionId = getOneSignalSubscriptionId()  // FCM token (different!)
+            // Get FCM token from preferences
+            val fcmToken = pm.fcmToken
+
+            // Get device information
+            val deviceManufacturer = getDeviceManufacturer()
+            val deviceModel = getDeviceModel()
+            val deviceOsVersion = getDeviceOSVersion()
 
             Log.d("AUTH", "loginWithPassword - deviceId: $deviceId, phone: $phone")
             Log.d("AUTH", "  app_version: $appVersion")
-            Log.d("AUTH", "  onesignal_player_id (UUID): ${onesignalPlayerId?.take(20) ?: "null"}...")
-            Log.d("AUTH", "  onesignal_subscription_id (FCM): ${onesignalSubscriptionId?.take(20) ?: "null"}...")
+            Log.d("AUTH", "  fcm_token: ${fcmToken?.take(30) ?: "null"}...")
+            Log.d("AUTH", "  device: $deviceManufacturer $deviceModel")
+            Log.d("AUTH", "  os_version: $deviceOsVersion")
 
             val res = api.verifyLogin(
                 mobileNumber = phone.toLong(),
@@ -110,9 +127,10 @@ class AuthRepository(
                 password = password,
                 otp = null,
                 appVersion = appVersion,
-                onesignalPlayerId = onesignalPlayerId,  // Send real UUID or null
-                onesignalSubscriptionId = onesignalSubscriptionId,  // Send FCM token
-                fcmToken = null
+                fcmToken = fcmToken,
+                deviceManufacturer = deviceManufacturer,
+                deviceModel = deviceModel,
+                deviceOsVersion = deviceOsVersion
             )
             Log.d("NET", "verifyLogin(password) -> code=${res.code()}")
 
@@ -129,19 +147,27 @@ class AuthRepository(
         }
     }
 
+    /**
+     * Login with OTP - includes FCM token
+     */
     suspend fun loginWithOtp(phone: String, otp: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val deviceId = androidId()
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
 
-            // Get OneSignal tokens if available (waits up to 15 seconds for real Player ID)
-            val onesignalPlayerId = getOneSignalPlayerId()  // Real OneSignal UUID
-            val onesignalSubscriptionId = getOneSignalSubscriptionId()  // FCM token (different!)
+            // Get FCM token from preferences
+            val fcmToken = pm.fcmToken
+
+            // Get device information
+            val deviceManufacturer = getDeviceManufacturer()
+            val deviceModel = getDeviceModel()
+            val deviceOsVersion = getDeviceOSVersion()
 
             Log.d("AUTH", "loginWithOtp - deviceId: $deviceId, phone: $phone")
             Log.d("AUTH", "  app_version: $appVersion")
-            Log.d("AUTH", "  onesignal_player_id (UUID): ${onesignalPlayerId?.take(20) ?: "null"}...")
-            Log.d("AUTH", "  onesignal_subscription_id (FCM): ${onesignalSubscriptionId?.take(20) ?: "null"}...")
+            Log.d("AUTH", "  fcm_token: ${fcmToken?.take(30) ?: "null"}...")
+            Log.d("AUTH", "  device: $deviceManufacturer $deviceModel")
+            Log.d("AUTH", "  os_version: $deviceOsVersion")
 
             val res = api.verifyLogin(
                 mobileNumber = phone.toLong(),
@@ -149,9 +175,10 @@ class AuthRepository(
                 password = null,
                 otp = otp,
                 appVersion = appVersion,
-                onesignalPlayerId = onesignalPlayerId,  // Send real UUID or null
-                onesignalSubscriptionId = onesignalSubscriptionId,  // Send FCM token
-                fcmToken = null
+                fcmToken = fcmToken,
+                deviceManufacturer = deviceManufacturer,
+                deviceModel = deviceModel,
+                deviceOsVersion = deviceOsVersion
             )
             Log.d("NET", "verifyLogin(otp) -> code=${res.code()}")
 
@@ -168,6 +195,9 @@ class AuthRepository(
         }
     }
 
+    /**
+     * Verify JWT token validity
+     */
     suspend fun verifyToken(): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val token = pm.authToken ?: return@withContext AuthOutcome.Error("No token found")
@@ -188,18 +218,7 @@ class AuthRepository(
                 }
             } else {
                 // Extract error message from response
-                val errorMessage = try {
-                    val errBody = res.errorBody()?.string()
-                    if (errBody.isNullOrBlank()) {
-                        res.message()
-                    } else {
-                        val gson = com.google.gson.Gson()
-                        val map = gson.fromJson(errBody, Map::class.java)
-                        map["message"]?.toString() ?: res.message()
-                    }
-                } catch (e: Exception) {
-                    res.message()
-                }
+                val errorMessage = extractMessage(res)
                 AuthOutcome.Error(errorMessage)
             }
         } catch (e: Exception) {
@@ -207,110 +226,124 @@ class AuthRepository(
         }
     }
 
-    suspend fun sendChangeDeviceOtp(mobileNumber: String): AuthOutcome = withContext(Dispatchers.IO) {
+    /**
+     * Send OTP for device change
+     */
+    suspend fun sendChangeDeviceOtp(phone: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            val res = api.sendChangeDeviceOtp(mobileNumber.toLong())
+            Log.d("AUTH", "sendChangeDeviceOtp - phone: $phone")
+
+            val res = api.sendChangeDeviceOtp(mobileNumber = phone.toLong())
             Log.d("NET", "sendChangeDeviceOtp -> code=${res.code()}")
+
             toOutcome(res, requireToken = false)
         } catch (e: Exception) {
-            AuthOutcome.Error(e.message ?: "Failed to send OTP")
+            Log.e("AUTH", "sendChangeDeviceOtp error", e)
+            AuthOutcome.Error(e.message ?: "Failed to send change device OTP")
         }
     }
 
-    suspend fun requestDeviceChange(
-        mobileNumber: String,
-        otp: String,
-        reason: String = ""
+    /**
+     * Request device change
+     * NOTE: This endpoint returns DeviceChangeResponse (with "detail" field), not BasicResponse
+     */
+    suspend fun requestChangeDevice(
+        phone: String,
+        otp: String
     ): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            val deviceInfo = DeviceInfoHelper.getDeviceInfo(context)
+            val newDeviceId = androidId()
+            val newDeviceOs = getDeviceOSVersion()
+            val newDeviceModel = getDeviceModel()
+            val newDeviceCompanyName = getDeviceManufacturer()
+
+            Log.d("AUTH", "requestChangeDevice")
+            Log.d("AUTH", "  phone: $phone")
+            Log.d("AUTH", "  newDeviceId: $newDeviceId")
+            Log.d("AUTH", "  newDeviceOs: $newDeviceOs")
+            Log.d("AUTH", "  newDeviceModel: $newDeviceModel")
+            Log.d("AUTH", "  newDeviceCompanyName: $newDeviceCompanyName")
 
             val res = api.requestChangeDevice(
                 otp = otp,
-                mobileNumber = mobileNumber.toLong(),
-                newDeviceId = deviceInfo.deviceId,
-                newDeviceOs = deviceInfo.os,
-                newDeviceModel = deviceInfo.model,
-                newDeviceCompanyName = deviceInfo.manufacturer,
-                reason = reason
+                mobileNumber = phone.toLong(),
+                newDeviceId = newDeviceId,
+                newDeviceOs = newDeviceOs,
+                newDeviceModel = newDeviceModel,
+                newDeviceCompanyName = newDeviceCompanyName,
+                reason = null
             )
+            Log.d("NET", "requestChangeDevice -> code=${res.code()}")
 
-            Log.d("NET", "requestDeviceChange -> code=${res.code()} url=${res.raw().request.url}")
-
-            when {
-                res.isSuccessful -> {
-                    val body = res.body()
-                    val msg = body?.detail ?: "Device change request submitted successfully"
-                    AuthOutcome.Success(msg)
+            // Handle DeviceChangeResponse (has "detail" field, not "message")
+            if (res.isSuccessful && res.code() == 200) {
+                val body = res.body()
+                val msg = body?.detail ?: "Device change request submitted successfully"
+                Log.d("AUTH", "✅ Device change request successful: $msg")
+                AuthOutcome.Success(msg)
+            } else {
+                val errorMessage = try {
+                    val errBody = res.errorBody()?.string()
+                    if (errBody.isNullOrBlank()) {
+                        res.message()
+                    } else {
+                        val gson = Gson()
+                        val map = gson.fromJson(errBody, Map::class.java)
+                        // Try "detail" field first (DeviceChangeResponse), then "message"
+                        map["detail"]?.toString() ?: map["message"]?.toString() ?: res.message()
+                    }
+                } catch (e: Exception) {
+                    res.message()
                 }
-                else -> {
-                    val msg = extractDetailMessage(res)
-                    AuthOutcome.Error(msg)
-                }
+                Log.e("AUTH", "❌ Device change request failed: $errorMessage")
+                AuthOutcome.Error(errorMessage)
             }
         } catch (e: Exception) {
-            Log.e("NET", "requestDeviceChange error", e)
+            Log.e("AUTH", "requestChangeDevice error", e)
             AuthOutcome.Error(e.message ?: "Failed to submit device change request")
         }
     }
 
     /**
-     * Get OneSignal Player ID (the actual UUID from OneSignal servers)
-     * Waits up to 15 seconds for the real OneSignal ID
-     * This is CRITICAL - we need the real OneSignal Player ID, not FCM token!
+     * Logout user and optionally clear push notification tokens
+     * @param clearPushToken If true, clears FCM tokens from backend
      */
-    private suspend fun getOneSignalPlayerId(): String? {
-        return try {
-            // Try up to 30 times with 500ms delay = 15 seconds total
-            repeat(30) { attempt ->
-                // Try to get the REAL OneSignal ID (UUID format)
-                val onesignalId = OneSignal.User.onesignalId
+    suspend fun logout(clearPushToken: Boolean = true): AuthOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val deviceId = androidId()
 
-                if (!onesignalId.isNullOrBlank()) {
-                    // Validate it's actually a UUID format (not FCM token)
-                    if (onesignalId.contains("-") && onesignalId.length == 36) {
-                        Log.d("AUTH", "✅ OneSignal Player ID (UUID) retrieved: ${onesignalId.take(20)}...")
-                        return onesignalId
-                    } else {
-                        Log.w("AUTH", "⚠️ Got ID but not UUID format: ${onesignalId.take(20)}...")
-                    }
-                }
+            Log.d("AUTH", "🚪 Logging out - deviceId: $deviceId, clearPushToken: $clearPushToken")
 
-                if (attempt < 29) {
-                    if (attempt % 5 == 0) {
-                        Log.d("AUTH", "⏳ Waiting for OneSignal Player ID... (attempt ${attempt + 1}/30)")
-                    }
-                    delay(500) // Wait 500ms before retry
-                }
+            val res = api.logout(
+                deviceId = deviceId,
+                clearPushToken = clearPushToken
+            )
+
+            Log.d("NET", "logout -> code=${res.code()}")
+
+            if (res.isSuccessful) {
+                val body = res.body()
+                val msg = body?.message ?: "Logged out successfully"
+
+                // Clear local preferences
+                pm.clearAll()
+                Log.d("AUTH", "✅ Local preferences cleared")
+
+                AuthOutcome.Success(msg)
+            } else {
+                AuthOutcome.Error(extractMessage(res))
             }
-
-            Log.w("AUTH", "⚠️ OneSignal Player ID not available after 15 seconds")
-            null
         } catch (e: Exception) {
-            Log.e("AUTH", "❌ Failed to get OneSignal Player ID", e)
-            null
+            Log.e("AUTH", "logout error", e)
+            // Even if API call fails, clear local preferences
+            pm.clearAll()
+            AuthOutcome.Error(e.message ?: "Logout failed")
         }
     }
 
     /**
-     * Get OneSignal Subscription ID (FCM Token)
-     * This is the Firebase token, NOT the same as Player ID!
+     * Convert API response to AuthOutcome
      */
-    private suspend fun getOneSignalSubscriptionId(): String? {
-        return try {
-            val subscriptionId = OneSignal.User.pushSubscription.token
-            if (!subscriptionId.isNullOrBlank()) {
-                Log.d("AUTH", "✅ OneSignal Subscription Token (FCM) retrieved: ${subscriptionId.take(20)}...")
-                return subscriptionId
-            }
-            Log.w("AUTH", "⚠️ OneSignal Subscription Token not available")
-            null
-        } catch (e: Exception) {
-            Log.e("AUTH", "❌ Failed to get OneSignal Subscription Token", e)
-            null
-        }
-    }
-
     private fun toOutcome(res: Response<BasicResponse>, requireToken: Boolean): AuthOutcome {
         return if (res.isSuccessful && res.code() == 200) {
             val body = res.body()
@@ -332,96 +365,18 @@ class AuthRepository(
                 pm.deviceId = deviceId
                 Log.d("AUTH", "✅ Device ID saved: $deviceId")
 
-                // Verify it was saved
-                val savedDeviceId = pm.deviceId
-                Log.d("AUTH", "✅ Verification - Device ID from prefs: $savedDeviceId")
-
-                if (savedDeviceId.isBlank()) {
-                    Log.e("AUTH", "❌ ERROR: Device ID is BLANK after saving!")
-                }
-
                 // Save profile and company info if available
                 body.profile_url?.let { pm.profileUrl = it }
                 body.full_name?.let { pm.fullName = it }
                 body.company_name?.let { pm.companyName = it }
                 body.company_logo_url?.let { pm.companyLogoUrl = it }
 
-                // Log push notification status if available
-                body.push_notifications?.let { pushStatus ->
-                    Log.d("AUTH", "📱 Push Notification Status:")
-                    Log.d("AUTH", "  Registered: ${pushStatus.registered}")
-                    Log.d("AUTH", "  Enabled: ${pushStatus.enabled}")
-                    Log.d("AUTH", "  Player ID: ${pushStatus.onesignal_player_id?.take(20)}...")
-                    Log.d("AUTH", "  Has FCM Backup: ${pushStatus.has_fcm_backup}")
-                    Log.d("AUTH", "  Failure Count: ${pushStatus.failure_count}")
-                }
+                Log.d("AUTH", "✅ Login successful - all data saved")
             }
 
             AuthOutcome.Success(msg)
         } else {
             AuthOutcome.Error(extractMessage(res))
-        }
-    }
-
-    /**
-     * Logout user and optionally clear push notification tokens
-     * @param clearPushToken If true, clears all OneSignal and FCM tokens from backend
-     */
-    suspend fun logout(clearPushToken: Boolean = true): AuthOutcome = withContext(Dispatchers.IO) {
-        return@withContext try {
-            val deviceId = androidId()
-
-            Log.d("AUTH", "🚪 Logging out - deviceId: $deviceId, clearPushToken: $clearPushToken")
-
-            val res = api.logout(
-                deviceId = deviceId,
-                clearPushToken = clearPushToken
-            )
-
-            Log.d("NET", "logout -> code=${res.code()}")
-
-            if (res.isSuccessful) {
-                val body = res.body()
-                val msg = body?.message ?: "Logged out successfully"
-
-                // Log logout details
-                body?.let {
-                    Log.d("AUTH", "✅ Logout successful")
-                    Log.d("AUTH", "  Logout time: ${it.logout_time}")
-                    Log.d("AUTH", "  Device ID: ${it.device_id}")
-
-                    it.push_notifications?.let { pushInfo ->
-                        Log.d("AUTH", "  Push tokens cleared: ${pushInfo.cleared}")
-                    }
-                }
-
-                // Clear local preferences
-                pm.clearAll()
-                Log.d("AUTH", "✅ Local preferences cleared")
-
-                AuthOutcome.Success(msg)
-            } else {
-                // Extract error message from logout response
-                val errorMsg = try {
-                    res.body()?.message ?: res.message() ?: "Logout failed"
-                } catch (e: Exception) {
-                    "Logout failed"
-                }
-
-                Log.e("AUTH", "❌ Logout failed: $errorMsg")
-
-                // Still clear local data even if API call fails
-                pm.clearAll()
-
-                AuthOutcome.Error(errorMsg)
-            }
-        } catch (e: Exception) {
-            Log.e("AUTH", "❌ Logout error", e)
-
-            // Clear local data even on exception
-            pm.clearAll()
-
-            AuthOutcome.Error(e.message ?: "Logout failed")
         }
     }
 }

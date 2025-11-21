@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "869917194030",
-    "project_id": "teamozy-bc969",
-    "storage_bucket": "teamozy-bc969.firebasestorage.app"
+    "project_number": "228563084316",
+    "project_id": "teamozy-rbac-hrms",
+    "storage_bucket": "teamozy-rbac-hrms.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:869917194030:android:1a18fc4ca094a8f6426cbf",
+        "mobilesdk_app_id": "1:228563084316:android:b5ac709d1cec319ee2abd9",
         "android_client_info": {
           "package_name": "com.hrms.jeejateamozy"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAWnWTSqJx23_OeCePlsOzOKJvpffJrNq4"
+          "current_key": "AIzaSyBf6gizyU22o_tiYsJbP3GK1A9bWOr13Os"
         }
       ],
       "services": {

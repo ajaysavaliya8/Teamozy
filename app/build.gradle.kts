@@ -46,7 +46,9 @@ android {
 }
 
 dependencies {
-    implementation("com.onesignal:OneSignal:[5.1.0, 5.1.99]")
+// Firebase Cloud Messaging
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     implementation(platform("io.insert-koin:koin-bom:4.1.1"))
     implementation("io.insert-koin:koin-android")
@@ -72,6 +74,8 @@ dependencies {
     implementation(libs.androidx.navigation.ui.ktx)
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.messaging)
+    implementation(libs.firebase.inappmessaging.display)
 
     // Chucker (network inspector) — debug only
     debugImplementation("com.github.chuckerteam.chucker:library:4.0.0")

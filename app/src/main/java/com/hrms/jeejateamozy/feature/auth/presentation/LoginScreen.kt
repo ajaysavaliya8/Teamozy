@@ -545,10 +545,11 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                     }
                 }
             },
+
             onRequestDevice = {
                 scope.launch {
                     deviceRequestLoading = true
-                    when (val outcome = repo.requestDeviceChange(deviceMobileNumber, deviceOtp)) {
+                    when (val outcome = repo.requestChangeDevice(deviceMobileNumber, deviceOtp)) {  // ✅ NEW
                         is AuthOutcome.Success -> {
                             deviceRequestLoading = false
                             showDeviceDialog = false

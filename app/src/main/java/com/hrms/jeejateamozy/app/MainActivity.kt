@@ -1,10 +1,14 @@
 package com.hrms.jeejateamozy.app
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,9 +18,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import org.koin.android.ext.koin.androidContext
 import org.koin.compose.koinInject
 import org.koin.core.context.GlobalContext
@@ -38,9 +44,9 @@ import com.hrms.jeejateamozy.di.homeModule
 import com.hrms.jeejateamozy.di.leaveModule
 import com.hrms.jeejateamozy.di.attendanceHistoryModule
 
-// OneSignal imports
-import com.onesignal.OneSignal
-import com.onesignal.debug.LogLevel
+// Firebase imports
+import com.google.firebase.FirebaseApp
+import com.google.firebase.messaging.FirebaseMessaging
 
 private enum class AppScreen {
     SPLASH,
@@ -49,6 +55,22 @@ private enum class AppScreen {
 }
 
 class MainActivity : ComponentActivity() {
+
+    // Permission launcher for notification permission (Android 13+)
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.d("FCM", "✅ Notification permission granted")
+            // Get FCM token after permission is granted
+            lifecycleScope.launch {
+                getFCMToken()
+            }
+        } else {
+            Log.w("FCM", "⚠️ Notification permission denied")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -56,9 +78,9 @@ class MainActivity : ComponentActivity() {
         NetworkModule.initialize(applicationContext)
 
         // ============================================
-        // INITIALIZE ONESIGNAL
+        // INITIALIZE FIREBASE
         // ============================================
-        initializeOneSignal()
+        initializeFirebase()
 
         // Start Koin here (since there's no Application class now)
         if (GlobalContext.getOrNull() == null) {
@@ -85,35 +107,66 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Initialize OneSignal Push Notifications
+     * Initialize Firebase and get FCM token
      */
-    private fun initializeOneSignal() {
+    private fun initializeFirebase() {
         try {
-            // Enable verbose logging for debugging (disable in production)
-            OneSignal.Debug.logLevel = LogLevel.VERBOSE
+            // Initialize Firebase
+            FirebaseApp.initializeApp(this)
+            Log.d("FCM", "✅ Firebase initialized successfully")
 
-            // Initialize OneSignal with your App ID
-            OneSignal.initWithContext(this, "d28eccbe-be33-48f3-a12d-fc5d75b4ac69")
-
-
-            // Request notification permission (Android 13+) - using lifecycleScope
-            lifecycleScope.launch {
-                try {
-                    OneSignal.Notifications.requestPermission(true)
-                    Log.d("OneSignal", "✅ Notification permission requested")
-                } catch (e: Exception) {
-                    Log.e("OneSignal", "Failed to request permission", e)
+            // Request notification permission (Android 13+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                when {
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED -> {
+                        Log.d("FCM", "✅ Notification permission already granted")
+                        // Get FCM token
+                        lifecycleScope.launch {
+                            getFCMToken()
+                        }
+                    }
+                    else -> {
+                        // Request permission
+                        Log.d("FCM", "📋 Requesting notification permission")
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+            } else {
+                // For Android < 13, notification permission is granted by default
+                Log.d("FCM", "✅ Notification permission not required for this Android version")
+                lifecycleScope.launch {
+                    getFCMToken()
                 }
             }
 
-            // Log the player ID when available
-            OneSignal.User.pushSubscription.id?.let { playerId ->
-                Log.d("OneSignal", "✅ Player ID: $playerId")
-            }
-
-            Log.d("OneSignal", "✅ OneSignal initialized successfully")
         } catch (e: Exception) {
-            Log.e("OneSignal", "❌ Failed to initialize OneSignal", e)
+            Log.e("FCM", "❌ Failed to initialize Firebase", e)
+        }
+    }
+
+    /**
+     * Get FCM Token and save to PreferencesManager
+     */
+    private suspend fun getFCMToken() {
+        try {
+            val token = FirebaseMessaging.getInstance().token.await()
+
+            if (token.isNotBlank()) {
+                Log.d("FCM", "✅ FCM Token retrieved: ${token.take(30)}...")
+
+                // Save token to PreferencesManager
+                val prefsManager = PreferencesManager.getInstance(applicationContext)
+                prefsManager.fcmToken = token
+
+                Log.d("FCM", "✅ FCM token saved to PreferencesManager")
+            } else {
+                Log.w("FCM", "⚠️ FCM token is blank")
+            }
+        } catch (e: Exception) {
+            Log.e("FCM", "❌ Failed to get FCM token", e)
         }
     }
 }
@@ -165,6 +218,56 @@ private fun AppRoot() {
 }
 
 @Composable
+private fun InlineSplash(
+    authRepository: AuthRepository,
+    preferencesManager: PreferencesManager,
+    onComplete: (isAuthorized: Boolean) -> Unit
+) {
+    var status by remember { mutableStateOf("Initializing...") }
+
+    LaunchedEffect(Unit) {
+        delay(1000)
+        status = "Verifying session..."
+        delay(500)
+
+        when (val outcome = authRepository.verifyToken()) {
+            is AuthOutcome.Success -> {
+                Log.d("SplashScreen", "Token valid - navigating to home")
+                onComplete(true)
+            }
+            else -> {
+                Log.d("SplashScreen", "Token invalid or missing - navigating to login")
+                onComplete(false)
+            }
+        }
+    }
+
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Teamozy",
+                style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "HR Management System",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(48.dp))
+            CircularProgressIndicator()
+            Spacer(Modifier.height(16.dp))
+            Text(text = status, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+@Composable
 private fun HomeWithPermissions(
     preferencesManager: PreferencesManager,
     onLogout: () -> Unit
@@ -176,6 +279,7 @@ private fun HomeWithPermissions(
 
     // Check if we should show permission dialog
     LaunchedEffect(Unit) {
+        delay(300)
         // Only check on first time or if permissions not granted
         if (!preferencesManager.hasShownPermissions) {
             // Check if permissions are already granted
@@ -215,65 +319,15 @@ private fun HomeWithPermissions(
                     }
                     is AuthOutcome.Error -> {
                         Log.e("MainActivity", "❌ Logout error: ${outcome.message}")
-                        // Still logout locally
+                        // Clear local data even if API fails
                         onLogout()
                     }
                     else -> {
+                        Log.w("MainActivity", "⚠️ Unexpected logout outcome")
                         onLogout()
                     }
                 }
             }
         }
     )
-}
-
-@Composable
-private fun InlineSplash(
-    authRepository: AuthRepository,
-    preferencesManager: PreferencesManager,
-    onComplete: (Boolean) -> Unit
-) {
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        delay(1000)  // Show splash for 1 second
-
-        val token = preferencesManager.authToken
-        if (token.isNullOrBlank()) {
-            onComplete(false)
-        } else {
-            when (authRepository.verifyToken()) {
-                is AuthOutcome.Success -> onComplete(true)
-                is AuthOutcome.Error -> {
-                    preferencesManager.clearAll()
-                    onComplete(false)
-                }
-                is AuthOutcome.DeviceNotRegistered -> {
-                    preferencesManager.clearAll()
-                    onComplete(false)
-                }
-            }
-        }
-    }
-
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(48.dp),
-                strokeWidth = 4.dp
-            )
-            Text(
-                text = "Loading...",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
 }

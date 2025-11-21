@@ -32,10 +32,10 @@ data class BasicResponse(
     // ===== Support Information =====
     val hr_email: String? = null,
     val technical_support_number: String? = null,
-    val technical_support_email: String? = null,
+    val technical_support_email: String? = null
 
-    // ===== NEW: Push Notification Status =====
-    val push_notifications: PushNotificationStatus? = null
+    // Note: Push notification status removed - no longer returned by API
+    // Firebase FCM token is registered silently in the backend
 )
 
 data class PushNotificationStatus(

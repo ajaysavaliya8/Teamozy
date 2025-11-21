@@ -15,6 +15,11 @@ class LoginUseCase(private val repo: AuthRepository) {
     suspend fun sendChangeDeviceOtp(mobileNumber: String): AuthOutcome =
         repo.sendChangeDeviceOtp(mobileNumber)
 
-    suspend fun requestDeviceChange(mobileNumber: String, otp: String, reason: String = ""): AuthOutcome =
-        repo.requestDeviceChange(mobileNumber, otp, reason)
+    /**
+     * Request device change with OTP verification
+     * Note: Method name changed from requestDeviceChange to requestChangeDevice
+     * Note: Reason parameter removed as it's not used in the current API implementation
+     */
+    suspend fun requestChangeDevice(mobileNumber: String, otp: String): AuthOutcome =
+        repo.requestChangeDevice(mobileNumber, otp)
 }
