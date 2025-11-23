@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
+import com.hrms.jeejateamozy.core.network.PendingMessage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.core.state.AppStateManager
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +36,8 @@ sealed class CheckInOutcome {
         val isOutOfRange: Boolean,
         val lateReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
-        val message: String
+        val message: String,
+        val pendingMessage: PendingMessage? = null  // ✅ NEW
     ) : CheckInOutcome()
 
     data class RequiresReasons(
@@ -44,7 +46,8 @@ sealed class CheckInOutcome {
         val isOutOfRange: Boolean,
         val lateReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
-        val message: String
+        val message: String,
+        val pendingMessage: PendingMessage? = null  // ✅ NEW
     ) : CheckInOutcome()
 
     data class Success(val message: String) : CheckInOutcome()
@@ -61,7 +64,7 @@ sealed class CheckOutOutcome {
         val isOutOfRange: Boolean,
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
-        val workReportRequired: Boolean,  // ✅ NEW
+        val workReportRequired: Boolean,
         val message: String
     ) : CheckOutOutcome()
 
@@ -72,7 +75,7 @@ sealed class CheckOutOutcome {
         val isOutOfRange: Boolean,
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
-        val workReportRequired: Boolean,  // ✅ NEW
+        val workReportRequired: Boolean,
         val message: String
     ) : CheckOutOutcome()
 
@@ -191,6 +194,7 @@ class AttendanceRepository(private val context: Context) {
                         val lateReasonRequired = body.late_reason_required ?: false
                         val outOfRangeReasonRequired = body.out_of_range_reason_required ?: false
                         val message = body.message ?: "Ready for check-in"
+                        val pendingMessage = body.pending_message  // ✅ NEW: Extract pending message
 
                         Log.d("NET", "Check-in initial success:")
                         Log.d("NET", "  face_verification_required: $faceVerificationRequired")
@@ -199,6 +203,7 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  is_out_of_range: $isOutOfRange")
                         Log.d("NET", "  late_reason_required: $lateReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
+                        Log.d("NET", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}, Type=${pendingMessage.type}" else "null"}")  // ✅ NEW
 
                         val faceVector = body.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
@@ -223,7 +228,8 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = isOutOfRange,
                                     lateReasonRequired = lateReasonRequired,
                                     outOfRangeReasonRequired = outOfRangeReasonRequired,
-                                    message = message
+                                    message = message,
+                                    pendingMessage = pendingMessage  // ✅ NEW
                                 )
                             }
 
@@ -234,7 +240,8 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = isOutOfRange,
                                     lateReasonRequired = lateReasonRequired,
                                     outOfRangeReasonRequired = outOfRangeReasonRequired,
-                                    message = message
+                                    message = message,
+                                    pendingMessage = pendingMessage  // ✅ NEW
                                 )
                             }
 
@@ -245,7 +252,8 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = false,
                                     lateReasonRequired = false,
                                     outOfRangeReasonRequired = false,
-                                    message = message
+                                    message = message,
+                                    pendingMessage = pendingMessage  // ✅ NEW
                                 )
                             }
                         }
@@ -275,7 +283,8 @@ class AttendanceRepository(private val context: Context) {
         faceRecognitionQualityScore: Float? = null,
         faceVerify: Boolean = false,
         lateReason: String? = null,
-        outOfRangeReason: String? = null
+        outOfRangeReason: String? = null,
+        acknowledgmentNote: String? = null  // ✅ NEW: Acknowledgment note for pending message
     ): SignatureOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("NET", "checkInSignature called:")
@@ -284,6 +293,7 @@ class AttendanceRepository(private val context: Context) {
             Log.d("NET", "  face_verify: $faceVerify")
             Log.d("NET", "  late_reason: ${lateReason?.take(50)}")
             Log.d("NET", "  out_of_range_reason: ${outOfRangeReason?.take(50)}")
+            Log.d("NET", "  acknowledgment_note: ${acknowledgmentNote?.take(50)}")  // ✅ NEW
 
             val res = api.checkInSignature(
                 tToken = tToken,
@@ -291,6 +301,7 @@ class AttendanceRepository(private val context: Context) {
                 faceVerify = faceVerify,
                 lateReason = lateReason,
                 outOfRangeReason = outOfRangeReason,
+                acknowledgmentNote = acknowledgmentNote,  // ✅ NEW
                 token = token()
             )
 
@@ -364,7 +375,7 @@ class AttendanceRepository(private val context: Context) {
                         val isOutOfRange = body.is_out_of_range ?: false
                         val earlyReasonRequired = body.early_reason_required ?: false
                         val outOfRangeReasonRequired = body.out_of_range_reason_required ?: false
-                        val workReportRequired = body.work_report_require ?: false  // ✅ NEW
+                        val workReportRequired = body.work_report_require ?: false
                         val message = body.message ?: "Ready for check-out"
 
                         Log.d("NET", "Check-out initial success:")
@@ -375,7 +386,7 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  is_out_of_range: $isOutOfRange")
                         Log.d("NET", "  early_reason_required: $earlyReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
-                        Log.d("NET", "  work_report_required: $workReportRequired")  // ✅ NEW
+                        Log.d("NET", "  work_report_required: $workReportRequired")
 
                         val faceVector = body.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
@@ -401,12 +412,12 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = isOutOfRange,
                                     earlyReasonRequired = earlyReasonRequired,
                                     outOfRangeReasonRequired = outOfRangeReasonRequired,
-                                    workReportRequired = workReportRequired,  // ✅ NEW
+                                    workReportRequired = workReportRequired,
                                     message = message
                                 )
                             }
 
-                            earlyReasonRequired || outOfRangeReasonRequired || workReportRequired -> {  // ✅ MODIFIED
+                            earlyReasonRequired || outOfRangeReasonRequired || workReportRequired -> {
                                 CheckOutOutcome.RequiresReasons(
                                     tToken = body.t_token,
                                     workHours = workHours,
@@ -414,7 +425,7 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = isOutOfRange,
                                     earlyReasonRequired = earlyReasonRequired,
                                     outOfRangeReasonRequired = outOfRangeReasonRequired,
-                                    workReportRequired = workReportRequired,  // ✅ NEW
+                                    workReportRequired = workReportRequired,
                                     message = message
                                 )
                             }
@@ -427,7 +438,7 @@ class AttendanceRepository(private val context: Context) {
                                     isOutOfRange = false,
                                     earlyReasonRequired = false,
                                     outOfRangeReasonRequired = false,
-                                    workReportRequired = false,  // ✅ NEW
+                                    workReportRequired = false,
                                     message = message
                                 )
                             }
@@ -463,8 +474,8 @@ class AttendanceRepository(private val context: Context) {
         faceVerify: Boolean = false,
         earlyReason: String? = null,
         outOfRangeReason: String? = null,
-        workReport: String? = null,  // ✅ NEW
-        workReportFileUri: Uri? = null  // ✅ NEW
+        workReport: String? = null,
+        workReportFileUri: Uri? = null
     ): SignatureOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("NET", "checkOutSignature called:")
@@ -473,7 +484,7 @@ class AttendanceRepository(private val context: Context) {
             Log.d("NET", "  face_verify: $faceVerify")
             Log.d("NET", "  early_reason: ${earlyReason?.take(50)}")
             Log.d("NET", "  out_of_range_reason: ${outOfRangeReason?.take(50)}")
-            Log.d("NET", "  work_report: ${workReport?.take(50)}")  // ✅ NEW
+            Log.d("NET", "  work_report: ${workReport?.take(50)}")
 
             // Prepare multipart request bodies
             val tTokenBody = tToken.toRequestBody("text/plain".toMediaTypeOrNull())
@@ -494,7 +505,7 @@ class AttendanceRepository(private val context: Context) {
 
                     fileBytes?.let { bytes ->
                         val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
-                        val fileName = getFileName(uri) ?: "work_report_${System.currentTimeMillis()}"
+                        val fileName = getFileName(uri) ?: "work_report_attachment"
 
                         val requestBody = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
                         filePart = MultipartBody.Part.createFormData(
@@ -502,10 +513,10 @@ class AttendanceRepository(private val context: Context) {
                             fileName,
                             requestBody
                         )
-                        Log.d("NET", "  work_report_file: $fileName (${bytes.size} bytes)")
+                        Log.d("NET", "  work_report_file prepared: $fileName (${bytes.size} bytes)")
                     }
                 } catch (e: Exception) {
-                    Log.e("NET", "Error preparing file: ${e.message}")
+                    Log.e("NET", "Error preparing work report file", e)
                 }
             }
 
@@ -516,7 +527,7 @@ class AttendanceRepository(private val context: Context) {
                 earlyReason = earlyReasonBody,
                 outOfRangeReason = outOfRangeReasonBody,
                 workReport = workReportBody,
-                work_report_file = filePart,
+                workReportFile = filePart,
                 token = token()
             )
 
@@ -528,9 +539,6 @@ class AttendanceRepository(private val context: Context) {
 
                     if (body != null) {
                         Log.d("NET", "Check-out signature success: ${body.message}")
-                        Log.d("NET", "  work_hours: ${body.work_hours}")
-                        Log.d("NET", "  attendance_status: ${body.attendance_status}")
-
                         SignatureOutcome.Success(
                             message = body.message,
                             attendanceRecordId = null,
@@ -562,24 +570,15 @@ class AttendanceRepository(private val context: Context) {
         }
     }
 
-    // Helper function to get file name from URI
     private fun getFileName(uri: Uri): String? {
         var fileName: String? = null
-        if (uri.scheme == "content") {
-            val cursor = context.contentResolver.query(uri, null, null, null, null)
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex != -1) {
-                        fileName = it.getString(nameIndex)
-                    }
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1) {
+                    fileName = it.getString(nameIndex)
                 }
-            }
-        }
-        if (fileName == null) {
-            fileName = uri.path?.let { path ->
-                val cut = path.lastIndexOf('/')
-                if (cut != -1) path.substring(cut + 1) else path
             }
         }
         return fileName
@@ -590,52 +589,21 @@ class AttendanceRepository(private val context: Context) {
             val errorBody = res.errorBody()?.string()
             if (!errorBody.isNullOrBlank()) {
                 val json = JSONObject(errorBody)
-
-                // Check for FastAPI validation errors (detail array)
-                if (json.has("detail")) {
-                    val detail = json.get("detail")
-
-                    // If detail is an array (FastAPI validation errors)
-                    if (detail is org.json.JSONArray && detail.length() > 0) {
-                        val firstError = detail.getJSONObject(0)
-                        val msg = firstError.optString("msg", "")
-                        val input = firstError.optString("input", "")
-
-                        // Create a user-friendly message
-                        return when {
-                            msg.contains("at least 10 characters", ignoreCase = true) ->
-                                "Work description must be at least 10 characters"
-                            msg.contains("required", ignoreCase = true) -> {
-                                val field = firstError.optJSONArray("loc")?.getString(1) ?: "Field"
-                                "$field is required"
-                            }
-                            else -> msg.ifEmpty { "Validation error" }
-                        }
-                    }
-
-                    // If detail is a string
-                    if (detail is String) {
-                        return detail
-                    }
-                }
-
-                // Fallback to message field
                 json.optString("message", "Unknown error")
             } else {
-                "Server error (${res.code()})"
+                "Server error: ${res.code()}"
             }
         } catch (e: Exception) {
-            Log.e("NET", "Error parsing error response", e)
-            "Server error (${res.code()})"
+            "Server error: ${res.code()}"
         }
     }
 
     private fun friendlyNetError(e: Exception): String {
-        return when (e) {
-            is java.net.UnknownHostException -> "No internet connection"
-            is java.net.SocketTimeoutException -> "Request timed out"
-            is javax.net.ssl.SSLException -> "Secure connection failed"
-            else -> e.message ?: "Network error occurred"
+        return when {
+            e.message?.contains("Unable to resolve host") == true ||
+                    e.message?.contains("Failed to connect") == true -> "No internet connection"
+            e.message?.contains("timeout") == true -> "Connection timeout. Please try again"
+            else -> "Network error. Please try again"
         }
     }
 }

@@ -86,6 +86,7 @@ interface ApiService {
         @Field("face_verify") faceVerify: Boolean = false,
         @Field("late_reason") lateReason: String? = null,
         @Field("out_of_range_reason") outOfRangeReason: String? = null,
+        @Field("acknowledgment_note") acknowledgmentNote: String? = null,
         @Query("token") token: String
     ): Response<CheckInSignatureResponse>
 

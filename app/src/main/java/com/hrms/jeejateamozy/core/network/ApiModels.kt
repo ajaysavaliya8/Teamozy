@@ -77,7 +77,8 @@ data class CheckInResponse(
     val is_late: Boolean? = null,
     val is_out_of_range: Boolean? = null,
     val late_reason_required: Boolean? = null,
-    val out_of_range_reason_required: Boolean? = null
+    val out_of_range_reason_required: Boolean? = null,
+    val pending_message: PendingMessage? = null
 )
 
 // -------- Check-In Signature Response --------
@@ -1039,4 +1040,14 @@ data class LogoutResponse(
 data class LogoutPushNotifications(
     val cleared: Boolean,
     val message: String? = null
+)
+
+data class PendingMessage(
+    val id: Int,
+    val type: String,                        // "REMINDER", "NOTICE", "WARNING", "CRITICAL"
+    val title: String,
+    val body: String,
+    val has_attachment: Boolean,
+    val attachment_url: String?,             // Full URL to download attachment
+    val requires_acknowledgment: Boolean
 )

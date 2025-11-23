@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hrms.jeejateamozy.core.network.PendingMessage
 import com.hrms.jeejateamozy.core.utils.LocationHelper
 import com.hrms.jeejateamozy.core.utils.LocationResult
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceOutcome
@@ -83,7 +84,10 @@ class AttendanceViewModel(
                         checkOutTToken = null,
                         showFaceVerification = false,
                         showReasonDialog = false,
-                        showWorkReportDialog = false  // ✅ NEW
+                        showWorkReportDialog = false,
+                        showPendingMessageDialog = false,  // ✅ NEW
+                        pendingMessage = null,  // ✅ NEW
+                        acknowledgmentNote = null  // ✅ NEW
                     )
                 }
                 is AttendanceOutcome.Error -> {
@@ -117,6 +121,10 @@ class AttendanceViewModel(
         when (val outcome = repo.checkIn(latitude, longitude)) {
             is CheckInOutcome.RequiresFaceVerification -> {
                 Log.d("AttendanceViewModel", "✅ Check-in requires face verification")
+
+                val pendingMessage = outcome.pendingMessage  // ✅ NEW: Extract pending message
+                Log.d("AttendanceViewModel", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}" else "null"}")
+
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     checkInTToken = outcome.tToken,
@@ -127,12 +135,18 @@ class AttendanceViewModel(
                     checkInOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkInMessage = outcome.message,
                     checkInFaceVector = outcome.faceVector,
-                    showFaceVerification = true
+                    pendingMessage = pendingMessage,  // ✅ NEW: Store pending message
+                    showPendingMessageDialog = pendingMessage != null,  // ✅ NEW: Show message dialog if message exists
+                    showFaceVerification = pendingMessage == null  // ✅ NEW: Only show face verification if no message
                 )
             }
 
             is CheckInOutcome.RequiresReasons -> {
                 Log.d("AttendanceViewModel", "✅ Check-in requires reasons")
+
+                val pendingMessage = outcome.pendingMessage  // ✅ NEW: Extract pending message
+                Log.d("AttendanceViewModel", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}" else "null"}")
+
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     checkInTToken = outcome.tToken,
@@ -141,10 +155,13 @@ class AttendanceViewModel(
                     checkInLateReasonRequired = outcome.lateReasonRequired,
                     checkInOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkInMessage = outcome.message,
-                    showReasonDialog = outcome.lateReasonRequired || outcome.outOfRangeReasonRequired
+                    pendingMessage = pendingMessage,  // ✅ NEW: Store pending message
+                    showPendingMessageDialog = pendingMessage != null,  // ✅ NEW: Show message dialog if message exists
+                    showReasonDialog = (outcome.lateReasonRequired || outcome.outOfRangeReasonRequired) && pendingMessage == null  // ✅ NEW: Only show reasons if no message
                 )
 
-                if (!outcome.lateReasonRequired && !outcome.outOfRangeReasonRequired) {
+                // ✅ NEW: Auto-complete only if no reasons required AND no message
+                if (!outcome.lateReasonRequired && !outcome.outOfRangeReasonRequired && pendingMessage == null) {
                     completeCheckIn(null, null)
                 }
             }
@@ -195,7 +212,7 @@ class AttendanceViewModel(
                     checkOutIsOutOfRange = outcome.isOutOfRange,
                     checkOutEarlyReasonRequired = outcome.earlyReasonRequired,
                     checkOutOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
-                    checkOutWorkReportRequired = outcome.workReportRequired,  // ✅ NEW
+                    checkOutWorkReportRequired = outcome.workReportRequired,
                     checkOutMessage = outcome.message,
                     checkOutFaceVector = outcome.faceVector,
                     showFaceVerification = true
@@ -212,10 +229,10 @@ class AttendanceViewModel(
                     checkOutIsOutOfRange = outcome.isOutOfRange,
                     checkOutEarlyReasonRequired = outcome.earlyReasonRequired,
                     checkOutOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
-                    checkOutWorkReportRequired = outcome.workReportRequired,  // ✅ NEW
+                    checkOutWorkReportRequired = outcome.workReportRequired,
                     checkOutMessage = outcome.message,
                     showReasonDialog = outcome.earlyReasonRequired || outcome.outOfRangeReasonRequired,
-                    showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired  // ✅ NEW: Show work report if no reasons required
+                    showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired
                 )
 
                 // Auto-complete if no reasons or work report required
@@ -243,6 +260,41 @@ class AttendanceViewModel(
         }
     }
 
+    // ✅ NEW: Handle pending message acknowledgment
+    fun onPendingMessageAcknowledged(acknowledgmentNote: String?) {
+        Log.d("AttendanceViewModel", "✅ Message acknowledged, note: ${acknowledgmentNote?.take(50)}")
+
+        _ui.value = _ui.value.copy(
+            showPendingMessageDialog = false,
+            acknowledgmentNote = acknowledgmentNote
+        )
+
+        // Now proceed with the next step based on what's required
+        val hasLateOrOutOfRangeReasons = _ui.value.checkInLateReasonRequired || _ui.value.checkInOutOfRangeReasonRequired
+        val hasFaceVerification = _ui.value.checkInFaceVector != null
+
+        when {
+            hasFaceVerification -> {
+                // Show face verification
+                _ui.value = _ui.value.copy(showFaceVerification = true)
+            }
+            hasLateOrOutOfRangeReasons -> {
+                // Show reason dialog
+                _ui.value = _ui.value.copy(showReasonDialog = true)
+            }
+            else -> {
+                // Complete check-in directly
+                completeCheckIn(null, null)
+            }
+        }
+    }
+
+    // ✅ NEW: Handle pending message dismissal (if no acknowledgment required)
+    fun onPendingMessageDismissed() {
+        Log.d("AttendanceViewModel", "Message dismissed (no acknowledgment required)")
+        onPendingMessageAcknowledged(null)  // Same flow, just no note
+    }
+
     fun onFaceVerificationComplete(qualityScore: Float, verified: Boolean) {
         _ui.value = _ui.value.copy(
             faceVerificationQualityScore = qualityScore,
@@ -264,13 +316,13 @@ class AttendanceViewModel(
         } else {
             val earlyReasonRequired = _ui.value.checkOutEarlyReasonRequired
             val outOfRangeReasonRequired = _ui.value.checkOutOutOfRangeReasonRequired
-            val workReportRequired = _ui.value.checkOutWorkReportRequired  // ✅ NEW
+            val workReportRequired = _ui.value.checkOutWorkReportRequired
 
             when {
                 earlyReasonRequired || outOfRangeReasonRequired -> {
                     _ui.value = _ui.value.copy(showReasonDialog = true)
                 }
-                workReportRequired -> {  // ✅ NEW
+                workReportRequired -> {
                     _ui.value = _ui.value.copy(showWorkReportDialog = true)
                 }
                 else -> {
@@ -284,7 +336,7 @@ class AttendanceViewModel(
         _ui.value = _ui.value.copy(showReasonDialog = false)
     }
 
-    fun onWorkReportDialogDismissed() {  // ✅ NEW
+    fun onWorkReportDialogDismissed() {
         _ui.value = _ui.value.copy(showWorkReportDialog = false)
     }
 
@@ -302,12 +354,17 @@ class AttendanceViewModel(
                 showReasonDialog = false
             )
 
+            val acknowledgmentNote = _ui.value.acknowledgmentNote  // ✅ NEW: Get stored acknowledgment note
+
+            Log.d("AttendanceViewModel", "Completing check-in with acknowledgment: ${acknowledgmentNote?.take(50)}")
+
             when (val outcome = repo.checkInSignature(
                 tToken = tToken,
                 faceRecognitionQualityScore = _ui.value.faceVerificationQualityScore,
                 faceVerify = _ui.value.faceVerificationSuccess,
                 lateReason = lateReason,
-                outOfRangeReason = outOfRangeReason
+                outOfRangeReason = outOfRangeReason,
+                acknowledgmentNote = acknowledgmentNote  // ✅ NEW: Pass acknowledgment note
             )) {
                 is SignatureOutcome.Success -> {
                     Log.d("AttendanceViewModel", "✅ Check-in signature SUCCESS")
@@ -319,7 +376,9 @@ class AttendanceViewModel(
                         checkInFaceVector = null,
                         checkInMessage = null,
                         faceVerificationQualityScore = null,
-                        faceVerificationSuccess = false
+                        faceVerificationSuccess = false,
+                        pendingMessage = null,  // ✅ NEW: Clear pending message
+                        acknowledgmentNote = null  // ✅ NEW: Clear acknowledgment note
                     )
                     emitSuccess(outcome.message)
                 }
@@ -330,7 +389,9 @@ class AttendanceViewModel(
                         isLoading = false,
                         checkInTToken = null,
                         checkInFaceVector = null,
-                        checkInMessage = null
+                        checkInMessage = null,
+                        pendingMessage = null,  // ✅ NEW: Clear pending message on error
+                        acknowledgmentNote = null  // ✅ NEW: Clear acknowledgment note on error
                     )
                     emitError(outcome.message)
                     delay(500)
@@ -343,8 +404,8 @@ class AttendanceViewModel(
     fun completeCheckOut(
         earlyReason: String?,
         outOfRangeReason: String?,
-        workReport: String?,  // ✅ NEW
-        workReportFileUri: Uri?  // ✅ NEW
+        workReport: String?,
+        workReportFileUri: Uri?
     ) {
         val tToken = _ui.value.checkOutTToken
         if (tToken == null) {
@@ -357,7 +418,7 @@ class AttendanceViewModel(
             _ui.value = _ui.value.copy(
                 isLoading = true,
                 showReasonDialog = false,
-                showWorkReportDialog = false  // ✅ NEW
+                showWorkReportDialog = false
             )
 
             when (val outcome = repo.checkOutSignature(
@@ -366,21 +427,22 @@ class AttendanceViewModel(
                 faceVerify = _ui.value.faceVerificationSuccess,
                 earlyReason = earlyReason,
                 outOfRangeReason = outOfRangeReason,
-                workReport = workReport,  // ✅ NEW
-                workReportFileUri = workReportFileUri  // ✅ NEW
+                workReport = workReport,
+                workReportFileUri = workReportFileUri
             )) {
                 is SignatureOutcome.Success -> {
                     Log.d("AttendanceViewModel", "✅ Check-out signature SUCCESS")
                     _ui.value = _ui.value.copy(
                         isLoading = false,
                         currentState = "CHECK_IN_NEEDED",
+                        lastCheckInTime = null,
                         checkOutTToken = null,
                         checkOutFaceVector = null,
                         checkOutMessage = null,
-                        checkOutWorkReportRequired = false,  // ✅ NEW
                         faceVerificationQualityScore = null,
                         faceVerificationSuccess = false,
-                        lastCheckInTime = null,
+                        tempEarlyReason = null,
+                        tempOutOfRangeReason = null,
                         isComplete = true
                     )
                     emitSuccess(outcome.message)
@@ -393,7 +455,8 @@ class AttendanceViewModel(
                         checkOutTToken = null,
                         checkOutFaceVector = null,
                         checkOutMessage = null,
-                        checkOutWorkReportRequired = false  // ✅ NEW
+                        tempEarlyReason = null,
+                        tempOutOfRangeReason = null
                     )
                     emitError(outcome.message)
                     delay(500)
@@ -403,7 +466,6 @@ class AttendanceViewModel(
         }
     }
 
-    // ✅ NEW: Method to handle reason dialog submission that checks for work report
     fun onReasonSubmitted(lateOrEarlyReason: String?, outOfRangeReason: String?) {
         val isCheckIn = _ui.value.checkInTToken != null
 
@@ -425,7 +487,6 @@ class AttendanceViewModel(
         }
     }
 
-    // ✅ NEW: Method to handle work report submission
     fun onWorkReportSubmitted(workReport: String, fileUri: Uri?) {
         completeCheckOut(
             _ui.value.tempEarlyReason,
@@ -466,18 +527,22 @@ data class AttendanceUiState(
     val checkOutIsOutOfRange: Boolean = false,
     val checkOutEarlyReasonRequired: Boolean = false,
     val checkOutOutOfRangeReasonRequired: Boolean = false,
-    val checkOutWorkReportRequired: Boolean = false,  // ✅ NEW
+    val checkOutWorkReportRequired: Boolean = false,
     val checkOutMessage: String? = null,
     val checkOutFaceVector: FloatArray? = null,
 
     val showFaceVerification: Boolean = false,
     val showReasonDialog: Boolean = false,
-    val showWorkReportDialog: Boolean = false,  // ✅ NEW
+    val showWorkReportDialog: Boolean = false,
+    val showPendingMessageDialog: Boolean = false,  // ✅ NEW: Show pending message dialog
 
     val faceVerificationQualityScore: Float? = null,
     val faceVerificationSuccess: Boolean = false,
 
-    // ✅ NEW: Temporary storage for reasons when work report is also required
     val tempEarlyReason: String? = null,
-    val tempOutOfRangeReason: String? = null
+    val tempOutOfRangeReason: String? = null,
+
+    // ✅ NEW: Pending message fields
+    val pendingMessage: PendingMessage? = null,  // The pending message from server
+    val acknowledgmentNote: String? = null  // User's acknowledgment note (if required)
 )
