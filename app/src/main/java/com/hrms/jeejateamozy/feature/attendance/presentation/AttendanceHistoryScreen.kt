@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -83,32 +84,44 @@ fun AttendanceHistoryScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize()
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 100.dp)  // ✅ INCREASED padding for bottom nav
             ) {
-                // Month Navigation
-                MonthNavigationBar(
-                    monthName = uiState.monthName,
-                    year = uiState.currentYear,
-                    onPreviousMonth = { viewModel.loadPreviousMonth() },
-                    onNextMonth = { viewModel.loadNextMonth() }
-                )
-
-                // Month Summary Card
-                uiState.summary?.let { summary ->
-                    MonthSummaryCard(summary = summary)
+                // Compact Month Navigation
+                item {
+                    CompactMonthNavigationBar(
+                        monthName = uiState.monthName,
+                        year = uiState.currentYear,
+                        onPreviousMonth = { viewModel.loadPreviousMonth() },
+                        onNextMonth = { viewModel.loadNextMonth() }
+                    )
                 }
 
                 // Calendar Grid
-                if (uiState.calendarDays.isNotEmpty()) {
-                    CalendarGrid(
-                        days = uiState.calendarDays,
-                        onDayClick = { day ->
-                            onNavigateToDayDetail(day.date)
-                        }
-                    )
-                } else if (!uiState.isLoading) {
-                    EmptyCalendarState()
+                item {
+                    if (uiState.calendarDays.isNotEmpty()) {
+                        CalendarGrid(
+                            days = uiState.calendarDays,
+                            onDayClick = { day ->
+                                onNavigateToDayDetail(day.date)
+                            }
+                        )
+                    } else if (!uiState.isLoading) {
+                        EmptyCalendarState()
+                    }
+                }
+
+                // Month Summary Card (MOVED BELOW)
+                item {
+                    uiState.summary?.let { summary ->
+                        MonthSummaryCard(summary = summary)
+                    }
+                }
+
+                // ✅ Extra spacer at bottom for safety
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
 
@@ -128,7 +141,7 @@ fun AttendanceHistoryScreen(
 }
 
 @Composable
-private fun MonthNavigationBar(
+private fun CompactMonthNavigationBar(
     monthName: String,
     year: Int,
     onPreviousMonth: () -> Unit,
@@ -137,7 +150,7 @@ private fun MonthNavigationBar(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -146,7 +159,7 @@ private fun MonthNavigationBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -158,16 +171,19 @@ private fun MonthNavigationBar(
                 )
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = monthName,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Text(
                     text = year.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
             }
@@ -203,7 +219,7 @@ private fun MonthSummaryCard(summary: MonthSummary) {
                 fontWeight = FontWeight.Bold
             )
 
-            Divider()
+            HorizontalDivider()
 
             // Total Time
             Row(
@@ -268,7 +284,7 @@ private fun CalendarGrid(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         // Weekday headers
         Row(
@@ -293,7 +309,8 @@ private fun CalendarGrid(
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.heightIn(max = 400.dp)
         ) {
             items(days) { day ->
                 CalendarDayItem(
@@ -315,18 +332,35 @@ private fun CalendarDayItem(
     day: CalendarDay,
     onClick: () -> Unit
 ) {
+    // Handle empty padding days
+    if (day.day == 0) {
+        Box(modifier = Modifier.aspectRatio(1f))
+        return
+    }
+
+    // Check if day has attendance
+    val hasAttendance = day.status.isNotEmpty()
+
     val backgroundColor = when (day.color) {
-        "red" -> Color(0xFFE57373)  // Light Red (Present)
-        "orange" -> Color(0xFFFFB74D)  // Orange (Present with issues/Pending)
-        "gray" -> Color(0xFFBDBDBD)  // Gray (Absent/Leave)
-        else -> Color.Transparent  // White/No attendance
+        "red" -> Color(0xFFE57373)
+        "orange" -> Color(0xFFFFB74D)
+        "gray" -> Color(0xFFBDBDBD)
+        "transparent", "" -> Color.Transparent
+        else -> Color.Transparent
     }
 
     val borderColor = when (day.status) {
-        "PRESENT" -> Color(0xFFD32F2F)  // Dark Red
-        "PENDING" -> Color(0xFFF57C00)  // Dark Orange
-        "ABSENT", "LEAVE" -> Color(0xFF757575)  // Dark Gray
-        else -> Color(0xFFE0E0E0)  // Light Gray
+        "PRESENT" -> Color(0xFFD32F2F)
+        "PENDING" -> Color(0xFFF57C00)
+        "ABSENT", "LEAVE" -> Color(0xFF757575)
+        "", "transparent" -> Color(0xFFE0E0E0)
+        else -> Color(0xFFE0E0E0)
+    }
+
+    val textColor = if (hasAttendance) {
+        Color.White
+    } else {
+        MaterialTheme.colorScheme.onSurface
     }
 
     Box(
@@ -334,8 +368,8 @@ private fun CalendarDayItem(
             .aspectRatio(1f)
             .clip(CircleShape)
             .background(backgroundColor)
-            .border(2.dp, borderColor, CircleShape)
-            .clickable(enabled = day.status != null) { onClick() },
+            .border(1.dp, borderColor, CircleShape)
+            .clickable(enabled = hasAttendance) { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -345,12 +379,12 @@ private fun CalendarDayItem(
             Text(
                 text = day.day.toString(),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (day.status != null) Color.White else MaterialTheme.colorScheme.onSurface
+                fontWeight = if (hasAttendance) FontWeight.Bold else FontWeight.Normal,
+                color = textColor
             )
 
-            // Show indicator for irregularities
             if (day.hasIrregularity) {
+                Spacer(modifier = Modifier.height(2.dp))
                 Box(
                     modifier = Modifier
                         .size(6.dp)

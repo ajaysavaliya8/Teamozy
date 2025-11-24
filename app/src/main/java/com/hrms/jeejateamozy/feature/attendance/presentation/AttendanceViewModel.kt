@@ -260,7 +260,6 @@ class AttendanceViewModel(
         }
     }
 
-    // ✅ NEW: Handle pending message acknowledgment
     fun onPendingMessageAcknowledged(acknowledgmentNote: String?) {
         Log.d("AttendanceViewModel", "✅ Message acknowledged, note: ${acknowledgmentNote?.take(50)}")
 
@@ -289,10 +288,80 @@ class AttendanceViewModel(
         }
     }
 
-    // ✅ NEW: Handle pending message dismissal (if no acknowledgment required)
     fun onPendingMessageDismissed() {
-        Log.d("AttendanceViewModel", "Message dismissed (no acknowledgment required)")
-        onPendingMessageAcknowledged(null)  // Same flow, just no note
+        Log.d("AttendanceViewModel", "❌ Message cancelled - stopping check-in process")
+        _ui.value = _ui.value.copy(
+            isLoading = false,
+            showPendingMessageDialog = false,
+            pendingMessage = null,
+            acknowledgmentNote = null,
+            checkInTToken = null,
+            checkInFaceVector = null,
+            checkInMessage = null,
+            checkInMinimumQualityScore = null,
+            checkInIsLate = false,
+            checkInIsOutOfRange = false,
+            checkInLateReasonRequired = false,
+            checkInOutOfRangeReasonRequired = false,
+            showFaceVerification = false,
+            showReasonDialog = false
+        )
+
+        // Optionally show a message
+        emitError("Check-in cancelled")
+    }
+
+    fun onFaceVerificationCancelled() {
+        Log.d("AttendanceViewModel", "❌ Face verification cancelled - stopping process")
+
+        val isCheckIn = _ui.value.checkInTToken != null
+
+        if (isCheckIn) {
+            // Clear all check-in related state
+            _ui.value = _ui.value.copy(
+                isLoading = false,
+                showFaceVerification = false,
+                showReasonDialog = false,
+                showPendingMessageDialog = false,
+                checkInTToken = null,
+                checkInFaceVector = null,
+                checkInMessage = null,
+                checkInMinimumQualityScore = null,
+                checkInIsLate = false,
+                checkInIsOutOfRange = false,
+                checkInLateReasonRequired = false,
+                checkInOutOfRangeReasonRequired = false,
+                pendingMessage = null,
+                acknowledgmentNote = null,
+                faceVerificationQualityScore = null,
+                faceVerificationSuccess = false
+            )
+        } else {
+            // Clear all check-out related state
+            _ui.value = _ui.value.copy(
+                isLoading = false,
+                showFaceVerification = false,
+                showReasonDialog = false,
+                showWorkReportDialog = false,
+                checkOutTToken = null,
+                checkOutFaceVector = null,
+                checkOutMessage = null,
+                checkOutMinimumQualityScore = null,
+                checkOutWorkHours = null,
+                checkOutIsEarly = false,
+                checkOutIsOutOfRange = false,
+                checkOutEarlyReasonRequired = false,
+                checkOutOutOfRangeReasonRequired = false,
+                checkOutWorkReportRequired = false,
+                faceVerificationQualityScore = null,
+                faceVerificationSuccess = false,
+                tempEarlyReason = null,
+                tempOutOfRangeReason = null
+            )
+        }
+
+        // Show cancellation message
+        emitError("${if (isCheckIn) "Check-in" else "Check-out"} cancelled")
     }
 
     fun onFaceVerificationComplete(qualityScore: Float, verified: Boolean) {

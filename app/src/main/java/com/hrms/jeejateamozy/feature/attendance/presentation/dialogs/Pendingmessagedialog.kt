@@ -14,27 +14,35 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.hrms.jeejateamozy.core.network.PendingMessage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 
 /**
- * Pending Message Dialog
+ * Message type styling configuration
+ */
+private data class MessageTypeStyle(
+    val label: String,
+    val icon: ImageVector,
+    val iconColor: Color,
+    val backgroundColor: Color,
+    val textColor: Color
+)
+
+/**
+ * Pending Message Dialog - Compact Version
  * Displays messages from management to employees during check-in
- *
- * Features:
- * - Type-based styling (REMINDER, NOTICE, WARNING, CRITICAL)
- * - Attachment download support
- * - Optional acknowledgment with text input
- * - Bearer token authenticated downloads
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,14 +53,8 @@ fun PendingMessageDialog(
 ) {
     val context = LocalContext.current
     val preferencesManager = remember { PreferencesManager.getInstance(context) }
-
     var acknowledgmentNote by remember { mutableStateOf("") }
-    var isDownloadingAttachment by remember { mutableStateOf(false) }
-
-    // Get message type styling
-    val messageStyle = remember(message.type) {
-        getMessageTypeStyle(message.type)
-    }
+    val messageStyle = getMessageTypeStyle(message.type)
 
     Dialog(
         onDismissRequest = {
@@ -81,41 +83,38 @@ fun PendingMessageDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Header with type indicator
+                // Compact Header
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(messageStyle.backgroundColor)
-                        .padding(20.dp)
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = messageStyle.icon,
                             contentDescription = null,
-                            modifier = Modifier.size(48.dp),
+                            modifier = Modifier.size(18.dp),
                             tint = messageStyle.iconColor
                         )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
                         Text(
                             text = messageStyle.label,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             color = messageStyle.textColor,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-                // Content
+                // Content - Reduced padding
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Title
                     Text(
@@ -133,81 +132,35 @@ fun PendingMessageDialog(
                         lineHeight = 20.sp
                     )
 
-                    // Attachment button
+                    // Image display
                     if (message.has_attachment && message.attachment_url != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedCard(
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                if (!isDownloadingAttachment) {
-                                    isDownloadingAttachment = true
-                                    openAttachment(
-                                        context = context,
-                                        url = message.attachment_url,
-                                        token = preferencesManager.authToken.orEmpty(),
-                                        onComplete = { isDownloadingAttachment = false }
-                                    )
-                                }
-                            },
-                            colors = CardDefaults.outlinedCardColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         ) {
-                            Row(
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(message.attachment_url)
+                                    .addHeader("Authorization", "Bearer ${preferencesManager.authToken.orEmpty()}")
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "Attachment Image",
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.AttachFile,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Column {
-                                        Text(
-                                            text = "View Attachment",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Text(
-                                            text = getFileTypeFromUrl(message.attachment_url),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                if (isDownloadingAttachment) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Filled.OpenInNew,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
+                                    .heightIn(min = 150.dp, max = 400.dp)
+                                    .clip(RoundedCornerShape(12.dp)),
+                                contentScale = ContentScale.Fit,
+                                alignment = Alignment.Center
+                            )
                         }
                     }
 
-                    // Acknowledgment input (if required)
+                    // Acknowledgment input
                     if (message.requires_acknowledgment) {
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         HorizontalDivider()
-
-                        Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
                             text = "Acknowledgment Required",
@@ -216,15 +169,11 @@ fun PendingMessageDialog(
                             color = MaterialTheme.colorScheme.primary
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         OutlinedTextField(
                             value = acknowledgmentNote,
                             onValueChange = { acknowledgmentNote = it },
                             modifier = Modifier.fillMaxWidth(),
-                            label = {
-                                Text("Enter your acknowledgment")
-                            },
+                            label = { Text("Enter your acknowledgment") },
                             placeholder = {
                                 Text(
                                     text = "e.g., I have read and understood this message",
@@ -244,12 +193,9 @@ fun PendingMessageDialog(
                         Text(
                             text = "Please confirm that you have read and understood this message",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Action buttons
                     Row(
@@ -257,7 +203,6 @@ fun PendingMessageDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         if (!message.requires_acknowledgment) {
-                            // Simple dismiss button
                             Button(
                                 onClick = { onDismiss() },
                                 modifier = Modifier.fillMaxWidth(),
@@ -271,10 +216,8 @@ fun PendingMessageDialog(
                                 )
                             }
                         } else {
-                            // Cancel button (only if acknowledgment required)
                             OutlinedButton(
                                 onClick = {
-                                    // Can't dismiss critical messages without acknowledging
                                     if (message.type != "CRITICAL") {
                                         onDismiss()
                                     }
@@ -290,7 +233,6 @@ fun PendingMessageDialog(
                                 )
                             }
 
-                            // Acknowledge button
                             Button(
                                 onClick = {
                                     if (acknowledgmentNote.isNotBlank()) {
@@ -316,95 +258,45 @@ fun PendingMessageDialog(
     }
 }
 
-/**
- * Message type styling configuration
- */
-private data class MessageTypeStyle(
-    val label: String,
-    val icon: ImageVector,
-    val iconColor: Color,
-    val backgroundColor: Color,
-    val textColor: Color
-)
-
 @Composable
 private fun getMessageTypeStyle(type: String): MessageTypeStyle {
+    val colorScheme = MaterialTheme.colorScheme
+
     return when (type.uppercase()) {
         "REMINDER" -> MessageTypeStyle(
             label = "REMINDER",
             icon = Icons.Outlined.Notifications,
-            iconColor = MaterialTheme.colorScheme.primary,
-            backgroundColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-            textColor = MaterialTheme.colorScheme.onPrimaryContainer
+            iconColor = colorScheme.primary,
+            backgroundColor = colorScheme.primaryContainer.copy(alpha = 0.3f),
+            textColor = colorScheme.onPrimaryContainer
         )
         "NOTICE" -> MessageTypeStyle(
             label = "NOTICE",
             icon = Icons.Outlined.Info,
-            iconColor = MaterialTheme.colorScheme.tertiary,
-            backgroundColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f),
-            textColor = MaterialTheme.colorScheme.onTertiaryContainer
+            iconColor = colorScheme.tertiary,
+            backgroundColor = colorScheme.tertiaryContainer.copy(alpha = 0.3f),
+            textColor = colorScheme.onTertiaryContainer
         )
         "WARNING" -> MessageTypeStyle(
             label = "WARNING",
             icon = Icons.Outlined.Warning,
-            iconColor = Color(0xFFFFA726), // Orange
-            backgroundColor = Color(0xFFFFF3E0), // Light orange
-            textColor = Color(0xFFE65100) // Dark orange
+            iconColor = Color(0xFFFFA726),
+            backgroundColor = Color(0xFFFFF3E0),
+            textColor = Color(0xFFE65100)
         )
         "CRITICAL" -> MessageTypeStyle(
             label = "⚠️ CRITICAL",
             icon = Icons.Filled.ErrorOutline,
-            iconColor = MaterialTheme.colorScheme.error,
-            backgroundColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
-            textColor = MaterialTheme.colorScheme.onErrorContainer
+            iconColor = colorScheme.error,
+            backgroundColor = colorScheme.errorContainer.copy(alpha = 0.3f),
+            textColor = colorScheme.onErrorContainer
         )
         else -> MessageTypeStyle(
             label = "MESSAGE",
             icon = Icons.Outlined.Mail,
-            iconColor = MaterialTheme.colorScheme.primary,
-            backgroundColor = MaterialTheme.colorScheme.surfaceVariant,
-            textColor = MaterialTheme.colorScheme.onSurfaceVariant
+            iconColor = colorScheme.primary,
+            backgroundColor = colorScheme.surfaceVariant,
+            textColor = colorScheme.onSurfaceVariant
         )
-    }
-}
-
-/**
- * Extract file type from URL for display
- */
-private fun getFileTypeFromUrl(url: String): String {
-    val extension = url.substringAfterLast('.', "").lowercase()
-    return when (extension) {
-        "pdf" -> "PDF Document"
-        "doc", "docx" -> "Word Document"
-        "jpg", "jpeg", "png", "gif", "webp" -> "Image"
-        else -> "Attachment"
-    }
-}
-
-/**
- * Open attachment with Bearer token authentication
- * The URL from API is already complete, just open it in browser with authentication
- */
-private fun openAttachment(
-    context: android.content.Context,
-    url: String,
-    token: String,
-    onComplete: () -> Unit
-) {
-    try {
-        // For authenticated downloads, we need to open in browser
-        // The browser will send cookies/auth if configured
-        // For better UX, you might want to implement in-app WebView with custom headers
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        // Handle error - maybe show a toast
-        android.widget.Toast.makeText(
-            context,
-            "Unable to open attachment: ${e.message}",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
-    } finally {
-        onComplete()
     }
 }

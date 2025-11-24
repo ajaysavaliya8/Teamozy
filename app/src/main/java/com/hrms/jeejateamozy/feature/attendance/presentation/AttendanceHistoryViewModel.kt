@@ -22,7 +22,7 @@ data class AttendanceHistoryUiState(
     val summary: MonthSummary? = null,
     val chartData: ChartData? = null,
     val errorMessage: String? = null,
-    val selectedDate: String? = null  // For navigating to day detail
+    val selectedDate: String? = null
 )
 
 /**
@@ -81,13 +81,21 @@ class AttendanceHistoryViewModel(
                 when (val outcome = repo.getMonthlyTimesheet(year = year, month = month)) {
                     is MonthlyTimesheetOutcome.Success -> {
                         val timesheet = outcome.timesheet
+
+                        // ✅ Generate full month calendar with all days
+                        val fullCalendar = generateFullMonthCalendar(
+                            year = timesheet.year,
+                            month = timesheet.month,
+                            attendanceDays = timesheet.calendarDays
+                        )
+
                         _historyUiState.update {
                             it.copy(
                                 isLoading = false,
                                 currentMonth = timesheet.month,
                                 currentYear = timesheet.year,
                                 monthName = timesheet.monthName,
-                                calendarDays = timesheet.calendarDays,
+                                calendarDays = fullCalendar,  // ✅ Use full calendar
                                 summary = timesheet.summary,
                                 chartData = timesheet.chartData,
                                 errorMessage = null
@@ -95,7 +103,7 @@ class AttendanceHistoryViewModel(
                         }
                         Log.d(
                             "AttendanceHistoryVM",
-                            "Loaded ${timesheet.calendarDays.size} calendar days"
+                            "Generated full calendar with ${fullCalendar.size} days (including padding)"
                         )
                     }
 
@@ -121,6 +129,70 @@ class AttendanceHistoryViewModel(
                 Log.e("AttendanceHistoryVM", "Exception loading timesheet", e)
             }
         }
+    }
+
+    /**
+     * ✅ Generate full month calendar with all days
+     * Includes leading padding days to align with correct weekday
+     */
+    private fun generateFullMonthCalendar(
+        year: Int,
+        month: Int,
+        attendanceDays: List<CalendarDay>
+    ): List<CalendarDay> {
+        val yearMonth = YearMonth.of(year, month)
+        val firstDayOfMonth = yearMonth.atDay(1)
+        val daysInMonth = yearMonth.lengthOfMonth()
+
+        // Get day of week for first day (0 = Monday, 6 = Sunday)
+        // We need Sunday = 0, so adjust
+        val firstDayOfWeek = firstDayOfMonth.dayOfWeek.value % 7  // 0 = Sunday, 1 = Monday, etc.
+
+        // Create map of existing attendance data by day number
+        val attendanceMap = attendanceDays.associateBy { it.day }
+
+        val fullCalendar = mutableListOf<CalendarDay>()
+
+        // ✅ Add leading empty days for alignment
+        repeat(firstDayOfWeek) {
+            fullCalendar.add(
+                CalendarDay(
+                    day = 0,  // Empty day indicator
+                    date = "",  // ✅ Empty string, not null
+                    status = "",  // ✅ Empty string, not null
+                    color = "transparent",
+                    isComplete = false,  // ✅ Required parameter
+                    hasIrregularity = false,
+                    punchCount = 0  // ✅ Required parameter
+                )
+            )
+        }
+
+        // ✅ Add all days of the month
+        for (day in 1..daysInMonth) {
+            val existingDay = attendanceMap[day]
+
+            if (existingDay != null) {
+                // Use attendance data from API
+                fullCalendar.add(existingDay)
+            } else {
+                // Create empty day with no attendance
+                val dateStr = String.format("%04d-%02d-%02d", year, month, day)
+                fullCalendar.add(
+                    CalendarDay(
+                        day = day,
+                        date = dateStr,  // ✅ Proper date string
+                        status = "",  // ✅ Empty string to indicate no status
+                        color = "transparent",
+                        isComplete = false,  // ✅ Required parameter
+                        hasIrregularity = false,
+                        punchCount = 0  // ✅ Required parameter
+                    )
+                )
+            }
+        }
+
+        return fullCalendar
     }
 
     /**

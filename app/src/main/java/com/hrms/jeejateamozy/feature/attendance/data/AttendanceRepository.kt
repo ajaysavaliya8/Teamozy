@@ -527,7 +527,7 @@ class AttendanceRepository(private val context: Context) {
                 earlyReason = earlyReasonBody,
                 outOfRangeReason = outOfRangeReasonBody,
                 workReport = workReportBody,
-                workReportFile = filePart,
+                filePart,
                 token = token()
             )
 

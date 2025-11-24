@@ -14,11 +14,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -101,7 +104,38 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
-                Surface { AppRoot() }
+                // ✅ GLOBAL STATUS BAR CONFIGURATION - APPLIES TO ALL SCREENS
+                ConfigureSystemBars()
+
+                Surface {
+                    AppRoot()
+                }
+            }
+        }
+    }
+
+    /**
+     * ✅ Configure System Bars (Status Bar) Globally for All Screens
+     * This ensures consistent status bar color across the entire app
+     */
+    @Composable
+    private fun ConfigureSystemBars() {
+        val view = LocalView.current
+        val primaryColor = MaterialTheme.colorScheme.primary
+
+        DisposableEffect(primaryColor) {
+            val window = window
+
+            // Set status bar color to match TopAppBar (primary color)
+            window.statusBarColor = primaryColor.toArgb()
+
+            // Set status bar icons to light (white) for visibility on dark background
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = false  // false = light/white icons
+            }
+
+            onDispose {
+                // No cleanup needed - status bar stays consistent
             }
         }
     }

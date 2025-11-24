@@ -2,6 +2,7 @@ package com.hrms.jeejateamozy.feature.home.presentation
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -35,15 +36,16 @@ fun HomeTopBar(
     onProfileClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // ✅ Use primary color background to match status bar
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp
+        color = MaterialTheme.colorScheme.primary,  // ✅ Changed from surface to primary
+        tonalElevation = 0.dp  // ✅ Remove elevation for seamless look
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),  // ✅ Reduced vertical padding
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -55,18 +57,18 @@ fun HomeTopBar(
                     text = (companyName ?: "COMPANY").uppercase(),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onPrimary  // ✅ Changed to onPrimary for contrast
                 )
                 Text(
                     text = userName ?: "User",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)  // ✅ Changed color
                 )
             }
 
             // Right side - Refresh button and profile picture
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Refresh button
@@ -77,23 +79,29 @@ fun HomeTopBar(
                     if (isRefreshing) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary  // ✅ White color
                         )
                     } else {
                         Icon(
                             Icons.Filled.Refresh,
                             contentDescription = "Refresh Status",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.onPrimary  // ✅ White color
                         )
                     }
                 }
 
-                // Profile Picture
+                // Profile Picture - ✅ BIGGER & ROUNDER
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(52.dp)  // ✅ Increased from 40.dp to 52.dp
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .border(
+                            width = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f),  // ✅ White border
+                            shape = CircleShape
+                        )
+                        .background(MaterialTheme.colorScheme.surface)  // ✅ Surface background for image
                         .clickable { onProfileClick() }
                 ) {
                     if (!profileUrl.isNullOrBlank()) {
@@ -103,7 +111,7 @@ fun HomeTopBar(
                                 .data(profileUrl)
                                 .crossfade(true)
                                 .build(),
-                            imageLoader = CoilImageLoader.get(context), // ✅ Authenticated loader
+                            imageLoader = CoilImageLoader.get(context),
                             contentDescription = "Profile Picture",
                             modifier = Modifier
                                 .fillMaxSize()
@@ -115,8 +123,10 @@ fun HomeTopBar(
                         Icon(
                             Icons.Filled.Person,
                             contentDescription = "Profile",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.align(Alignment.Center)
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(28.dp)  // ✅ Bigger icon
                         )
                     }
                 }

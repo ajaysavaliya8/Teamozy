@@ -29,6 +29,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
+import com.hrms.jeejateamozy.feature.home.presentation.dialogs.WorkReportBottomSheet
+import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.PendingMessageDialog
+
 
 private const val TAG = "HomePage"
 
@@ -170,13 +173,13 @@ fun HomePage(
             )
         }
     ) { padding ->
+        // ✅ FIXED: Only bottom padding for navigation bar
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(paddingValues)
+                .padding(bottom = paddingValues.calculateBottomPadding())
         ) {
-            // Top Bar
+            // ✅ Top Bar with status bar padding
             HomeTopBar(
                 context = context,
                 companyName = prefs.companyName,
@@ -184,7 +187,8 @@ fun HomePage(
                 profileUrl = prefs.profileUrl,
                 isRefreshing = ui.isRefreshing,
                 onRefreshClick = { vm.refreshStatus(force = true) },
-                onProfileClick = onNavigateToProfile
+                onProfileClick = onNavigateToProfile,
+                modifier = Modifier.statusBarsPadding()  // ✅ Status bar padding here
             )
 
             // Scrollable Content
@@ -245,8 +249,13 @@ fun HomePage(
         FaceCaptureScreen(
             generation = faceVerificationGeneration,
             onDismiss = {
+                // ✅ FIXED: Reset state and cancel completely
+                Log.d(TAG, "❌ Face verification CANCELLED by user")
                 faceVerifyBusy = false
-                vm.onFaceVerificationComplete(0f, false)
+                faceVerifyError = null
+
+                // ✅ Call the new cancel function
+                vm.onFaceVerificationCancelled()
             },
             onCaptured = { }, // Empty lambda - we use onBitmapCaptured
             onBitmapCaptured = { bitmap ->
@@ -276,8 +285,9 @@ fun HomePage(
                         val similarity = EmbeddingExtractor.cosineSimilarity(faceVector, embedding)
                         Log.d(TAG, "Face similarity score: $similarity (threshold: $minimumThreshold)")
 
-                        if (similarity >= (minimumThreshold ?: 0.55f)) {
+                        if (similarity >= (minimumThreshold ?: 0.80f)) {
                             Log.d(TAG, "✅ Face verified! Similarity: $similarity >= $minimumThreshold")
+                            faceVerifyBusy = false  // ✅ ADD THIS LINE
                             vm.onFaceVerificationComplete(
                                 qualityScore = similarity,
                                 verified = true
@@ -331,5 +341,20 @@ fun HomePage(
                 vm.onWorkReportSubmitted(workReport, fileUri)
             }
         )
+    }
+
+    // Pending Message Dialog
+    ui.pendingMessage?.let { message ->  // ✅ CORRECT - use let to create local variable
+        if (ui.showPendingMessageDialog) {
+            PendingMessageDialog(
+                message = message,  // Now it's a local variable, not delegated
+                onDismiss = {
+                    vm.onPendingMessageDismissed()
+                },
+                onAcknowledge = { acknowledgmentNote ->
+                    vm.onPendingMessageAcknowledged(acknowledgmentNote)
+                }
+            )
+        }
     }
 }
