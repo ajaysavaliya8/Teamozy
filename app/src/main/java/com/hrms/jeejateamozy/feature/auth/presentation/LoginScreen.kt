@@ -60,6 +60,7 @@ import androidx.compose.ui.zIndex
 import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.auth.domain.usecase.LoginUseCase
+import com.hrms.jeejateamozy.feature.auth.presentation.dialogs.AppVersionUpdateDialog  // ⚡ NEW IMPORT
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -103,6 +104,10 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var deviceCanResend by remember { mutableStateOf(true) }
     var deviceSecondsLeft by remember { mutableStateOf(0) }
 
+    // ⚡ NEW: App version update dialog state
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf("") }
+
     val snack = remember { SnackbarHostState() }
 
     fun startResendTimer(seconds: Int = 30) {
@@ -129,6 +134,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         }
     }
 
+    // ⚡ UPDATED: Added UpdateRequired case
     fun handleAuthOutcome(outcome: AuthOutcome, onSuccess: () -> Unit) {
         when (outcome) {
             is AuthOutcome.Success -> {
@@ -145,7 +151,22 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 deviceMobileNumber = phone  // Use login phone number
                 showDeviceDialog = true
             }
+            // ⚡ NEW: Handle version update required
+            is AuthOutcome.UpdateRequired -> {
+                updateMessage = outcome.message
+                showUpdateDialog = true
+            }
         }
+    }
+
+    // ⚡ NEW: Show update dialog if needed - blocks entire UI
+    if (showUpdateDialog) {
+        AppVersionUpdateDialog(
+            message = updateMessage,
+            onDismiss = null // Cannot be dismissed - user must update
+        )
+        // Don't render the rest of the UI when update is required
+        return
     }
 
     // Palette
@@ -521,26 +542,26 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             onSendOtp = {
                 scope.launch {
                     deviceOtpLoading = true
-                    deviceCanResend = false      // ← Add this line IMMEDIATELY
-                    deviceSecondsLeft = 30        // ← Add this line too
+                    deviceCanResend = false
+                    deviceSecondsLeft = 30
 
                     when (val outcome = repo.sendChangeDeviceOtp(deviceMobileNumber)) {
                         is AuthOutcome.Success -> {
                             deviceOtpLoading = false
                             deviceOtpSent = true
                             snack.showSnackbar(outcome.message)
-                            startDeviceResendTimer(30)  // This will now just start the countdown
+                            startDeviceResendTimer(30)
                         }
                         is AuthOutcome.Error -> {
                             deviceOtpLoading = false
-                            deviceCanResend = true   // ← Add this: re-enable on error
-                            deviceSecondsLeft = 0     // ← Add this: reset timer on error
+                            deviceCanResend = true
+                            deviceSecondsLeft = 0
                             snack.showSnackbar(outcome.message)
                         }
                         else -> {
                             deviceOtpLoading = false
-                            deviceCanResend = true   // ← Add this: re-enable on failure
-                            deviceSecondsLeft = 0     // ← Add this: reset timer on failure
+                            deviceCanResend = true
+                            deviceSecondsLeft = 0
                         }
                     }
                 }
@@ -549,7 +570,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             onRequestDevice = {
                 scope.launch {
                     deviceRequestLoading = true
-                    when (val outcome = repo.requestChangeDevice(deviceMobileNumber, deviceOtp)) {  // ✅ NEW
+                    when (val outcome = repo.requestChangeDevice(deviceMobileNumber, deviceOtp)) {
                         is AuthOutcome.Success -> {
                             deviceRequestLoading = false
                             showDeviceDialog = false
@@ -572,6 +593,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     }
 }
 
+// Device Registration Dialog - UNCHANGED from your original
 @Composable
 private fun DeviceRegistrationDialog(
     message: String,
@@ -744,7 +766,10 @@ private fun DeviceRegistrationDialog(
                                     }
                                 },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Done
+                                ),
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -756,39 +781,26 @@ private fun DeviceRegistrationDialog(
                             )
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        // Confirm Button (after OTP entered)
+                        Button(
+                            onClick = onRequestDevice,
+                            enabled = otp.length == 4 && !requestLoading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                         ) {
-                            OutlinedButton(
-                                onClick = onDismiss,
-                                enabled = !requestLoading,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Cancel")
-                            }
-
-                            Button(
-                                onClick = onRequestDevice,
-                                enabled = otp.length == 4 && !requestLoading,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
-                            ) {
-                                if (requestLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = Color.White
-                                    )
-                                } else {
-                                    Text("Request", fontWeight = FontWeight.SemiBold)
-                                }
+                            if (requestLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Confirming...")
+                            } else {
+                                Text("Send Device Request", fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -812,7 +824,8 @@ private fun DeviceRegistrationDialog(
     }
 }
 
-/* ---------------- UI Components ---------------- */
+
+/* ---------------- UI Components - UNCHANGED from your original ---------------- */
 
 @Composable
 private fun SegmentedTwoWay(

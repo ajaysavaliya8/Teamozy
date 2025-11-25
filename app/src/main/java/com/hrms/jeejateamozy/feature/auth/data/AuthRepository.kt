@@ -23,6 +23,7 @@ sealed class AuthOutcome {
     data class Success(val message: String) : AuthOutcome()
     data class Error(val message: String) : AuthOutcome()
     data class DeviceNotRegistered(val message: String) : AuthOutcome()
+    data class UpdateRequired(val message: String) : AuthOutcome() // ⚡ NEW: For 426 status
 }
 
 // ============================================
@@ -89,7 +90,20 @@ class AuthRepository(
             val res = api.sendLogin(mobileNumber = phone.toLong(), deviceId = deviceId)
             Log.d("NET", "sendLogin -> code=${res.code()}")
 
-            toOutcome(res, requireToken = false)
+            // ✅ Handle both 409 and 426 status codes
+            when (res.code()) {
+                409 -> {
+                    val msg = extractMessage(res)
+                    Log.d("AUTH", "⚠️ Device not registered: $msg")
+                    AuthOutcome.DeviceNotRegistered(msg)
+                }
+                426 -> {
+                    val msg = extractMessage(res)
+                    Log.d("AUTH", "⚠️ Update required: $msg")
+                    AuthOutcome.UpdateRequired(msg)
+                }
+                else -> toOutcome(res, requireToken = false)
+            }
         } catch (e: Exception) {
             Log.e("AUTH", "sendLoginCode error", e)
             AuthOutcome.Error(e.message ?: "Failed to send login code")
@@ -134,10 +148,15 @@ class AuthRepository(
             )
             Log.d("NET", "verifyLogin(password) -> code=${res.code()}")
 
+            // ⚡ UPDATED: Added 426 handling
             when (res.code()) {
                 409 -> {
                     val msg = extractMessage(res)
                     AuthOutcome.DeviceNotRegistered(msg)
+                }
+                426 -> {
+                    val msg = extractMessage(res)
+                    AuthOutcome.UpdateRequired(msg)
                 }
                 else -> toOutcome(res, requireToken = true)
             }
@@ -182,10 +201,15 @@ class AuthRepository(
             )
             Log.d("NET", "verifyLogin(otp) -> code=${res.code()}")
 
+            // ⚡ UPDATED: Added 426 handling
             when (res.code()) {
                 409 -> {
                     val msg = extractMessage(res)
                     AuthOutcome.DeviceNotRegistered(msg)
+                }
+                426 -> {
+                    val msg = extractMessage(res)
+                    AuthOutcome.UpdateRequired(msg)
                 }
                 else -> toOutcome(res, requireToken = true)
             }
@@ -208,18 +232,28 @@ class AuthRepository(
             val res = api.verifyToken(appVersion)
             Log.d("NET", "verifyToken -> app_version=$appVersion, code=${res.code()}")
 
-            // Handle VerifyTokenResponse directly (not BasicResponse)
-            if (res.isSuccessful && res.code() == 200) {
-                val body = res.body()
-                if (body?.status == "success") {
-                    AuthOutcome.Success(body.message ?: "Token verified")
-                } else {
-                    AuthOutcome.Error(body?.message ?: "Token verification failed")
+            // ⚡ UPDATED: Added 426 handling
+            when (res.code()) {
+                426 -> {
+                    val msg = extractMessage(res)
+                    Log.d("AUTH", "⚠️ Update required during token verification: $msg")
+                    AuthOutcome.UpdateRequired(msg)
                 }
-            } else {
-                // Extract error message from response
-                val errorMessage = extractMessage(res)
-                AuthOutcome.Error(errorMessage)
+                else -> {
+                    // Handle VerifyTokenResponse directly (not BasicResponse)
+                    if (res.isSuccessful && res.code() == 200) {
+                        val body = res.body()
+                        if (body?.status == "success") {
+                            AuthOutcome.Success(body.message ?: "Token verified")
+                        } else {
+                            AuthOutcome.Error(body?.message ?: "Token verification failed")
+                        }
+                    } else {
+                        // Extract error message from response
+                        val errorMessage = extractMessage(res)
+                        AuthOutcome.Error(errorMessage)
+                    }
+                }
             }
         } catch (e: Exception) {
             AuthOutcome.Error(e.message ?: "Token verification failed")

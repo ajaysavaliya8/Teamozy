@@ -35,6 +35,7 @@ import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.presentation.LoginScreen
+import com.hrms.jeejateamozy.feature.auth.presentation.dialogs.AppVersionUpdateDialog  // ⚡ NEW IMPORT
 import com.hrms.jeejateamozy.feature.main.presentation.MainScreen
 import com.hrms.jeejateamozy.feature.permissions.presentation.PermissionDialog
 import com.hrms.jeejateamozy.feature.permissions.presentation.arePermissionsGranted
@@ -251,6 +252,7 @@ private fun AppRoot() {
     }
 }
 
+// ⚡ UPDATED: Added 426 handling
 @Composable
 private fun InlineSplash(
     authRepository: AuthRepository,
@@ -259,15 +261,37 @@ private fun InlineSplash(
 ) {
     var status by remember { mutableStateOf("Initializing...") }
 
+    // ⚡ NEW: State for update dialog
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf("") }
+
+    // ⚡ NEW: Show update dialog if needed - blocks entire UI
+    if (showUpdateDialog) {
+        AppVersionUpdateDialog(
+            message = updateMessage,
+            onDismiss = null // Cannot be dismissed - user must update
+        )
+        // Don't render the rest of the splash screen when update is required
+        return
+    }
+
     LaunchedEffect(Unit) {
         delay(1000)
         status = "Verifying session..."
         delay(500)
 
+        // ⚡ UPDATED: Handle all auth outcomes including UpdateRequired
         when (val outcome = authRepository.verifyToken()) {
             is AuthOutcome.Success -> {
                 Log.d("SplashScreen", "Token valid - navigating to home")
                 onComplete(true)
+            }
+            is AuthOutcome.UpdateRequired -> {
+                // ⚡ NEW: Show update dialog and block navigation
+                Log.d("SplashScreen", "⚠️ Update required: ${outcome.message}")
+                updateMessage = outcome.message
+                showUpdateDialog = true
+                // Don't call onComplete - stay on splash with update dialog
             }
             else -> {
                 Log.d("SplashScreen", "Token invalid or missing - navigating to login")

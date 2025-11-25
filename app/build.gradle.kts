@@ -16,11 +16,12 @@ android {
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.7.1"
+        versionCode = 10
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
 
     buildTypes {
         release {
@@ -29,6 +30,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
