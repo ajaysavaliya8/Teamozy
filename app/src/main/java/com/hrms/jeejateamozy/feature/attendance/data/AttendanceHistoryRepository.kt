@@ -8,6 +8,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
+ * Updated AttendanceHistoryRepository with Correction Request Support
+ *
+ * INTEGRATION INSTRUCTIONS:
+ * Replace the existing AttendanceHistoryRepository.kt file with this updated version
+ * or merge the changes into your existing file.
+ */
+
+/**
  * Sealed class for monthly timesheet outcomes
  */
 sealed class MonthlyTimesheetOutcome {
@@ -25,6 +33,7 @@ sealed class DayTimesheetOutcome {
 
 /**
  * Repository for attendance history/timesheet operations
+ * ✅ UPDATED: Now includes correction request data
  */
 class AttendanceHistoryRepository(private val context: Context) {
 
@@ -32,6 +41,7 @@ class AttendanceHistoryRepository(private val context: Context) {
 
     /**
      * Get monthly timesheet calendar view
+     * ✅ UPDATED: Now includes correction request summary
      */
     suspend fun getMonthlyTimesheet(
         year: Int? = null,
@@ -57,8 +67,18 @@ class AttendanceHistoryRepository(private val context: Context) {
                             monthName = data.month_name,
                             calendarDays = data.calendar_days.map { it.toDomain() },
                             summary = data.summary.toDomain(),
-                            chartData = data.chart_data.toDomain()
+                            chartData = data.chart_data.toDomain(),
+                            correctionRequests = data.correction_requests?.toDomain()  // ✅ NEW
                         )
+
+                        // Log correction request summary
+                        timesheet.correctionRequests?.let { summary ->
+                            Log.d("TIMESHEET", "Correction requests - " +
+                                    "Pending: ${summary.pending}, " +
+                                    "Approved: ${summary.approved}, " +
+                                    "Rejected: ${summary.rejected}, " +
+                                    "Info Needed: ${summary.infoNeeded}")
+                        }
 
                         MonthlyTimesheetOutcome.Success(timesheet = timesheet)
                     } else {
@@ -84,6 +104,7 @@ class AttendanceHistoryRepository(private val context: Context) {
 
     /**
      * Get detailed timesheet for a specific day
+     * ✅ UPDATED: Now includes active and settled correction requests
      */
     suspend fun getDayTimesheet(attendanceDate: String): DayTimesheetOutcome =
         withContext(Dispatchers.IO) {
@@ -103,6 +124,7 @@ class AttendanceHistoryRepository(private val context: Context) {
                             val data = responseBody.data
                             val timesheet = DayTimesheet(
                                 hasAttendance = data.has_attendance,
+                                attendanceRecordId = data.attendance_record_id,  // ✅ NEW
                                 date = data.date,
                                 dayName = data.day_name,
                                 formattedDate = data.formatted_date,
@@ -111,8 +133,35 @@ class AttendanceHistoryRepository(private val context: Context) {
                                 shift = data.shift?.toDomain(),
                                 hours = data.hours?.toDomain(),
                                 punches = data.punches?.map { it.toDomain() },
-                                isComplete = data.is_complete
+                                isComplete = data.is_complete,
+
+                                // ✅ NEW: Correction request fields
+                                correctionRequest = data.correction_request?.toDomain(),
+                                canSubmitCorrection = data.can_submit_correction,
+                                hasPendingRequest = data.has_pending_request,
+                                availableActions = data.available_actions,
+                                canRequestNewAttendance = data.can_request_new_attendance,
+                                actionAvailable = data.action_available
                             )
+
+                            // Log correction request status
+                            timesheet.correctionRequest?.let { container ->
+                                if (container.hasAny) {
+                                    container.active?.let { active ->
+                                        Log.d("TIMESHEET", "Active correction request: " +
+                                                "ID=${active.id}, " +
+                                                "Type=${active.requestType}, " +
+                                                "Status=${active.status}")
+                                    }
+                                    container.settled?.let { settled ->
+                                        Log.d("TIMESHEET", "Settled correction request: " +
+                                                "ID=${settled.id}, " +
+                                                "Final Status=${settled.finalStatus}")
+                                    }
+                                } else {
+                                    Log.d("TIMESHEET", "No correction requests for this date")
+                                }
+                            }
 
                             DayTimesheetOutcome.Success(timesheet = timesheet)
                         } else {

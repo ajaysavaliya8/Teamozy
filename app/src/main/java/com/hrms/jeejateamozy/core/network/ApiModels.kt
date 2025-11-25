@@ -1,5 +1,9 @@
 package com.hrms.jeejateamozy.core.network
 
+import com.google.gson.annotations.SerializedName
+import okhttp3.ResponseBody
+
+
 // -------- Auth --------
 data class BasicResponse(
     val status: String,           // "success" | "error" | "reject"
@@ -48,8 +52,6 @@ data class PushNotificationStatus(
     val last_notification_sent: String? = null,
     val failure_count: Int
 )
-
-
 
 // -------- Check Status Response --------
 data class CheckStatusResponse(
@@ -104,6 +106,7 @@ data class CheckOutResponse(
     val out_of_range_reason_required: Boolean? = null,
     val work_report_require: Boolean? = null
 )
+
 // -------- Check-Out Signature Response --------
 data class CheckOutSignatureResponse(
     val status: String,           // "success" | "error"
@@ -116,7 +119,9 @@ data class CheckOutSignatureResponse(
     val location_violation: Boolean? = null
 )
 
-// -------- ATTENDANCE HISTORY / TIMESHEET MODELS --------
+// ========================================
+// ATTENDANCE HISTORY / TIMESHEET MODELS
+// ========================================
 
 /**
  * GET /timesheet/monthly Response
@@ -132,17 +137,21 @@ data class MonthlyTimesheetData(
     val month_name: String,
     val calendar_days: List<CalendarDayDto>,
     val summary: MonthSummaryDto,
-    val chart_data: ChartDataDto
+    val chart_data: ChartDataDto,
+    val correction_requests: CorrectionRequestSummaryDto? = null
 )
 
 data class CalendarDayDto(
     val day: Int,
-    val date: String,  // ISO format: "2025-01-15"
-    val status: String,  // "PRESENT", "ABSENT", "LEAVE", "PENDING", or null
-    val color: String,  // "red", "orange", "gray", "white"
+    val date: String,
+    val status: String,
+    val color: String,
     val is_complete: Boolean,
     val has_irregularity: Boolean,
-    val punch_count: Int
+    val punch_count: Int,
+    val has_correction_request: Boolean = false,
+    val correction_badge: CorrectionBadgeDto? = null,
+    val correction_request_id: Int? = null
 ) {
     fun toDomain() = CalendarDay(
         day = day,
@@ -151,12 +160,15 @@ data class CalendarDayDto(
         color = color,
         isComplete = is_complete,
         hasIrregularity = has_irregularity,
-        punchCount = punch_count
+        punchCount = punch_count,
+        hasCorrectionRequest = has_correction_request,
+        correctionBadge = correction_badge?.toDomain(),
+        correctionRequestId = correction_request_id
     )
 }
 
 data class MonthSummaryDto(
-    val total_time: String,  // "120 hr 30 min"
+    val total_time: String,
     val total_minutes: Int,
     val total_hours: Int,
     val monthly_hours_spent: Int,
@@ -193,21 +205,28 @@ data class DayTimesheetResponse(
 
 data class DayTimesheetData(
     val has_attendance: Boolean,
-    val date: String,  // ISO format
-    val day_name: String,  // "Monday", "Tuesday", etc.
-    val formatted_date: String?,  // "15th January 2025"
-    val message: String?,  // For no attendance days
+    val date: String,
+    val day_name: String,
+    val formatted_date: String?,
+    val message: String?,
     val status: DayStatusDto?,
     val shift: ShiftInfoDto?,
     val hours: HoursInfoDto?,
     val punches: List<PunchRecordDto>?,
-    val is_complete: Boolean?
+    val is_complete: Boolean?,
+    val attendance_record_id: Int? = null,
+    val correction_request: CorrectionRequestContainerDto? = null,
+    val can_submit_correction: Boolean? = null,
+    val has_pending_request: Boolean? = null,
+    val available_actions: List<String>? = null,
+    val can_request_new_attendance: Boolean? = null,
+    val action_available: Map<String, Boolean>? = null
 )
 
 data class DayStatusDto(
-    val text: String,  // "Present", "Absent", "On Leave", "Pending Attendance"
-    val color: String,  // "green", "red", "blue", "orange", "gray"
-    val raw_status: String  // "PRESENT", "ABSENT", "LEAVE", "PENDING"
+    val text: String,
+    val color: String,
+    val raw_status: String
 ) {
     fun toDomain() = DayStatus(
         text = text,
@@ -218,10 +237,10 @@ data class DayStatusDto(
 
 data class ShiftInfoDto(
     val name: String,
-    val hours: String,  // "08 hr 00 min"
-    val start_time: String,  // "09:00 AM"
-    val end_time: String,  // "05:00 PM"
-    val timing_display: String  // Full formatted string
+    val hours: String,
+    val start_time: String,
+    val end_time: String,
+    val timing_display: String
 ) {
     fun toDomain() = ShiftInfo(
         name = name,
@@ -233,10 +252,10 @@ data class ShiftInfoDto(
 }
 
 data class HoursInfoDto(
-    val total: String,  // "08:30"
-    val total_display: String,  // "8 hr 30 min"
-    val productive: String,  // "08:00"
-    val productive_display: String  // "8 hr 0 min"
+    val total: String,
+    val total_display: String,
+    val productive: String,
+    val productive_display: String
 ) {
     fun toDomain() = HoursInfo(
         total = total,
@@ -247,8 +266,8 @@ data class HoursInfoDto(
 }
 
 data class PunchRecordDto(
-    val type: String,  // "PUNCH IN" or "PUNCH OUT"
-    val time: String?,  // "09:15:30 AM"
+    val type: String,
+    val time: String?,
     val location: PunchLocationDto?
 ) {
     fun toDomain() = PunchRecord(
@@ -268,7 +287,263 @@ data class PunchLocationDto(
     )
 }
 
-// -------- DOMAIN MODELS (for ViewModel/UI) --------
+// ========================================
+// CORRECTION REQUEST DTOs
+// ========================================
+
+/**
+ * Correction Badge DTO
+ */
+data class CorrectionBadgeDto(
+    val type: String,
+    val text: String,
+    val color: String
+) {
+    fun toDomain() = CorrectionBadge(
+        type = type,
+        text = text,
+        color = color
+    )
+}
+
+/**
+ * Correction Request Summary DTO
+ */
+data class CorrectionRequestSummaryDto(
+    val total: Int,
+    val pending: Int,
+    val approved: Int,
+    val rejected: Int,
+    val info_needed: Int
+) {
+    fun toDomain() = CorrectionRequestSummary(
+        total = total,
+        pending = pending,
+        approved = approved,
+        rejected = rejected,
+        infoNeeded = info_needed
+    )
+}
+
+/**
+ * Correction Request Container DTO
+ */
+data class CorrectionRequestContainerDto(
+    val has_any: Boolean,
+    val active: CorrectionRequestDto? = null,
+    val settled: SettledCorrectionRequestDto? = null
+) {
+    fun toDomain() = CorrectionRequestContainer(
+        hasAny = has_any,
+        active = active?.toDomain(),
+        settled = settled?.toDomain()
+    )
+}
+
+/**
+ * Active Correction Request DTO
+ */
+data class CorrectionRequestDto(
+    val id: Int,
+    val request_type: String,
+    val status: String,
+    val priority: String,
+    val reason: String,
+    val requested_changes: RequestedChangesDto,
+    val attachment: AttachmentInfoDto? = null,
+    val request_date: String,
+    val review_info: ReviewInfoDto? = null
+) {
+    fun toDomain() = CorrectionRequest(
+        id = id,
+        requestType = request_type,
+        status = status,
+        priority = priority,
+        reason = reason,
+        requestedChanges = requested_changes.toDomain(),
+        attachment = attachment?.toDomain(),
+        requestDate = request_date,
+        reviewInfo = review_info?.toDomain()
+    )
+}
+
+/**
+ * Settled Correction Request DTO
+ */
+data class SettledCorrectionRequestDto(
+    val id: Int,
+    val request_type: String,
+    val final_status: String,
+    val priority: String,
+    val reason: String,
+    val requested_changes: RequestedChangesDto,
+    val attachment: AttachmentInfoDto? = null,
+    val request_date: String,
+    val settled_date: String,
+    val changes_applied: RequestedChangesDto? = null,
+    val review_info: ReviewInfoDto
+) {
+    fun toDomain() = SettledCorrectionRequest(
+        id = id,
+        requestType = request_type,
+        finalStatus = final_status,
+        priority = priority,
+        reason = reason,
+        requestedChanges = requested_changes.toDomain(),
+        attachment = attachment?.toDomain(),
+        requestDate = request_date,
+        settledDate = settled_date,
+        changesApplied = changes_applied?.toDomain(),
+        reviewInfo = review_info.toDomain()
+    )
+}
+
+/**
+ * Requested Changes DTO
+ */
+data class RequestedChangesDto(
+    val status: String? = null,
+    val check_in: String? = null,
+    val check_out: String? = null,
+    val leave_type_name: String? = null
+) {
+    fun toDomain() = RequestedChanges(
+        status = status,
+        checkIn = check_in,
+        checkOut = check_out,
+        leaveTypeName = leave_type_name
+    )
+}
+
+/**
+ * Attachment Info DTO
+ */
+data class AttachmentInfoDto(
+    val has_attachment: Boolean,
+    val file_name: String? = null,
+    val download_url: String? = null
+) {
+    fun toDomain() = AttachmentInfo(
+        hasAttachment = has_attachment,
+        fileName = file_name,
+        downloadUrl = download_url
+    )
+}
+
+/**
+ * Review Info DTO
+ */
+data class ReviewInfoDto(
+    val reviewer_name: String,
+    val reviewed_at: String,
+    val comments: String?
+) {
+    fun toDomain() = ReviewInfo(
+        reviewerName = reviewer_name,
+        reviewedAt = reviewed_at,
+        comments = comments
+    )
+}
+
+/**
+ * Correction Request Options Response
+ */
+data class CorrectionRequestOptionsResponse(
+    val status: String,
+    val data: CorrectionRequestOptionsDataDto
+)
+
+data class CorrectionRequestOptionsDataDto(
+    val request_types: List<RequestTypeOptionDto>,
+    val status_options: List<StatusOptionDto>,
+    val priority_options: List<PriorityOptionDto>,
+    val leave_types: List<LeaveTypeOptionDto>
+) {
+    fun toDomain() = CorrectionRequestOptionsData(
+        requestTypes = request_types.map { it.toDomain() },
+        statusOptions = status_options.map { it.toDomain() },
+        priorityOptions = priority_options.map { it.toDomain() },
+        leaveTypes = leave_types.map { it.toDomain() }
+    )
+}
+
+data class RequestTypeOptionDto(
+    val value: String,
+    val label: String,
+    val description: String
+) {
+    fun toDomain() = RequestTypeOption(
+        value = value,
+        label = label,
+        description = description
+    )
+}
+
+data class StatusOptionDto(
+    val value: String,
+    val label: String
+) {
+    fun toDomain() = StatusOption(
+        value = value,
+        label = label
+    )
+}
+
+data class PriorityOptionDto(
+    val value: String,
+    val label: String
+) {
+    fun toDomain() = PriorityOption(
+        value = value,
+        label = label
+    )
+}
+
+data class LeaveTypeOptionDto(
+    val id: Int,
+    val label: String,
+    val description: String?
+) {
+    fun toDomain() = LeaveTypeOption(
+        id = id,
+        label = label,
+        description = description
+    )
+}
+
+/**
+ * Submit Correction Request Response
+ */
+data class SubmitCorrectionRequestResponse(
+    val status: String,
+    val message: String,
+    val data: SubmittedCorrectionRequestDataDto
+)
+
+data class SubmittedCorrectionRequestDataDto(
+    val request_id: Int,
+    val status: String,
+    val submitted_at: String
+)
+
+/**
+ * Withdraw Correction Request Response
+ */
+data class WithdrawCorrectionRequestResponse(
+    val status: String,
+    val message: String,
+    val data: WithdrawnCorrectionRequestDataDto
+)
+
+data class WithdrawnCorrectionRequestDataDto(
+    val request_id: Int,
+    val new_status: String,
+    val withdrawn_at: String
+)
+
+// ========================================
+// DOMAIN MODELS (for ViewModel/UI)
+// ========================================
 
 data class CalendarDay(
     val day: Int,
@@ -277,7 +552,10 @@ data class CalendarDay(
     val color: String,
     val isComplete: Boolean,
     val hasIrregularity: Boolean,
-    val punchCount: Int
+    val punchCount: Int,
+    val hasCorrectionRequest: Boolean = false,
+    val correctionBadge: CorrectionBadge? = null,
+    val correctionRequestId: Int? = null
 )
 
 data class MonthSummary(
@@ -300,7 +578,8 @@ data class MonthlyTimesheet(
     val monthName: String,
     val calendarDays: List<CalendarDay>,
     val summary: MonthSummary,
-    val chartData: ChartData
+    val chartData: ChartData,
+    val correctionRequests: CorrectionRequestSummary? = null
 )
 
 data class DayStatus(
@@ -345,11 +624,156 @@ data class DayTimesheet(
     val shift: ShiftInfo?,
     val hours: HoursInfo?,
     val punches: List<PunchRecord>?,
-    val isComplete: Boolean?
+    val isComplete: Boolean?,
+    val attendanceRecordId: Int? = null,
+    val correctionRequest: CorrectionRequestContainer? = null,
+    val canSubmitCorrection: Boolean? = null,
+    val hasPendingRequest: Boolean? = null,
+    val availableActions: List<String>? = null,
+    val canRequestNewAttendance: Boolean? = null,
+    val actionAvailable: Map<String, Boolean>? = null
 )
 
+// ========================================
+// CORRECTION REQUEST DOMAIN MODELS
+// ========================================
 
+/**
+ * Correction Badge (mini indicator on calendar)
+ */
+data class CorrectionBadge(
+    val type: String,
+    val text: String,
+    val color: String
+)
 
+/**
+ * Correction Request Summary (monthly totals)
+ */
+data class CorrectionRequestSummary(
+    val total: Int,
+    val pending: Int,
+    val approved: Int,
+    val rejected: Int,
+    val infoNeeded: Int
+)
+
+/**
+ * Correction Request Container
+ */
+data class CorrectionRequestContainer(
+    val hasAny: Boolean,
+    val active: CorrectionRequest? = null,
+    val settled: SettledCorrectionRequest? = null
+)
+
+/**
+ * Active Correction Request
+ */
+data class CorrectionRequest(
+    val id: Int,
+    val requestType: String,
+    val status: String,
+    val priority: String,
+    val reason: String,
+    val requestedChanges: RequestedChanges,
+    val attachment: AttachmentInfo? = null,
+    val requestDate: String,
+    val reviewInfo: ReviewInfo? = null
+)
+
+/**
+ * Settled Correction Request
+ */
+data class SettledCorrectionRequest(
+    val id: Int,
+    val requestType: String,
+    val finalStatus: String,
+    val priority: String,
+    val reason: String,
+    val requestedChanges: RequestedChanges,
+    val attachment: AttachmentInfo? = null,
+    val requestDate: String,
+    val settledDate: String,
+    val changesApplied: RequestedChanges? = null,
+    val reviewInfo: ReviewInfo
+)
+
+/**
+ * Requested Changes
+ */
+data class RequestedChanges(
+    val status: String? = null,
+    val checkIn: String? = null,
+    val checkOut: String? = null,
+    val leaveTypeName: String? = null
+)
+
+/**
+ * Attachment Info
+ */
+data class AttachmentInfo(
+    val hasAttachment: Boolean,
+    val fileName: String? = null,
+    val downloadUrl: String? = null
+)
+
+/**
+ * Review Info
+ */
+data class ReviewInfo(
+    val reviewerName: String,
+    val reviewedAt: String,
+    val comments: String?
+)
+
+/**
+ * Correction Request Options Data
+ */
+data class CorrectionRequestOptionsData(
+    val requestTypes: List<RequestTypeOption>,
+    val statusOptions: List<StatusOption>,
+    val priorityOptions: List<PriorityOption>,
+    val leaveTypes: List<LeaveTypeOption>
+)
+
+/**
+ * Request Type Option
+ */
+data class RequestTypeOption(
+    val value: String,
+    val label: String,
+    val description: String
+)
+
+/**
+ * Status Option
+ */
+data class StatusOption(
+    val value: String,
+    val label: String
+)
+
+/**
+ * Priority Option
+ */
+data class PriorityOption(
+    val value: String,
+    val label: String
+)
+
+/**
+ * Leave Type Option
+ */
+data class LeaveTypeOption(
+    val id: Int,
+    val label: String,
+    val description: String?
+)
+
+// ========================================
+// OTHER API MODELS
+// ========================================
 
 // Verify token endpoint response
 data class VerifyTokenResponse(
@@ -404,6 +828,9 @@ data class ProfilePictureUpdateResponse(
     val filename: String? = null
 )
 
+// ========================================
+// WORK REPORT MODELS
+// ========================================
 
 data class WorkReport(
     val id: Int,
@@ -433,6 +860,79 @@ data class WorkReportListResponse(
     val reports: List<WorkReportDto>
 )
 
+/**
+ * Work Report DTO from API
+ */
+data class WorkReportDto(
+    val id: Int,
+    val report_date: String,
+    val work_description: String,
+    val attachments: String,
+    val report_status: String,
+    val branch_name: String?,
+    val submitted_at: String?,
+    val reviewed_at: String?,
+    val reviewed_by_name: String?,
+    val reviewer_comments: String?,
+    val rejection_reason: String?,
+    val created_at: String,
+    val updated_at: String
+) {
+    fun toDomain() = WorkReport(
+        id = id,
+        reportDate = report_date,
+        workDescription = work_description,
+        attachments = parseAttachments(attachments),
+        reportStatus = report_status,
+        branchName = branch_name,
+        submittedAt = submitted_at,
+        reviewedAt = reviewed_at,
+        reviewedByName = reviewed_by_name,
+        reviewerComments = reviewer_comments,
+        rejectionReason = rejection_reason,
+        createdAt = created_at,
+        updatedAt = updated_at
+    )
+
+    private fun parseAttachments(attachmentsJson: String): List<String> {
+        return try {
+            if (attachmentsJson.isBlank() || attachmentsJson == "[]") {
+                emptyList()
+            } else {
+                val gson = com.google.gson.Gson()
+                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
+                gson.fromJson(attachmentsJson, type) ?: emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+}
+
+/**
+ * API Response for POST /work-report
+ */
+data class CreateWorkReportResponse(
+    val status: String,
+    val message: String,
+    val work_report: CreatedWorkReportDto?,
+    val reports_today: Int?,
+    val remaining_reports_today: Int?
+)
+
+data class CreatedWorkReportDto(
+    val id: Int,
+    val report_date: String,
+    val work_description: String,
+    val attachments_count: Int,
+    val report_status: String,
+    val submitted_at: String
+)
+
+// ========================================
+// CIRCULAR MODELS
+// ========================================
+
 data class Circular(
     val id: Int,
     val title: String,
@@ -451,9 +951,6 @@ data class Circular(
     val createdAt: String?
 )
 
-/**
- * Circular detail data model (includes additional fields)
- */
 data class CircularDetail(
     val id: Int,
     val title: String,
@@ -484,9 +981,6 @@ data class ApprovedBy(
     val email: String?
 )
 
-/**
- * Circular statistics
- */
 data class CircularStats(
     val totalCirculars: Int,
     val highPriority: Int,
@@ -494,9 +988,6 @@ data class CircularStats(
     val byType: Map<String, Int>
 )
 
-/**
- * Pagination info
- */
 data class PaginationInfo(
     val currentPage: Int,
     val pageSize: Int,
@@ -504,11 +995,6 @@ data class PaginationInfo(
     val totalPages: Int
 )
 
-// -------- API Response Models --------
-
-/**
- * API Response for GET /circulars
- */
 data class CircularListResponse(
     val status: String,
     val data: CircularListData
@@ -519,9 +1005,6 @@ data class CircularListData(
     val pagination: PaginationDto
 )
 
-/**
- * Circular DTO from API
- */
 data class CircularDto(
     val id: Int,
     val title: String,
@@ -539,9 +1022,6 @@ data class CircularDto(
     val approved_at: String?,
     val created_at: String?
 ) {
-    /**
-     * Convert DTO to domain model
-     */
     fun toDomain() = Circular(
         id = id,
         title = title,
@@ -575,9 +1055,6 @@ data class PaginationDto(
     )
 }
 
-/**
- * API Response for GET /circulars/{circular_id}
- */
 data class CircularDetailResponse(
     val status: String,
     val data: CircularDetailDto
@@ -633,9 +1110,6 @@ data class ApprovedByDto(
     val email: String?
 )
 
-/**
- * API Response for GET /circulars/stats/summary
- */
 data class CircularStatsResponse(
     val status: String,
     val data: CircularStatsDto
@@ -654,87 +1128,11 @@ data class CircularStatsDto(
         byType = by_type
     )
 }
-/**
- * Work Report DTO from API
- */
-data class WorkReportDto(
-    val id: Int,
-    val report_date: String,
-    val work_description: String,
-    val attachments: String,  // ⭐ CHANGED: String instead of List<String>
-    val report_status: String,
-    val branch_name: String?,
-    val submitted_at: String?,
-    val reviewed_at: String?,
-    val reviewed_by_name: String?,
-    val reviewer_comments: String?,
-    val rejection_reason: String?,
-    val created_at: String,
-    val updated_at: String
-) {
-    /**
-     * Convert DTO to domain model
-     * Parses attachments JSON string to List
-     */
-    fun toDomain() = WorkReport(
-        id = id,
-        reportDate = report_date,
-        workDescription = work_description,
-        attachments = parseAttachments(attachments),
-        reportStatus = report_status,
-        branchName = branch_name,
-        submittedAt = submitted_at,
-        reviewedAt = reviewed_at,
-        reviewedByName = reviewed_by_name,
-        reviewerComments = reviewer_comments,
-        rejectionReason = rejection_reason,
-        createdAt = created_at,
-        updatedAt = updated_at
-    )
 
-    /**
-     * Parse attachments from JSON string to List
-     */
-    private fun parseAttachments(attachmentsJson: String): List<String> {
-        return try {
-            if (attachmentsJson.isBlank() || attachmentsJson == "[]") {
-                emptyList()
-            } else {
-                // Parse JSON array string
-                val gson = com.google.gson.Gson()
-                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
-                gson.fromJson(attachmentsJson, type) ?: emptyList()
-            }
-        } catch (e: Exception) {
-            // If parsing fails, return empty list
-            emptyList()
-        }
-    }
-}
+// ========================================
+// LEAVE MODELS
+// ========================================
 
-/**
- * API Response for POST /work-report
- */
-data class CreateWorkReportResponse(
-    val status: String,
-    val message: String,
-    val work_report: CreatedWorkReportDto?,
-    val reports_today: Int?,
-    val remaining_reports_today: Int?
-)
-
-data class CreatedWorkReportDto(
-    val id: Int,
-    val report_date: String,
-    val work_description: String,
-    val attachments_count: Int,
-    val report_status: String,
-    val submitted_at: String
-)
-
-/**
- * Leave Type
- */
 data class LeaveType(
     val id: Int,
     val leaveTypeName: String,
@@ -746,9 +1144,6 @@ data class LeaveType(
     val description: String?
 )
 
-/**
- * Leave Application
- */
 data class LeaveApplication(
     val id: Int,
     val leaveType: LeaveTypeInfo,
@@ -786,9 +1181,6 @@ data class ApproverInfo(
     val approvedAt: String?
 )
 
-/**
- * Leave Summary
- */
 data class LeaveSummary(
     val year: Int,
     val totalDaysTaken: Int,
@@ -818,11 +1210,6 @@ data class UpcomingLeave(
     val status: String
 )
 
-// -------- API Response Models --------
-
-/**
- * GET /leave-types Response
- */
 data class LeaveTypesResponse(
     val status: String,
     val data: List<LeaveTypeDto>
@@ -850,9 +1237,6 @@ data class LeaveTypeDto(
     )
 }
 
-/**
- * POST /apply-leave Response
- */
 data class ApplyLeaveResponse(
     val status: String,
     val message: String,
@@ -867,9 +1251,6 @@ data class ApplyLeaveData(
     val requires_approval: Boolean
 )
 
-/**
- * GET /leave-applications Response
- */
 data class LeaveApplicationsResponse(
     val status: String,
     val data: LeaveApplicationsData
@@ -954,9 +1335,6 @@ data class ApproverInfoDto(
     )
 }
 
-/**
- * GET /leave-summary Response
- */
 data class LeaveSummaryResponse(
     val status: String,
     val data: LeaveSummaryDto
@@ -1020,14 +1398,14 @@ data class UpcomingLeaveDto(
     )
 }
 
-/**
- * POST /withdraw-leave Response
- */
 data class WithdrawLeaveResponse(
     val status: String,
     val message: String
-
 )
+
+// ========================================
+// LOGOUT & MISC MODELS
+// ========================================
 
 data class LogoutResponse(
     val status: String,
@@ -1044,10 +1422,29 @@ data class LogoutPushNotifications(
 
 data class PendingMessage(
     val id: Int,
-    val type: String,                        // "REMINDER", "NOTICE", "WARNING", "CRITICAL"
+    val type: String,
     val title: String,
     val body: String,
     val has_attachment: Boolean,
-    val attachment_url: String?,             // Full URL to download attachment
+    val attachment_url: String?,
     val requires_acknowledgment: Boolean
 )
+
+// ========================================
+// ENUMS
+// ========================================
+
+enum class RequestType {
+    @SerializedName("NEW_ATTENDANCE") NEW_ATTENDANCE,
+    @SerializedName("CORRECTION") CORRECTION,
+    @SerializedName("LEAVE_LINKAGE") LEAVE_LINKAGE,
+    @SerializedName("STATUS_CHANGE") STATUS_CHANGE
+}
+
+enum class CorrectionStatus {
+    @SerializedName("PENDING") PENDING,
+    @SerializedName("MORE_INFO_NEEDED") MORE_INFO_NEEDED,
+    @SerializedName("APPROVED") APPROVED,
+    @SerializedName("REJECTED") REJECTED,
+    @SerializedName("WITHDRAWN") WITHDRAWN
+}

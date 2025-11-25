@@ -8,7 +8,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,11 +17,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.core.network.DayTimesheet
 import com.hrms.jeejateamozy.core.network.PunchRecord
+import com.hrms.jeejateamozy.feature.attendance.presentation.components.CorrectionRequestCard
+import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.SubmitCorrectionRequestBottomSheet
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+
+/**
+ * ✅ UPDATED: AttendanceDayDetailScreen with Correction Request Support
+ *
+ * Changes:
+ * - Added correction request card display
+ * - Added submit correction button
+ * - Added submit correction dialog
+ * - Added withdrawal and attachment download handling
+ */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,9 +45,9 @@ fun AttendanceDayDetailScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load day detail when screen opens
+    // Load day timesheet when screen opens
     LaunchedEffect(date) {
-        viewModel.loadDayDetail(date)
+        viewModel.loadDayTimesheet(date)
     }
 
     // Handle events
@@ -59,7 +69,7 @@ fun AttendanceDayDetailScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Day Details") },
+                title = { Text("Day Detail") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -88,30 +98,63 @@ fun AttendanceDayDetailScreen(
                     }
                 }
 
-                uiState.timesheet != null -> {
-                    val timesheet = uiState.timesheet!!
-
-                    if (!timesheet.hasAttendance) {
-                        NoAttendanceView(
-                            date = timesheet.date,
-                            dayName = timesheet.dayName,
-                            message = timesheet.message ?: "No attendance record"
-                        )
-                    } else {
-                        DayDetailContent(timesheet = timesheet)
-                    }
-                }
-
                 uiState.errorMessage != null -> {
                     ErrorView(message = uiState.errorMessage!!)
                 }
+
+                uiState.timesheet != null -> {
+                    DayDetailContent(
+                        timesheet = uiState.timesheet!!,
+                        onWithdrawCorrection = { requestId ->
+                            viewModel.withdrawCorrectionRequest(requestId, date)
+                        },
+                        onDownloadAttachment = { downloadUrl, isSettled, requestId ->
+                            viewModel.downloadAttachment(downloadUrl, isSettled, requestId)
+                        },
+                        onSubmitCorrection = {
+                            viewModel.showSubmitCorrectionDialog(true)
+                        }
+                    )
+                }
+            }
+
+            // ✅ NEW: Submit Correction Dialog
+            if (uiState.showSubmitCorrectionDialog && uiState.correctionOptions != null) {
+                SubmitCorrectionRequestBottomSheet(
+                    date = date,
+                    attendanceRecordId = uiState.timesheet?.attendanceRecordId,
+                    availableActions = uiState.timesheet?.availableActions ?: emptyList(),
+                    options = uiState.correctionOptions!!,
+                    onDismiss = {
+                        viewModel.showSubmitCorrectionDialog(false)
+                    },
+                    onSubmit = { requestType, reason, requestedStatus, requestedCheckIn, requestedCheckOut, leaveTypeId, priority, attachmentUri ->
+                        viewModel.submitCorrectionRequest(
+                            attendanceDate = date,
+                            attendanceRecordId = uiState.timesheet?.attendanceRecordId,
+                            requestType = requestType,
+                            reason = reason,
+                            requestedStatus = requestedStatus,
+                            requestedCheckIn = requestedCheckIn,
+                            requestedCheckOut = requestedCheckOut,
+                            leaveTypeId = leaveTypeId,
+                            priority = priority,
+                            attachmentUri = attachmentUri
+                        )
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun DayDetailContent(timesheet: DayTimesheet) {
+private fun DayDetailContent(
+    timesheet: DayTimesheet,
+    onWithdrawCorrection: (Int) -> Unit,
+    onDownloadAttachment: (String, Boolean, Int) -> Unit,
+    onSubmitCorrection: () -> Unit
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -125,53 +168,107 @@ private fun DayDetailContent(timesheet: DayTimesheet) {
             )
         }
 
-        // Status Card
-        timesheet.status?.let { status ->
+        // No Attendance Message
+        if (!timesheet.hasAttendance) {
             item {
-                StatusCard(
-                    text = status.text,
-                    color = status.color,
-                    isComplete = timesheet.isComplete ?: false
+                NoAttendanceView(
+                    date = timesheet.date,
+                    dayName = timesheet.dayName,
+                    message = timesheet.message ?: "No attendance record"
                 )
             }
-        }
-
-        // Shift Information
-        timesheet.shift?.let { shift ->
-            item {
-                ShiftInfoCard(
-                    shiftName = shift.name,
-                    hours = shift.hours,
-                    timingDisplay = shift.timingDisplay
-                )
-            }
-        }
-
-        // Hours Summary
-        timesheet.hours?.let { hours ->
-            item {
-                HoursSummaryCard(
-                    totalDisplay = hours.totalDisplay,
-                    productiveDisplay = hours.productiveDisplay
-                )
-            }
-        }
-
-        // Punch Records
-        timesheet.punches?.let { punches ->
-            if (punches.isNotEmpty()) {
+        } else {
+            // Status Card
+            timesheet.status?.let { status ->
                 item {
-                    Text(
-                        text = "Punch Records",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                    StatusCard(
+                        text = status.text,
+                        color = status.color,
+                        isComplete = timesheet.isComplete ?: false
                     )
                 }
+            }
 
-                items(punches) { punch ->
-                    PunchRecordCard(punch = punch)
+            // Shift Information
+            timesheet.shift?.let { shift ->
+                item {
+                    ShiftInfoCard(
+                        shiftName = shift.name,
+                        hours = shift.hours,
+                        timingDisplay = shift.timingDisplay
+                    )
                 }
             }
+
+            // Hours Summary
+            timesheet.hours?.let { hours ->
+                item {
+                    HoursSummaryCard(
+                        totalDisplay = hours.totalDisplay,
+                        productiveDisplay = hours.productiveDisplay
+                    )
+                }
+            }
+
+            // Punch Records
+            timesheet.punches?.let { punches ->
+                if (punches.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Punch Records",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    items(punches) { punch ->
+                        PunchRecordCard(punch = punch)
+                    }
+                }
+            }
+        }
+
+        // ✅ NEW: Correction Request Card
+        timesheet.correctionRequest?.let { container ->
+            if (container.hasAny) {
+                item {
+                    CorrectionRequestCard(
+                        correctionRequest = container.active,
+                        settledRequest = container.settled,
+                        onWithdraw = { requestId ->
+                            onWithdrawCorrection(requestId)
+                        },
+                        onDownloadAttachment = { downloadUrl ->
+                            val requestId = container.active?.id ?: container.settled?.id ?: 0
+                            val isSettled = container.active == null
+                            onDownloadAttachment(downloadUrl, isSettled, requestId)
+                        }
+                    )
+                }
+            }
+        }
+
+        // ✅ NEW: Submit Correction Button
+        if (timesheet.canSubmitCorrection == true) {
+            item {
+                Button(
+                    onClick = onSubmitCorrection,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Submit Correction"
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Submit Correction Request")
+                }
+            }
+        }
+
+        // Extra spacing at bottom
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -202,6 +299,42 @@ private fun DateHeaderCard(dayName: String, formattedDate: String) {
                 text = formattedDate,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun NoAttendanceView(
+    date: String,
+    dayName: String,
+    message: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = "No Attendance",
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(48.dp)
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -262,7 +395,7 @@ private fun StatusCard(text: String, color: String, isComplete: Boolean) {
 }
 
 @Composable
-private fun ShiftInfoCard(shiftName: String, hours: String, timingDisplay: String) {
+private fun ShiftInfoCard(shiftName: String?, hours: String, timingDisplay: String?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp)
@@ -278,8 +411,8 @@ private fun ShiftInfoCard(shiftName: String, hours: String, timingDisplay: Strin
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Schedule,
-                    contentDescription = null,
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = "Shift",
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
@@ -289,45 +422,19 @@ private fun ShiftInfoCard(shiftName: String, hours: String, timingDisplay: Strin
                 )
             }
 
-            Divider()
+            HorizontalDivider()
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+            shiftName?.let {
+                InfoRow(label = "Shift", value = it)
+            }
+            InfoRow(label = "Hours", value = hours)
+            timingDisplay?.let {
                 Text(
-                    text = "Shift",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                    text = shiftName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
             }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Hours",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = hours,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            Text(
-                text = timingDisplay,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -349,8 +456,8 @@ private fun HoursSummaryCard(totalDisplay: String, productiveDisplay: String) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Timer,
-                    contentDescription = null,
+                    imageVector = Icons.Default.Timer,
+                    contentDescription = "Hours",
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
@@ -360,110 +467,61 @@ private fun HoursSummaryCard(totalDisplay: String, productiveDisplay: String) {
                 )
             }
 
-            Divider()
+            HorizontalDivider()
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Total Hours",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = totalDisplay,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Productive Hours",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = productiveDisplay,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+            InfoRow(label = "Total Time", value = totalDisplay)
+            InfoRow(label = "Productive Time", value = productiveDisplay)
         }
     }
 }
 
 @Composable
 private fun PunchRecordCard(punch: PunchRecord) {
-    val isPunchIn = punch.type == "PUNCH IN"
-    val icon = if (isPunchIn) Icons.Outlined.Login else Icons.Outlined.Logout
-    val iconColor = if (isPunchIn) Color(0xFF4CAF50) else Color(0xFFF44336)
-
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isPunchIn)
-                Color(0xFF4CAF50).copy(alpha = 0.05f)
-            else
-                Color(0xFFF44336).copy(alpha = 0.05f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = punch.type,
-                tint = iconColor,
-                modifier = Modifier.size(32.dp)
-            )
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = punch.type,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (punch.type == "PUNCH IN") Icons.Default.Login else Icons.Default.Logout,
+                    contentDescription = punch.type,
+                    tint = if (punch.type == "PUNCH IN") Color(0xFF4CAF50) else Color(0xFFF44336)
                 )
-
-                punch.time?.let { time ->
-                    Spacer(modifier = Modifier.height(4.dp))
+                Column {
                     Text(
-                        text = time,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = punch.type,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
                     )
-                }
-
-                punch.location?.let { location ->
-                    if (location.latitude != null && location.longitude != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.LocationOn,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "${location.latitude}, ${location.longitude}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    punch.time?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
+                }
+            }
+
+            punch.location?.let { location ->
+                if (location.latitude != null && location.longitude != null) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "Location",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -471,69 +529,48 @@ private fun PunchRecordCard(punch: PunchRecord) {
 }
 
 @Composable
-private fun NoAttendanceView(date: String, dayName: String, message: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Icon(
-            imageVector = Icons.Outlined.EventBusy,
-            contentDescription = null,
-            modifier = Modifier.size(80.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = dayName,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = date,
-            style = MaterialTheme.typography.bodyLarge,
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = message,
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
         )
     }
 }
 
 @Composable
 private fun ErrorView(message: String) {
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.Default.Error,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.error
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Error",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.error
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Error,
+                contentDescription = "Error",
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.error
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }

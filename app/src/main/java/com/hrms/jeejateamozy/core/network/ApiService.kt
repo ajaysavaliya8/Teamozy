@@ -12,6 +12,7 @@ import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityResponse
 import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsResponse
 import com.hrms.jeejateamozy.core.network.WorkReportListResponse
 import com.hrms.jeejateamozy.core.network.CreateWorkReportResponse
+import okhttp3.ResponseBody
 
 data class DeviceChangeResponse(
     val detail: String
@@ -305,4 +306,40 @@ interface ApiService {
         @Field("device_id") deviceId: String,
         @Field("clear_push_token") clearPushToken: Boolean = true
     ): Response<LogoutResponse>
+
+    @GET("timesheet/correction-request/options")
+    suspend fun getCorrectionRequestOptions(): Response<CorrectionRequestOptionsResponse>
+
+    @Multipart
+    @POST("timesheet/correction-request/submit")
+    suspend fun submitCorrectionRequest(
+        @Part("request_type") requestType: RequestBody,
+        @Part("attendance_date") attendanceDate: RequestBody,
+        @Part("reason") reason: RequestBody,
+        @Part("attendance_record_id") attendanceRecordId: RequestBody? = null,
+        @Part("attendance_session_id") attendanceSessionId: RequestBody? = null,
+        @Part("leave_type_id") leaveTypeId: RequestBody? = null,
+        @Part("requested_status") requestedStatus: RequestBody? = null,
+        @Part("requested_check_in") requestedCheckIn: RequestBody? = null,
+        @Part("requested_check_out") requestedCheckOut: RequestBody? = null,
+        @Part("priority") priority: RequestBody? = null,
+        @Part attachment: MultipartBody.Part? = null
+    ): Response<SubmitCorrectionRequestResponse>
+
+    @PATCH("timesheet/correction-request/{request_id}/withdraw")
+    suspend fun withdrawCorrectionRequest(
+        @Path("request_id") requestId: Int
+    ): Response<WithdrawCorrectionRequestResponse>
+
+    @Streaming
+    @GET("timesheet/correction-request/attachment/{request_id}")
+    suspend fun downloadCorrectionAttachment(
+        @Path("request_id") requestId: Int
+    ): Response<ResponseBody>
+
+    @Streaming
+    @GET("timesheet/correction-request/settled-attachment/{settled_id}")
+    suspend fun downloadSettledCorrectionAttachment(
+        @Path("settled_id") settledId: Int
+    ): Response<ResponseBody>
 }

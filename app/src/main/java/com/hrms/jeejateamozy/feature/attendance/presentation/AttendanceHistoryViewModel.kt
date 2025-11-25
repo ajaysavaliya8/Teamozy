@@ -1,5 +1,6 @@
 package com.hrms.jeejateamozy.feature.attendance.presentation
 
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,7 +12,20 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 /**
+ * ✅ UPDATED: AttendanceHistoryViewModel with Correction Request Support
+ *
+ * Changes:
+ * - Added CorrectionRequestRepository dependency
+ * - Added correction request state to DayDetailUiState
+ * - Added methods for submit, withdraw, download
+ * - Added dialog management
+ * - Updated MonthlyTimesheet domain model to include correctionRequests
+ * - Updated DayTimesheet domain model to include correction fields
+ */
+
+/**
  * UI State for Attendance History Screen (Monthly View)
+ * ✅ UPDATED: Added correctionRequests field
  */
 data class AttendanceHistoryUiState(
     val isLoading: Boolean = false,
@@ -21,17 +35,25 @@ data class AttendanceHistoryUiState(
     val calendarDays: List<CalendarDay> = emptyList(),
     val summary: MonthSummary? = null,
     val chartData: ChartData? = null,
+    val correctionRequests: CorrectionRequestSummary? = null,  // ✅ NEW
     val errorMessage: String? = null,
     val selectedDate: String? = null
 )
 
 /**
  * UI State for Day Detail Screen
+ * ✅ UPDATED: Added correction request state
  */
 data class DayDetailUiState(
     val isLoading: Boolean = false,
     val timesheet: DayTimesheet? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+
+    // ✅ NEW: Correction request state
+    val correctionOptions: CorrectionRequestOptionsData? = null,
+    val showSubmitCorrectionDialog: Boolean = false,
+    val isSubmittingCorrection: Boolean = false,
+    val isWithdrawingCorrection: Boolean = false
 )
 
 /**
@@ -44,9 +66,11 @@ sealed class AttendanceHistoryEvent {
 
 /**
  * ViewModel for Attendance History
+ * ✅ UPDATED: Added CorrectionRequestRepository parameter
  */
 class AttendanceHistoryViewModel(
-    private val repo: AttendanceHistoryRepository
+    private val repo: AttendanceHistoryRepository,
+    private val correctionRepo: CorrectionRequestRepository  // ✅ NEW
 ) : ViewModel() {
 
     private val _historyUiState = MutableStateFlow(AttendanceHistoryUiState())
@@ -72,6 +96,7 @@ class AttendanceHistoryViewModel(
 
     /**
      * Load timesheet for a specific month
+     * ✅ UPDATED: Now includes correction request summary
      */
     fun loadMonthlyTimesheet(year: Int, month: Int) {
         viewModelScope.launch {
@@ -81,30 +106,35 @@ class AttendanceHistoryViewModel(
                 when (val outcome = repo.getMonthlyTimesheet(year = year, month = month)) {
                     is MonthlyTimesheetOutcome.Success -> {
                         val timesheet = outcome.timesheet
-
-                        // ✅ Generate full month calendar with all days
-                        val fullCalendar = generateFullMonthCalendar(
-                            year = timesheet.year,
-                            month = timesheet.month,
-                            attendanceDays = timesheet.calendarDays
+                        val calendarWithPadding = addPaddingDays(
+                            days = timesheet.calendarDays,
+                            year = year,
+                            month = month
                         )
 
                         _historyUiState.update {
                             it.copy(
                                 isLoading = false,
-                                currentMonth = timesheet.month,
-                                currentYear = timesheet.year,
+                                currentMonth = month,
+                                currentYear = year,
                                 monthName = timesheet.monthName,
-                                calendarDays = fullCalendar,  // ✅ Use full calendar
+                                calendarDays = calendarWithPadding,
                                 summary = timesheet.summary,
                                 chartData = timesheet.chartData,
+                                correctionRequests = timesheet.correctionRequests,  // ✅ NEW
                                 errorMessage = null
                             )
                         }
-                        Log.d(
-                            "AttendanceHistoryVM",
-                            "Generated full calendar with ${fullCalendar.size} days (including padding)"
-                        )
+                        Log.d("AttendanceHistoryVM", "Loaded timesheet for $month/$year")
+
+                        // ✅ NEW: Log correction request summary
+                        timesheet.correctionRequests?.let { summary ->
+                            Log.d("AttendanceHistoryVM", "Correction Requests - " +
+                                    "Pending: ${summary.pending}, " +
+                                    "Approved: ${summary.approved}, " +
+                                    "Rejected: ${summary.rejected}, " +
+                                    "Info Needed: ${summary.infoNeeded}")
+                        }
                     }
 
                     is MonthlyTimesheetOutcome.Error -> {
@@ -132,96 +162,15 @@ class AttendanceHistoryViewModel(
     }
 
     /**
-     * ✅ Generate full month calendar with all days
-     * Includes leading padding days to align with correct weekday
+     * Load day timesheet
+     * ✅ UPDATED: Now includes correction request data
      */
-    private fun generateFullMonthCalendar(
-        year: Int,
-        month: Int,
-        attendanceDays: List<CalendarDay>
-    ): List<CalendarDay> {
-        val yearMonth = YearMonth.of(year, month)
-        val firstDayOfMonth = yearMonth.atDay(1)
-        val daysInMonth = yearMonth.lengthOfMonth()
-
-        // Get day of week for first day (0 = Monday, 6 = Sunday)
-        // We need Sunday = 0, so adjust
-        val firstDayOfWeek = firstDayOfMonth.dayOfWeek.value % 7  // 0 = Sunday, 1 = Monday, etc.
-
-        // Create map of existing attendance data by day number
-        val attendanceMap = attendanceDays.associateBy { it.day }
-
-        val fullCalendar = mutableListOf<CalendarDay>()
-
-        // ✅ Add leading empty days for alignment
-        repeat(firstDayOfWeek) {
-            fullCalendar.add(
-                CalendarDay(
-                    day = 0,  // Empty day indicator
-                    date = "",  // ✅ Empty string, not null
-                    status = "",  // ✅ Empty string, not null
-                    color = "transparent",
-                    isComplete = false,  // ✅ Required parameter
-                    hasIrregularity = false,
-                    punchCount = 0  // ✅ Required parameter
-                )
-            )
-        }
-
-        // ✅ Add all days of the month
-        for (day in 1..daysInMonth) {
-            val existingDay = attendanceMap[day]
-
-            if (existingDay != null) {
-                // Use attendance data from API
-                fullCalendar.add(existingDay)
-            } else {
-                // Create empty day with no attendance
-                val dateStr = String.format("%04d-%02d-%02d", year, month, day)
-                fullCalendar.add(
-                    CalendarDay(
-                        day = day,
-                        date = dateStr,  // ✅ Proper date string
-                        status = "",  // ✅ Empty string to indicate no status
-                        color = "transparent",
-                        isComplete = false,  // ✅ Required parameter
-                        hasIrregularity = false,
-                        punchCount = 0  // ✅ Required parameter
-                    )
-                )
-            }
-        }
-
-        return fullCalendar
-    }
-
-    /**
-     * Navigate to previous month
-     */
-    fun loadPreviousMonth() {
-        val currentYearMonth = YearMonth.of(_historyUiState.value.currentYear, _historyUiState.value.currentMonth)
-        val previousMonth = currentYearMonth.minusMonths(1)
-        loadMonthlyTimesheet(year = previousMonth.year, month = previousMonth.monthValue)
-    }
-
-    /**
-     * Navigate to next month
-     */
-    fun loadNextMonth() {
-        val currentYearMonth = YearMonth.of(_historyUiState.value.currentYear, _historyUiState.value.currentMonth)
-        val nextMonth = currentYearMonth.plusMonths(1)
-        loadMonthlyTimesheet(year = nextMonth.year, month = nextMonth.monthValue)
-    }
-
-    /**
-     * Load day detail when user clicks on a calendar day
-     */
-    fun loadDayDetail(date: String) {
+    fun loadDayTimesheet(attendanceDate: String) {
         viewModelScope.launch {
             try {
                 _dayDetailUiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-                when (val outcome = repo.getDayTimesheet(attendanceDate = date)) {
+                when (val outcome = repo.getDayTimesheet(attendanceDate = attendanceDate)) {
                     is DayTimesheetOutcome.Success -> {
                         _dayDetailUiState.update {
                             it.copy(
@@ -230,7 +179,21 @@ class AttendanceHistoryViewModel(
                                 errorMessage = null
                             )
                         }
-                        Log.d("AttendanceHistoryVM", "Loaded day timesheet for $date")
+                        Log.d("AttendanceHistoryVM", "Loaded day timesheet for $attendanceDate")
+
+                        // ✅ NEW: Log correction request status
+                        outcome.timesheet.correctionRequest?.let { container ->
+                            if (container.hasAny) {
+                                container.active?.let { active ->
+                                    Log.d("AttendanceHistoryVM", "Active correction request: " +
+                                            "ID=${active.id}, Type=${active.requestType}, Status=${active.status}")
+                                }
+                                container.settled?.let { settled ->
+                                    Log.d("AttendanceHistoryVM", "Settled correction request: " +
+                                            "ID=${settled.id}, Final Status=${settled.finalStatus}")
+                                }
+                            }
+                        }
                     }
 
                     is DayTimesheetOutcome.Error -> {
@@ -257,27 +220,240 @@ class AttendanceHistoryViewModel(
         }
     }
 
+    // ==========================================
+    // ✅ NEW: CORRECTION REQUEST METHODS
+    // ==========================================
+
     /**
-     * Select a date (for navigation)
+     * Load correction request form options
      */
-    fun selectDate(date: String) {
-        _historyUiState.update { it.copy(selectedDate = date) }
+    fun loadCorrectionOptions() {
+        viewModelScope.launch {
+            when (val outcome = correctionRepo.getCorrectionRequestOptions()) {
+                is CorrectionRequestOptionsOutcome.Success -> {
+                    _dayDetailUiState.update { it.copy(correctionOptions = outcome.options) }
+                    Log.d("AttendanceHistoryVM", "Loaded correction request options")
+                }
+                is CorrectionRequestOptionsOutcome.Error -> {
+                    _events.emit(AttendanceHistoryEvent.ShowError(outcome.message))
+                    Log.e("AttendanceHistoryVM", "Error loading correction options: ${outcome.message}")
+                }
+            }
+        }
     }
 
     /**
-     * Clear selected date
+     * Submit correction request
      */
-    fun clearSelectedDate() {
-        _dayDetailUiState.update { DayDetailUiState() }
+    fun submitCorrectionRequest(
+        attendanceDate: String,
+        attendanceRecordId: Int?,
+        requestType: String,
+        reason: String,
+        requestedStatus: String? = null,
+        requestedCheckIn: String? = null,
+        requestedCheckOut: String? = null,
+        leaveTypeId: Int? = null,
+        priority: String = "NORMAL",
+        attachmentUri: Uri? = null
+    ) {
+        viewModelScope.launch {
+            _dayDetailUiState.update { it.copy(isSubmittingCorrection = true) }
+
+            Log.d("AttendanceHistoryVM", "Submitting correction request for $attendanceDate")
+
+            when (val outcome = correctionRepo.submitCorrectionRequest(
+                requestType = requestType,
+                attendanceDate = attendanceDate,
+                reason = reason,
+                attendanceRecordId = attendanceRecordId,
+                requestedStatus = requestedStatus,
+                requestedCheckIn = requestedCheckIn,
+                requestedCheckOut = requestedCheckOut,
+                leaveTypeId = leaveTypeId,
+                priority = priority,
+                attachmentUri = attachmentUri
+            )) {
+                is SubmitCorrectionRequestOutcome.Success -> {
+                    _dayDetailUiState.update {
+                        it.copy(
+                            isSubmittingCorrection = false,
+                            showSubmitCorrectionDialog = false
+                        )
+                    }
+
+                    Log.d("AttendanceHistoryVM", "Successfully submitted correction request: ${outcome.data.request_id}")
+
+                    // Reload day timesheet to show new request
+                    loadDayTimesheet(attendanceDate)
+
+                    // Reload monthly calendar to show badge
+                    loadCurrentMonth()
+
+                    _events.emit(AttendanceHistoryEvent.ShowError("Correction request submitted successfully"))
+                }
+
+                is SubmitCorrectionRequestOutcome.Error -> {
+                    _dayDetailUiState.update { it.copy(isSubmittingCorrection = false) }
+                    _events.emit(AttendanceHistoryEvent.ShowError(outcome.message))
+                    Log.e("AttendanceHistoryVM", "Error submitting correction request: ${outcome.message}")
+                }
+            }
+        }
     }
 
     /**
-     * Refresh current month
+     * Withdraw correction request
+     */
+    fun withdrawCorrectionRequest(requestId: Int, attendanceDate: String) {
+        viewModelScope.launch {
+            _dayDetailUiState.update { it.copy(isWithdrawingCorrection = true) }
+
+            Log.d("AttendanceHistoryVM", "Withdrawing correction request: $requestId")
+
+            when (val outcome = correctionRepo.withdrawCorrectionRequest(requestId)) {
+                is WithdrawCorrectionRequestOutcome.Success -> {
+                    _dayDetailUiState.update { it.copy(isWithdrawingCorrection = false) }
+
+                    Log.d("AttendanceHistoryVM", "Successfully withdrawn correction request: $requestId")
+
+                    // Reload day timesheet to show updated status
+                    loadDayTimesheet(attendanceDate)
+
+                    // Reload monthly calendar to update badge
+                    loadCurrentMonth()
+
+                    _events.emit(AttendanceHistoryEvent.ShowError("Correction request withdrawn"))
+                }
+
+                is WithdrawCorrectionRequestOutcome.Error -> {
+                    _dayDetailUiState.update { it.copy(isWithdrawingCorrection = false) }
+                    _events.emit(AttendanceHistoryEvent.ShowError(outcome.message))
+                    Log.e("AttendanceHistoryVM", "Error withdrawing correction request: ${outcome.message}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Download attachment
+     */
+    fun downloadAttachment(downloadUrl: String, isSettled: Boolean, requestId: Int) {
+        viewModelScope.launch {
+            Log.d("AttendanceHistoryVM", "Downloading attachment for request: $requestId (settled=$isSettled)")
+
+            val outcome = if (isSettled) {
+                correctionRepo.downloadSettledCorrectionAttachment(requestId)
+            } else {
+                correctionRepo.downloadCorrectionAttachment(requestId)
+            }
+
+            when (outcome) {
+                is DownloadAttachmentOutcome.Success -> {
+                    Log.d("AttendanceHistoryVM", "Successfully downloaded: ${outcome.file.name}")
+                    _events.emit(AttendanceHistoryEvent.ShowError("Downloaded: ${outcome.file.name}"))
+                }
+
+                is DownloadAttachmentOutcome.Error -> {
+                    Log.e("AttendanceHistoryVM", "Error downloading attachment: ${outcome.message}")
+                    _events.emit(AttendanceHistoryEvent.ShowError(outcome.message))
+                }
+            }
+        }
+    }
+
+    /**
+     * Show/hide submit correction dialog
+     */
+    fun showSubmitCorrectionDialog(show: Boolean) {
+        _dayDetailUiState.update { it.copy(showSubmitCorrectionDialog = show) }
+
+        // Load options when opening dialog
+        if (show && _dayDetailUiState.value.correctionOptions == null) {
+            loadCorrectionOptions()
+        }
+    }
+
+    // ==========================================
+    // EXISTING METHODS (unchanged)
+    // ==========================================
+
+    /**
+     * Navigate to previous month
+     */
+    fun loadPreviousMonth() {
+        val currentYearMonth = YearMonth.of(_historyUiState.value.currentYear, _historyUiState.value.currentMonth)
+        val previousMonth = currentYearMonth.minusMonths(1)
+        loadMonthlyTimesheet(year = previousMonth.year, month = previousMonth.monthValue)
+    }
+
+    /**
+     * Navigate to next month
+     */
+    fun loadNextMonth() {
+        val currentYearMonth = YearMonth.of(_historyUiState.value.currentYear, _historyUiState.value.currentMonth)
+        val nextMonth = currentYearMonth.plusMonths(1)
+        loadMonthlyTimesheet(year = nextMonth.year, month = nextMonth.monthValue)
+    }
+
+    /**
+     * Refresh current view
      */
     fun refresh() {
         loadMonthlyTimesheet(
             year = _historyUiState.value.currentYear,
             month = _historyUiState.value.currentMonth
         )
+    }
+
+    /**
+     * Add padding days to calendar for proper alignment
+     */
+    private fun addPaddingDays(days: List<CalendarDay>, year: Int, month: Int): List<CalendarDay> {
+        if (days.isEmpty()) return emptyList()
+
+        // Get first day of month
+        val firstDayOfMonth = LocalDate.of(year, month, 1)
+        val dayOfWeek = firstDayOfMonth.dayOfWeek.value % 7 // Sunday = 0
+
+        // Add empty padding days for alignment
+        val paddingDays = List(dayOfWeek) {
+            CalendarDay(
+                day = 0, // 0 indicates empty padding
+                date = "",
+                status = "",
+                color = "transparent",
+                isComplete = false,
+                hasIrregularity = false,
+                punchCount = 0,
+                hasCorrectionRequest = false,  // ✅ NEW
+                correctionBadge = null,  // ✅ NEW
+                correctionRequestId = null  // ✅ NEW
+            )
+        }
+
+        val fullCalendar = paddingDays + days
+
+        // Add padding at end to complete the grid if needed
+        val remainingDays = 7 - (fullCalendar.size % 7)
+        if (remainingDays < 7) {
+            val endPadding = List(remainingDays) {
+                CalendarDay(
+                    day = 0,
+                    date = "",
+                    status = "",
+                    color = "transparent",
+                    isComplete = false,
+                    hasIrregularity = false,
+                    punchCount = 0,
+                    hasCorrectionRequest = false,  // ✅ NEW
+                    correctionBadge = null,  // ✅ NEW
+                    correctionRequestId = null  // ✅ NEW
+                )
+            }
+            return fullCalendar + endPadding
+        }
+
+        return fullCalendar
     }
 }

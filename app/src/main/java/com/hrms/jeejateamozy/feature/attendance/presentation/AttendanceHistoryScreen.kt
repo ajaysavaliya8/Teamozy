@@ -24,8 +24,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.core.network.CalendarDay
 import com.hrms.jeejateamozy.core.network.MonthSummary
+import com.hrms.jeejateamozy.feature.attendance.presentation.components.CorrectionRequestMiniBadge
+import com.hrms.jeejateamozy.feature.attendance.presentation.components.CorrectionRequestSummaryBadge
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+
+/**
+ * ✅ UPDATED: AttendanceHistoryScreen with Correction Request Support
+ *
+ * Changes:
+ * - Added correction request mini badges on calendar days
+ * - Added correction request summary card below month summary
+ * - Import correction request components
+ */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,7 +97,7 @@ fun AttendanceHistoryScreen(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 100.dp)  // ✅ INCREASED padding for bottom nav
+                contentPadding = PaddingValues(bottom = 100.dp)
             ) {
                 // Compact Month Navigation
                 item {
@@ -112,14 +123,31 @@ fun AttendanceHistoryScreen(
                     }
                 }
 
-                // Month Summary Card (MOVED BELOW)
+                // Month Summary Card
                 item {
                     uiState.summary?.let { summary ->
                         MonthSummaryCard(summary = summary)
                     }
                 }
 
-                // ✅ Extra spacer at bottom for safety
+                // ✅ NEW: Correction Request Summary Card
+                item {
+                    uiState.correctionRequests?.let { correctionSummary ->
+                        if (correctionSummary.total > 0) {
+                            CorrectionRequestSummaryBadge(
+                                pending = correctionSummary.pending,
+                                approved = correctionSummary.approved,
+                                rejected = correctionSummary.rejected,
+                                infoNeeded = correctionSummary.infoNeeded,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Extra spacer at bottom
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -327,6 +355,9 @@ private fun CalendarGrid(
     }
 }
 
+/**
+ * ✅ UPDATED: CalendarDayItem with Correction Request Badge Support
+ */
 @Composable
 private fun CalendarDayItem(
     day: CalendarDay,
@@ -383,11 +414,18 @@ private fun CalendarDayItem(
                 color = textColor
             )
 
+            // ✅ NEW: Show correction request badge
+            day.correctionBadge?.let { badge ->
+                Spacer(modifier = Modifier.height(2.dp))
+                CorrectionRequestMiniBadge(badge = badge)
+            }
+
+            // Show irregularity indicator
             if (day.hasIrregularity) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Box(
                     modifier = Modifier
-                        .size(6.dp)
+                        .size(4.dp)
                         .clip(CircleShape)
                         .background(Color.Yellow)
                 )
@@ -452,7 +490,7 @@ private fun LegendItem(color: Color, label: String) {
 private fun EmptyCalendarState() {
     Box(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(32.dp),
         contentAlignment = Alignment.Center
     ) {

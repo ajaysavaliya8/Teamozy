@@ -18,6 +18,8 @@ import com.hrms.jeejateamozy.feature.leave.presentation.LeaveViewModel
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
+import com.hrms.jeejateamozy.feature.attendance.data.CorrectionRequestRepository
+
 
 val authModule = module {
     // Provide AuthRepository with correct parameter order: (api, pm, context)
@@ -58,5 +60,6 @@ val leaveModule = module {
 
 val attendanceHistoryModule = module {
     single { AttendanceHistoryRepository(androidContext()) }
-    viewModel { AttendanceHistoryViewModel(get()) }
+    single { CorrectionRequestRepository(androidContext()) }  // ⚡ ADD THIS
+    viewModel { AttendanceHistoryViewModel(get(), get()) }  // ⚡ UPDATE THIS (add second get())
 }
