@@ -7,13 +7,13 @@ import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.WorkReport
 import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
+import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 
@@ -40,6 +40,9 @@ sealed class CreateWorkReportOutcome {
     data class Error(val message: String) : CreateWorkReportOutcome()
 }
 
+/**
+ * ✅ UPDATED: Now using NetworkErrorHandler
+ */
 class WorkReportRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
@@ -85,10 +88,8 @@ class WorkReportRepository(private val context: Context) {
                     }
 
                     response.code() == 403 -> {
-                        val errorMsg = extractErrorMessage(response)
-                        WorkReportListOutcome.Error(
-                            errorMsg ?: "Only active employees can view work reports"
-                        )
+                        val errorMsg = NetworkErrorHandler.extract(response, "Only active employees can view work reports")
+                        WorkReportListOutcome.Error(errorMsg)
                     }
 
                     response.code() == 404 -> {
@@ -96,10 +97,8 @@ class WorkReportRepository(private val context: Context) {
                     }
 
                     else -> {
-                        val errorMsg = extractErrorMessage(response)
-                        WorkReportListOutcome.Error(
-                            errorMsg ?: "Failed to fetch work reports"
-                        )
+                        val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch work reports")
+                        WorkReportListOutcome.Error(errorMsg)
                     }
                 }
             } catch (e: Exception) {
@@ -219,24 +218,18 @@ class WorkReportRepository(private val context: Context) {
                 }
 
                 response.code() == 403 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CreateWorkReportOutcome.Error(
-                        errorMsg ?: "Only active employees can create work reports"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Only active employees can create work reports")
+                    CreateWorkReportOutcome.Error(errorMsg)
                 }
 
                 response.code() == 400 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CreateWorkReportOutcome.Error(
-                        errorMsg ?: "Invalid work report data"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid work report data")
+                    CreateWorkReportOutcome.Error(errorMsg)
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CreateWorkReportOutcome.Error(
-                        errorMsg ?: "Failed to create work report"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to create work report")
+                    CreateWorkReportOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -292,55 +285,5 @@ class WorkReportRepository(private val context: Context) {
             }
         }
         return fileName
-    }
-
-    /**
-     * Helper function to extract error message from response
-     */
-    private fun extractErrorMessage(response: retrofit2.Response<*>): String? {
-        return try {
-            val errorBody = response.errorBody()?.string()
-            if (!errorBody.isNullOrBlank()) {
-                val json = JSONObject(errorBody)
-
-                // Check for standard message field
-                if (json.has("message")) {
-                    return json.getString("message")
-                }
-
-                // Check for detail field (FastAPI style)
-                if (json.has("detail")) {
-                    val detail = json.get("detail")
-
-                    // If detail is a string
-                    if (detail is String) {
-                        return detail
-                    }
-
-                    // If detail is an array (validation errors)
-                    if (detail is org.json.JSONArray && detail.length() > 0) {
-                        val firstError = detail.getJSONObject(0)
-                        val msg = firstError.optString("msg", "")
-
-                        return when {
-                            msg.contains("at least 10 characters", ignoreCase = true) ->
-                                "Work description must be at least 10 characters"
-                            msg.contains("required", ignoreCase = true) -> {
-                                val field = firstError.optJSONArray("loc")?.getString(1) ?: "Field"
-                                "$field is required"
-                            }
-                            else -> msg.ifBlank { "Invalid input" }
-                        }
-                    }
-                }
-
-                errorBody
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e("WORK_REPORT", "Error parsing error response", e)
-            null
-        }
     }
 }

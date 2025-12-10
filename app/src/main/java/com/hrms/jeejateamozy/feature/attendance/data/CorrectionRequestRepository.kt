@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.*
 import com.hrms.jeejateamozy.core.state.AppStateManager
+import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -40,6 +41,7 @@ sealed class DownloadAttachmentOutcome {
 
 /**
  * Repository for Correction Request operations
+ * ✅ UPDATED: Now using NetworkErrorHandler
  */
 class CorrectionRequestRepository(private val context: Context) {
 
@@ -77,10 +79,8 @@ class CorrectionRequestRepository(private val context: Context) {
                     }
 
                     else -> {
-                        val errorMsg = extractErrorMessage(response)
-                        CorrectionRequestOptionsOutcome.Error(
-                            errorMsg ?: "Failed to fetch options"
-                        )
+                        val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch options")
+                        CorrectionRequestOptionsOutcome.Error(errorMsg)
                     }
                 }
             } catch (e: Exception) {
@@ -206,17 +206,13 @@ class CorrectionRequestRepository(private val context: Context) {
                 }
 
                 response.code() == 400 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    SubmitCorrectionRequestOutcome.Error(
-                        errorMsg ?: "Invalid request data"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid request data")
+                    SubmitCorrectionRequestOutcome.Error(errorMsg)
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    SubmitCorrectionRequestOutcome.Error(
-                        errorMsg ?: "Failed to submit correction request"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to submit correction request")
+                    SubmitCorrectionRequestOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -260,17 +256,13 @@ class CorrectionRequestRepository(private val context: Context) {
                     }
 
                     response.code() == 400 -> {
-                        val errorMsg = extractErrorMessage(response)
-                        WithdrawCorrectionRequestOutcome.Error(
-                            errorMsg ?: "Cannot withdraw this request"
-                        )
+                        val errorMsg = NetworkErrorHandler.extract(response, "Cannot withdraw this request")
+                        WithdrawCorrectionRequestOutcome.Error(errorMsg)
                     }
 
                     else -> {
-                        val errorMsg = extractErrorMessage(response)
-                        WithdrawCorrectionRequestOutcome.Error(
-                            errorMsg ?: "Failed to withdraw correction request"
-                        )
+                        val errorMsg = NetworkErrorHandler.extract(response, "Failed to withdraw correction request")
+                        WithdrawCorrectionRequestOutcome.Error(errorMsg)
                     }
                 }
             } catch (e: Exception) {
@@ -380,21 +372,6 @@ class CorrectionRequestRepository(private val context: Context) {
     // ==========================================
     // HELPER METHODS
     // ==========================================
-
-    private fun <T> extractErrorMessage(response: retrofit2.Response<T>): String? {
-        return try {
-            val errorBody = response.errorBody()?.string()
-            if (!errorBody.isNullOrBlank()) {
-                val json = org.json.JSONObject(errorBody)
-                json.optString("message").takeIf { it.isNotBlank() }
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error extracting error message", e)
-            null
-        }
-    }
 
     private fun getFileName(uri: Uri): String? {
         return try {

@@ -4,15 +4,13 @@ import android.content.Context
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.*
 import com.hrms.jeejateamozy.core.state.AppStateManager
+import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
  * Updated AttendanceHistoryRepository with Correction Request Support
- *
- * INTEGRATION INSTRUCTIONS:
- * Replace the existing AttendanceHistoryRepository.kt file with this updated version
- * or merge the changes into your existing file.
+ * ✅ UPDATED: Now using NetworkErrorHandler
  */
 
 /**
@@ -92,8 +90,8 @@ class AttendanceHistoryRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    MonthlyTimesheetOutcome.Error(errorMsg ?: "Failed to fetch monthly timesheet")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch monthly timesheet")
+                    MonthlyTimesheetOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -175,8 +173,8 @@ class AttendanceHistoryRepository(private val context: Context) {
                     }
 
                     else -> {
-                        val errorMsg = extractErrorMessage(response)
-                        DayTimesheetOutcome.Error(errorMsg ?: "Failed to fetch day timesheet")
+                        val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch day timesheet")
+                        DayTimesheetOutcome.Error(errorMsg)
                     }
                 }
             } catch (e: Exception) {
@@ -184,22 +182,4 @@ class AttendanceHistoryRepository(private val context: Context) {
                 DayTimesheetOutcome.Error(e.message ?: "Network error occurred")
             }
         }
-
-    /**
-     * Helper function to extract error message from response
-     */
-    private fun <T> extractErrorMessage(response: retrofit2.Response<T>): String? {
-        return try {
-            val errorBody = response.errorBody()?.string()
-            if (!errorBody.isNullOrBlank()) {
-                val json = org.json.JSONObject(errorBody)
-                json.optString("message").takeIf { it.isNotBlank() }
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e("TIMESHEET", "Error extracting error message", e)
-            null
-        }
-    }
 }

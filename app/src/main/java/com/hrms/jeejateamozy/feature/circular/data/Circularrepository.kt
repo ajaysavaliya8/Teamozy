@@ -4,15 +4,13 @@ import android.content.Context
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.state.AppStateManager
-
 import com.hrms.jeejateamozy.core.network.Circular
 import com.hrms.jeejateamozy.core.network.CircularDetail
 import com.hrms.jeejateamozy.core.network.CircularStats
 import com.hrms.jeejateamozy.core.network.PaginationInfo
-
+import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
 sealed class CircularListOutcome {
     data class Success(
@@ -33,6 +31,9 @@ sealed class CircularStatsOutcome {
     data class Error(val message: String) : CircularStatsOutcome()
 }
 
+/**
+ * ✅ UPDATED: Now using NetworkErrorHandler
+ */
 class CircularRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
@@ -74,9 +75,7 @@ class CircularRepository(private val context: Context) {
                             pagination = pagination
                         )
                     } else {
-                        CircularListOutcome.Error(
-                            "Failed to fetch circulars"
-                        )
+                        CircularListOutcome.Error("Failed to fetch circulars")
                     }
                 }
 
@@ -86,17 +85,13 @@ class CircularRepository(private val context: Context) {
                 }
 
                 response.code() == 404 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CircularListOutcome.Error(
-                        errorMsg ?: "Employee not found"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Employee not found")
+                    CircularListOutcome.Error(errorMsg)
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CircularListOutcome.Error(
-                        errorMsg ?: "Failed to fetch circulars"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch circulars")
+                    CircularListOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -128,9 +123,7 @@ class CircularRepository(private val context: Context) {
 
                         CircularDetailOutcome.Success(circular = circularDetail)
                     } else {
-                        CircularDetailOutcome.Error(
-                            "Failed to fetch circular detail"
-                        )
+                        CircularDetailOutcome.Error("Failed to fetch circular detail")
                     }
                 }
 
@@ -140,24 +133,18 @@ class CircularRepository(private val context: Context) {
                 }
 
                 response.code() == 403 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CircularDetailOutcome.Error(
-                        errorMsg ?: "You don't have access to this circular"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "You don't have access to this circular")
+                    CircularDetailOutcome.Error(errorMsg)
                 }
 
                 response.code() == 404 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CircularDetailOutcome.Error(
-                        errorMsg ?: "Circular not found"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Circular not found")
+                    CircularDetailOutcome.Error(errorMsg)
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CircularDetailOutcome.Error(
-                        errorMsg ?: "Failed to fetch circular detail"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch circular detail")
+                    CircularDetailOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -189,9 +176,7 @@ class CircularRepository(private val context: Context) {
 
                         CircularStatsOutcome.Success(stats = stats)
                     } else {
-                        CircularStatsOutcome.Error(
-                            "Failed to fetch statistics"
-                        )
+                        CircularStatsOutcome.Error("Failed to fetch statistics")
                     }
                 }
 
@@ -201,17 +186,13 @@ class CircularRepository(private val context: Context) {
                 }
 
                 response.code() == 404 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CircularStatsOutcome.Error(
-                        errorMsg ?: "Employee not found"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Employee not found")
+                    CircularStatsOutcome.Error(errorMsg)
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    CircularStatsOutcome.Error(
-                        errorMsg ?: "Failed to fetch statistics"
-                    )
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch statistics")
+                    CircularStatsOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -219,24 +200,6 @@ class CircularRepository(private val context: Context) {
             CircularStatsOutcome.Error(
                 e.message ?: "Network error occurred"
             )
-        }
-    }
-
-    /**
-     * Helper function to extract error message from response
-     */
-    private fun <T> extractErrorMessage(response: retrofit2.Response<T>): String? {
-        return try {
-            val errorBody = response.errorBody()?.string()
-            if (!errorBody.isNullOrBlank()) {
-                val json = JSONObject(errorBody)
-                json.optString("message").takeIf { it.isNotBlank() }
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e("CIRCULAR", "Error extracting error message", e)
-            null
         }
     }
 }

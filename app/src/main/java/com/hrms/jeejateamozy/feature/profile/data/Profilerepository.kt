@@ -3,18 +3,17 @@ package com.hrms.jeejateamozy.feature.profile.data
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import android.net.Uri
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.core.state.AppStateManager
+import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
-import retrofit2.Response
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -24,6 +23,9 @@ sealed class ProfilePictureOutcome {
     data class Error(val message: String) : ProfilePictureOutcome()
 }
 
+/**
+ * ✅ UPDATED: Now using NetworkErrorHandler
+ */
 class ProfileRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
@@ -83,14 +85,14 @@ class ProfileRepository(private val context: Context) {
 
                 response.code() == 400 -> {
                     compressedFile.delete()
-                    val errorMsg = extractErrorMessage(response)
-                    ProfilePictureOutcome.Error(errorMsg ?: "Invalid image file")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid image file")
+                    ProfilePictureOutcome.Error(errorMsg)
                 }
 
                 else -> {
                     compressedFile.delete()
-                    val errorMsg = extractErrorMessage(response)
-                    ProfilePictureOutcome.Error(errorMsg ?: "Failed to update profile picture")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to update profile picture")
+                    ProfilePictureOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -136,8 +138,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    ProfilePictureOutcome.Error(errorMsg ?: "Failed to remove profile picture")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to remove profile picture")
+                    ProfilePictureOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -181,8 +183,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    ContactInfoOutcome.Error(errorMsg ?: "Failed to retrieve contact information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to retrieve contact information")
+                    ContactInfoOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -238,8 +240,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 400 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    ContactInfoOutcome.Error(errorMsg ?: "Invalid contact information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid contact information")
+                    ContactInfoOutcome.Error(errorMsg)
                 }
 
                 response.code() == 404 -> {
@@ -247,8 +249,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    ContactInfoOutcome.Error(errorMsg ?: "Failed to update contact information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to update contact information")
+                    ContactInfoOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -289,8 +291,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    PersonalInfoOutcome.Error(errorMsg ?: "Failed to retrieve personal information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to retrieve personal information")
+                    PersonalInfoOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -341,8 +343,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 400 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    PersonalInfoOutcome.Error(errorMsg ?: "Invalid personal information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid personal information")
+                    PersonalInfoOutcome.Error(errorMsg)
                 }
 
                 response.code() == 404 -> {
@@ -350,8 +352,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    PersonalInfoOutcome.Error(errorMsg ?: "Failed to update personal information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to update personal information")
+                    PersonalInfoOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -359,6 +361,7 @@ class ProfileRepository(private val context: Context) {
             PersonalInfoOutcome.Error(e.message ?: "Network error occurred")
         }
     }
+
     suspend fun getEmploymentDetails(): EmploymentDetailOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("PROFILE", "Fetching employment details")
@@ -391,84 +394,13 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    EmploymentDetailOutcome.Error(errorMsg ?: "Failed to retrieve employment details")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to retrieve employment details")
+                    EmploymentDetailOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
             Log.e("PROFILE", "Error fetching employment details", e)
             EmploymentDetailOutcome.Error(e.message ?: "Network error occurred")
-        }
-    }
-
-    /**
-     * Helper function to compress image
-     */
-    private fun compressImage(imageUri: Uri): File? {
-        return try {
-            val inputStream = context.contentResolver.openInputStream(imageUri)
-            val originalBitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
-
-            if (originalBitmap == null) {
-                Log.e("PROFILE", "Failed to decode image")
-                return null
-            }
-
-            // Calculate new dimensions (max 1024px on longest side)
-            val maxSize = 1024
-            val ratio = if (originalBitmap.width > originalBitmap.height) {
-                maxSize.toFloat() / originalBitmap.width
-            } else {
-                maxSize.toFloat() / originalBitmap.height
-            }
-
-            val newWidth = (originalBitmap.width * ratio).toInt()
-            val newHeight = (originalBitmap.height * ratio).toInt()
-
-            // Resize bitmap
-            val resizedBitmap = Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
-
-            // Compress to JPEG
-            val outputStream = ByteArrayOutputStream()
-            resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-
-            // Save to temporary file
-            val tempFile = File(context.cacheDir, "profile_${System.currentTimeMillis()}.jpg")
-            val fos = FileOutputStream(tempFile)
-            fos.write(outputStream.toByteArray())
-            fos.close()
-
-            // Clean up bitmaps
-            originalBitmap.recycle()
-            resizedBitmap.recycle()
-
-            Log.d("PROFILE", "Image compressed: ${tempFile.length() / 1024}KB")
-            tempFile
-        } catch (e: Exception) {
-            Log.e("PROFILE", "Error compressing image", e)
-            null
-        }
-    }
-
-    /**
-     * Helper function to extract error message from response
-     */
-    private fun <T> extractErrorMessage(response: Response<T>): String? {
-        return try {
-            val errorBody = response.errorBody()?.string()
-            if (!errorBody.isNullOrBlank()) {
-                // Try to parse JSON error response
-                val gson = com.google.gson.Gson()
-                val errorResponse = gson.fromJson(errorBody, Map::class.java)
-                errorResponse["message"] as? String ?: errorResponse["detail"] as? String
-                errorResponse["message"] as? String ?: errorResponse["detail"] as? String
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e("PROFILE", "Error extracting error message", e)
-            null
         }
     }
 
@@ -504,8 +436,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    BankingInfoOutcome.Error(errorMsg ?: "Failed to retrieve banking information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to retrieve banking information")
+                    BankingInfoOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -558,8 +490,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 400 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    BankingInfoOutcome.Error(errorMsg ?: "Invalid banking information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid banking information")
+                    BankingInfoOutcome.Error(errorMsg)
                 }
 
                 response.code() == 404 -> {
@@ -567,8 +499,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    BankingInfoOutcome.Error(errorMsg ?: "Failed to update banking information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to update banking information")
+                    BankingInfoOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -613,8 +545,8 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    EmploymentIdentityOutcome.Error(errorMsg ?: "Failed to retrieve identity information")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to retrieve identity information")
+                    EmploymentIdentityOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -659,13 +591,63 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    ShiftDetailsOutcome.Error(errorMsg ?: "Failed to retrieve shift details")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to retrieve shift details")
+                    ShiftDetailsOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
             Log.e("PROFILE", "Error fetching shift details", e)
             ShiftDetailsOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    /**
+     * Helper function to compress image
+     */
+    private fun compressImage(imageUri: Uri): File? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(imageUri)
+            val originalBitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
+
+            if (originalBitmap == null) {
+                Log.e("PROFILE", "Failed to decode image")
+                return null
+            }
+
+            // Calculate new dimensions (max 1024px on longest side)
+            val maxSize = 1024
+            val ratio = if (originalBitmap.width > originalBitmap.height) {
+                maxSize.toFloat() / originalBitmap.width
+            } else {
+                maxSize.toFloat() / originalBitmap.height
+            }
+
+            val newWidth = (originalBitmap.width * ratio).toInt()
+            val newHeight = (originalBitmap.height * ratio).toInt()
+
+            // Resize bitmap
+            val resizedBitmap = Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
+
+            // Compress to JPEG
+            val outputStream = ByteArrayOutputStream()
+            resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+
+            // Save to temporary file
+            val tempFile = File(context.cacheDir, "profile_${System.currentTimeMillis()}.jpg")
+            val fos = FileOutputStream(tempFile)
+            fos.write(outputStream.toByteArray())
+            fos.close()
+
+            // Clean up bitmaps
+            originalBitmap.recycle()
+            resizedBitmap.recycle()
+
+            Log.d("PROFILE", "Image compressed: ${tempFile.length() / 1024}KB")
+            tempFile
+        } catch (e: Exception) {
+            Log.e("PROFILE", "Error compressing image", e)
+            null
         }
     }
 }

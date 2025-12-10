@@ -30,7 +30,7 @@ sealed class AttendanceEvent {
 
 class AttendanceViewModel(
     private val repo: AttendanceRepository
-) : ViewModel() {
+    ) : ViewModel() {
 
     private val _ui = MutableStateFlow(AttendanceUiState())
     val ui: StateFlow<AttendanceUiState> = _ui.asStateFlow()

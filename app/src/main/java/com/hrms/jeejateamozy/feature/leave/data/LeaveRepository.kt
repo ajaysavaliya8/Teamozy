@@ -5,12 +5,12 @@ import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.*
 import com.hrms.jeejateamozy.core.state.AppStateManager
+import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 import java.io.File
 
 sealed class LeaveTypesOutcome {
@@ -46,6 +46,9 @@ sealed class WithdrawLeaveOutcome {
     data class Error(val message: String) : WithdrawLeaveOutcome()
 }
 
+/**
+ * ✅ UPDATED: Now using NetworkErrorHandler
+ */
 class LeaveRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
@@ -81,8 +84,8 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    LeaveTypesOutcome.Error(errorMsg ?: "Failed to fetch leave types")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave types")
+                    LeaveTypesOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -151,8 +154,8 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 400 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    ApplyLeaveOutcome.Error(errorMsg ?: "Invalid leave application data")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid leave application data")
+                    ApplyLeaveOutcome.Error(errorMsg)
                 }
 
                 response.code() == 401 -> {
@@ -165,8 +168,8 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    ApplyLeaveOutcome.Error(errorMsg ?: "Failed to apply leave")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to apply leave")
+                    ApplyLeaveOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -222,8 +225,8 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    LeaveApplicationsOutcome.Error(errorMsg ?: "Failed to fetch leave applications")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave applications")
+                    LeaveApplicationsOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -263,8 +266,8 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    LeaveSummaryOutcome.Error(errorMsg ?: "Failed to fetch leave summary")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave summary")
+                    LeaveSummaryOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
@@ -303,8 +306,8 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 400 -> {
-                    val errorMsg = extractErrorMessage(response)
-                    WithdrawLeaveOutcome.Error(errorMsg ?: "Cannot withdraw this leave application")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Cannot withdraw this leave application")
+                    WithdrawLeaveOutcome.Error(errorMsg)
                 }
 
                 response.code() == 401 -> {
@@ -317,31 +320,13 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 else -> {
-                    val errorMsg = extractErrorMessage(response)
-                    WithdrawLeaveOutcome.Error(errorMsg ?: "Failed to withdraw leave")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to withdraw leave")
+                    WithdrawLeaveOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
             Log.e("LEAVE", "Error withdrawing leave", e)
             WithdrawLeaveOutcome.Error(e.message ?: "Network error occurred")
-        }
-    }
-
-    /**
-     * Helper function to extract error message from response
-     */
-    private fun <T> extractErrorMessage(response: retrofit2.Response<T>): String? {
-        return try {
-            val errorBody = response.errorBody()?.string()
-            if (!errorBody.isNullOrBlank()) {
-                val json = JSONObject(errorBody)
-                json.optString("message").takeIf { it.isNotBlank() }
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e("LEAVE", "Error extracting error message", e)
-            null
         }
     }
 }

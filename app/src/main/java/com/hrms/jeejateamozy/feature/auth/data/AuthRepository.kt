@@ -7,6 +7,7 @@ import android.util.Log
 import com.hrms.jeejateamozy.core.network.ApiService
 import com.hrms.jeejateamozy.core.network.BasicResponse
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
+import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,6 +31,9 @@ sealed class AuthOutcome {
 // AUTH REPOSITORY
 // ============================================
 
+/**
+ * ✅ UPDATED: Now using NetworkErrorHandler
+ */
 class AuthRepository(
     private val api: ApiService,
     private val pm: PreferencesManager,
@@ -63,20 +67,10 @@ class AuthRepository(
 
     /**
      * Extract error message from response
+     * ✅ SIMPLIFIED: Now using NetworkErrorHandler
      */
     private fun extractMessage(res: Response<*>): String {
-        return try {
-            val errBody = res.errorBody()?.string()
-            if (errBody.isNullOrBlank()) {
-                res.message()
-            } else {
-                val gson = Gson()
-                val map = gson.fromJson(errBody, Map::class.java)
-                map["message"]?.toString() ?: res.message()
-            }
-        } catch (e: Exception) {
-            res.message()
-        }
+        return NetworkErrorHandler.extractErrorMessage(res, res.message())
     }
 
     /**
