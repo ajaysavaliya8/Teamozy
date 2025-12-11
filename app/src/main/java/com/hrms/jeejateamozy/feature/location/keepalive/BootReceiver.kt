@@ -8,15 +8,7 @@ import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
 import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
 
 /**
- * Boot Receiver - Auto-restart after device reboot
- *
- * Listens for device boot completion
- * If there was an active tracking session before reboot:
- * - Restarts LocationTrackingService
- * - Restarts WorkManager
- * - Restarts AlarmManager
- *
- * Effectiveness: 100% for device restarts
+ * Boot receiver - restarts tracking after device reboot
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -25,49 +17,19 @@ class BootReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_LOCKED_BOOT_COMPLETED,  // Direct Boot (Android 7+)
-            "android.intent.action.QUICKBOOT_POWERON"  // Some manufacturers
-                -> {
-                Log.d(TAG, "📱 Device boot completed - checking for active sessions")
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            Log.d(TAG, "🔄 Device booted - checking tracking state")
 
-                try {
-                    // Check if there was an active tracking session
-                    val trackingStateManager = TrackingStateManager(context)
+            val stateManager = TrackingStateManager(context)
 
-                    if (trackingStateManager.shouldTrackingBeActive()) {
-                        Log.d(TAG, "✅ Active tracking session found before reboot")
-
-                        // Restart all tracking components
-                        restartTrackingComponents(context)
-
-                        Log.d(TAG, "✅ All tracking components restarted successfully")
-                    } else {
-                        Log.d(TAG, "⏹️ No active tracking session - not starting")
-                    }
-
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error handling boot event", e)
-                }
+            if (stateManager.shouldTrackingBeActive()) {
+                Log.d(TAG, "✅ Tracking was active - restarting after boot")
+                LocationTrackingService.startTracking(context)
+                TrackingWorker.schedule(context)
+                TrackingAlarmReceiver.schedule(context)
+            } else {
+                Log.d(TAG, "⏹️ Tracking was not active")
             }
         }
-    }
-
-    /**
-     * Restart all tracking components
-     */
-    private fun restartTrackingComponents(context: Context) {
-        // 1. Start LocationTrackingService
-        LocationTrackingService.startTracking(context)
-        Log.d(TAG, "  ✅ LocationTrackingService started")
-
-        // 2. Schedule WorkManager
-        TrackingWorker.schedule(context)
-        Log.d(TAG, "  ✅ WorkManager scheduled")
-
-        // 3. Schedule AlarmManager
-        TrackingAlarmReceiver.schedule(context)
-        Log.d(TAG, "  ✅ AlarmManager scheduled")
     }
 }

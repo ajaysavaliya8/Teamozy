@@ -135,22 +135,13 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
      */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "🔄 New FCM token: $token")
+        Log.d(TAG, "🔄 New FCM token received")
 
-        // Save token locally
-        val prefs = PreferencesManager.getInstance(applicationContext)
-        prefs.saveFCMToken(token)
+        // Save token using PreferencesManager
+        val prefs = PreferencesManager.getInstance(this)
+        prefs.fcmToken = token  // ✅ This is correct for your PreferencesManager
 
-        // TODO: Send token to your backend
-        serviceScope.launch {
-            try {
-                // Call your API to update FCM token
-                // NetworkModule.apiService.updateFCMToken(token)
-                Log.d(TAG, "✅ FCM token saved locally")
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to update FCM token on server", e)
-            }
-        }
+        Log.d(TAG, "✅ FCM token saved: ${token.take(20)}...")
     }
 
     override fun onDestroy() {

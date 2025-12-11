@@ -12,7 +12,10 @@ import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityResponse
 import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsResponse
 import com.hrms.jeejateamozy.core.network.WorkReportListResponse
 import com.hrms.jeejateamozy.core.network.CreateWorkReportResponse
+import com.hrms.jeejateamozy.feature.location.model.LocationData
 import okhttp3.ResponseBody
+import retrofit2.http.Body
+import retrofit2.http.POST
 
 data class DeviceChangeResponse(
     val detail: String
@@ -342,4 +345,9 @@ interface ApiService {
     suspend fun downloadSettledCorrectionAttachment(
         @Path("settled_id") settledId: Int
     ): Response<ResponseBody>
+
+    @POST("location/sync")
+    suspend fun syncLocationTracking(
+        @Body locations: List<LocationData>
+    ): Response<Any>
 }

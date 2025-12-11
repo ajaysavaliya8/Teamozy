@@ -1,13 +1,15 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 package com.hrms.jeejateamozy.feature.home.presentation
 
-import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -16,46 +18,21 @@ import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceEvent
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceViewModel
 import com.hrms.jeejateamozy.feature.face.data.EmbeddingExtractor
 import com.hrms.jeejateamozy.feature.face.presentation.FaceCaptureScreen
-import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
 import com.hrms.jeejateamozy.feature.home.presentation.components.AttendanceStatusCard
-import com.hrms.jeejateamozy.feature.home.presentation.components.MessageCard
 import com.hrms.jeejateamozy.feature.home.presentation.components.QuickAccessSection
 import com.hrms.jeejateamozy.feature.home.presentation.dialogs.ReasonBottomSheet
 import com.hrms.jeejateamozy.feature.home.presentation.dialogs.WorkReportBottomSheet
 import com.hrms.jeejateamozy.feature.home.presentation.utils.calculateElapsedSeconds
 import com.hrms.jeejateamozy.feature.home.presentation.utils.rememberPermissionChecker
+import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.PendingMessageDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
-import com.hrms.jeejateamozy.feature.home.presentation.dialogs.WorkReportBottomSheet
-import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.PendingMessageDialog
-
 
 private const val TAG = "HomePage"
 
-/**
- * HomePage - Refactored Main Screen
- *
- * This file now only contains:
- * - Main HomePage composable
- * - ViewModel integration
- * - State management
- * - Timer logic
- *
- * UI Components moved to:
- * - components/AttendanceStatusCard.kt
- * - components/QuickAccessSection.kt
- * - components/MessageCard.kt
- * - components/HomeTopBar.kt
- * - dialogs/ReasonBottomSheet.kt
- * - dialogs/WorkReportBottomSheet.kt
- *
- * Utilities moved to:
- * - utils/HomeUtils.kt
- * - utils/PermissionChecker.kt
- */
 @Composable
 fun HomePage(
     onLogout: () -> Unit,
@@ -171,26 +148,43 @@ fun HomePage(
                 hostState = snack,
                 modifier = Modifier.padding(bottom = 80.dp)
             )
+        },
+        topBar = {
+            // ✅ Simple TopAppBar instead of HomeTopBar
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            text = prefs.companyName ?: "Teamozy",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = prefs.userName ?: "User",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { vm.refreshStatus(force = true) },
+                        enabled = !ui.isRefreshing
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Refresh"
+                        )
+                    }
+                },
+                modifier = Modifier.statusBarsPadding()
+            )
         }
     ) { padding ->
-        // ✅ FIXED: Only bottom padding for navigation bar
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .padding(bottom = paddingValues.calculateBottomPadding())
         ) {
-            // ✅ Top Bar with status bar padding
-            HomeTopBar(
-                context = context,
-                companyName = prefs.companyName,
-                userName = prefs.userName,
-                profileUrl = prefs.profileUrl,
-                isRefreshing = ui.isRefreshing,
-                onRefreshClick = { vm.refreshStatus(force = true) },
-                onProfileClick = onNavigateToProfile,
-                modifier = Modifier.statusBarsPadding()  // ✅ Status bar padding here
-            )
-
             // Scrollable Content
             Column(
                 modifier = Modifier
@@ -249,15 +243,12 @@ fun HomePage(
         FaceCaptureScreen(
             generation = faceVerificationGeneration,
             onDismiss = {
-                // ✅ FIXED: Reset state and cancel completely
                 Log.d(TAG, "❌ Face verification CANCELLED by user")
                 faceVerifyBusy = false
                 faceVerifyError = null
-
-                // ✅ Call the new cancel function
                 vm.onFaceVerificationCancelled()
             },
-            onCaptured = { }, // Empty lambda - we use onBitmapCaptured
+            onCaptured = { },
             onBitmapCaptured = { bitmap ->
                 scope.launch {
                     try {
@@ -287,10 +278,11 @@ fun HomePage(
 
                         if (similarity >= (minimumThreshold ?: 0.80f)) {
                             Log.d(TAG, "✅ Face verified! Similarity: $similarity >= $minimumThreshold")
-                            faceVerifyBusy = false  // ✅ ADD THIS LINE
+                            faceVerifyBusy = false
                             vm.onFaceVerificationComplete(
                                 qualityScore = similarity,
-                                verified = true
+                                verified = true,
+                                context = context
                             )
                         } else {
                             Log.e(TAG, "❌ Face NOT verified! Similarity: $similarity < $minimumThreshold")
@@ -328,7 +320,7 @@ fun HomePage(
             outOfRangeReasonRequired = outOfRangeReasonRequired,
             onDismiss = { vm.onReasonDialogDismissed() },
             onSubmit = { lateOrEarlyReason, outOfRangeReason ->
-                vm.onReasonSubmitted(lateOrEarlyReason, outOfRangeReason)
+                vm.onReasonSubmitted(lateOrEarlyReason, outOfRangeReason, context)
             }
         )
     }
@@ -338,21 +330,21 @@ fun HomePage(
         WorkReportBottomSheet(
             onDismiss = { vm.onWorkReportDialogDismissed() },
             onSubmit = { workReport, fileUri ->
-                vm.onWorkReportSubmitted(workReport, fileUri)
+                vm.onWorkReportSubmitted(workReport, fileUri, context)
             }
         )
     }
 
     // Pending Message Dialog
-    ui.pendingMessage?.let { message ->  // ✅ CORRECT - use let to create local variable
+    ui.pendingMessage?.let { message ->
         if (ui.showPendingMessageDialog) {
             PendingMessageDialog(
-                message = message,  // Now it's a local variable, not delegated
+                message = message,
                 onDismiss = {
                     vm.onPendingMessageDismissed()
                 },
                 onAcknowledge = { acknowledgmentNote ->
-                    vm.onPendingMessageAcknowledged(acknowledgmentNote)
+                    vm.onPendingMessageAcknowledged(acknowledgmentNote, context)
                 }
             )
         }

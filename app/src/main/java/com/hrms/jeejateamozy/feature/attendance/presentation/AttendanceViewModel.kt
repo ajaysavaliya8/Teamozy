@@ -1,7 +1,9 @@
 package com.hrms.jeejateamozy.feature.attendance.presentation
 
+import android.app.Activity
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hrms.jeejateamozy.core.network.PendingMessage
@@ -12,6 +14,12 @@ import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
 import com.hrms.jeejateamozy.feature.attendance.data.CheckInOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.CheckOutOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.SignatureOutcome
+import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
+import com.hrms.jeejateamozy.feature.location.sync.PersistentSyncManager
+import com.hrms.jeejateamozy.feature.location.keepalive.TrackingWorker
+import com.hrms.jeejateamozy.feature.location.keepalive.TrackingAlarmReceiver
+import com.hrms.jeejateamozy.feature.location.keepalive.BatteryOptimizationHelper
+import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +28,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
-import android.util.Log
 
 sealed class AttendanceEvent {
     data class ShowError(val message: String) : AttendanceEvent()
@@ -30,7 +36,11 @@ sealed class AttendanceEvent {
 
 class AttendanceViewModel(
     private val repo: AttendanceRepository
-    ) : ViewModel() {
+) : ViewModel() {
+
+    companion object {
+        private const val TAG = "AttendanceViewModel"
+    }
 
     private val _ui = MutableStateFlow(AttendanceUiState())
     val ui: StateFlow<AttendanceUiState> = _ui.asStateFlow()
@@ -42,14 +52,14 @@ class AttendanceViewModel(
 
     private fun emitError(message: String) {
         viewModelScope.launch {
-            Log.e("AttendanceViewModel", "Emitting error event: $message")
+            Log.e(TAG, "Emitting error event: $message")
             _events.emit(AttendanceEvent.ShowError(message))
         }
     }
 
     private fun emitSuccess(message: String) {
         viewModelScope.launch {
-            Log.d("AttendanceViewModel", "Emitting success event: $message")
+            Log.d(TAG, "Emitting success event: $message")
             _events.emit(AttendanceEvent.ShowSuccess(message))
         }
     }
@@ -63,7 +73,7 @@ class AttendanceViewModel(
 
     fun refreshStatus(force: Boolean = false) {
         if (_ui.value.isLoading && !force) {
-            Log.d("AttendanceViewModel", "Already loading, skipping refresh")
+            Log.d(TAG, "Already loading, skipping refresh")
             return
         }
 
@@ -72,7 +82,7 @@ class AttendanceViewModel(
 
             when (val outcome = repo.getStatus()) {
                 is AttendanceOutcome.Success -> {
-                    Log.d("AttendanceViewModel", "✅ Status refreshed: ${outcome.currentState}")
+                    Log.d(TAG, "✅ Status refreshed: ${outcome.currentState}")
                     _ui.value = _ui.value.copy(
                         isRefreshing = false,
                         currentState = outcome.currentState,
@@ -85,13 +95,13 @@ class AttendanceViewModel(
                         showFaceVerification = false,
                         showReasonDialog = false,
                         showWorkReportDialog = false,
-                        showPendingMessageDialog = false,  // ✅ NEW
-                        pendingMessage = null,  // ✅ NEW
-                        acknowledgmentNote = null  // ✅ NEW
+                        showPendingMessageDialog = false,
+                        pendingMessage = null,
+                        acknowledgmentNote = null
                     )
                 }
                 is AttendanceOutcome.Error -> {
-                    Log.e("AttendanceViewModel", "❌ Status refresh error: ${outcome.message}")
+                    Log.e(TAG, "❌ Status refresh error: ${outcome.message}")
                     _ui.value = _ui.value.copy(
                         isRefreshing = false,
                         statusMessage = outcome.message
@@ -107,7 +117,7 @@ class AttendanceViewModel(
 
             when (val locResult = LocationHelper(context).getCurrentLocation()) {
                 is LocationResult.Success -> {
-                    performCheckIn(locResult.latitude, locResult.longitude)
+                    performCheckIn(locResult.latitude, locResult.longitude, context)  // ✅ FIXED: Added context
                 }
                 is LocationResult.Error -> {
                     _ui.value = _ui.value.copy(isLoading = false)
@@ -117,13 +127,14 @@ class AttendanceViewModel(
         }
     }
 
-    private suspend fun performCheckIn(latitude: Double, longitude: Double) {
+    // ✅ FIXED: Added context parameter
+    private suspend fun performCheckIn(latitude: Double, longitude: Double, context: Context) {
         when (val outcome = repo.checkIn(latitude, longitude)) {
             is CheckInOutcome.RequiresFaceVerification -> {
-                Log.d("AttendanceViewModel", "✅ Check-in requires face verification")
+                Log.d(TAG, "✅ Check-in requires face verification")
 
-                val pendingMessage = outcome.pendingMessage  // ✅ NEW: Extract pending message
-                Log.d("AttendanceViewModel", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}" else "null"}")
+                val pendingMessage = outcome.pendingMessage
+                Log.d(TAG, "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}" else "null"}")
 
                 _ui.value = _ui.value.copy(
                     isLoading = false,
@@ -135,17 +146,17 @@ class AttendanceViewModel(
                     checkInOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkInMessage = outcome.message,
                     checkInFaceVector = outcome.faceVector,
-                    pendingMessage = pendingMessage,  // ✅ NEW: Store pending message
-                    showPendingMessageDialog = pendingMessage != null,  // ✅ NEW: Show message dialog if message exists
-                    showFaceVerification = pendingMessage == null  // ✅ NEW: Only show face verification if no message
+                    pendingMessage = pendingMessage,
+                    showPendingMessageDialog = pendingMessage != null,
+                    showFaceVerification = pendingMessage == null
                 )
             }
 
             is CheckInOutcome.RequiresReasons -> {
-                Log.d("AttendanceViewModel", "✅ Check-in requires reasons")
+                Log.d(TAG, "✅ Check-in requires reasons")
 
-                val pendingMessage = outcome.pendingMessage  // ✅ NEW: Extract pending message
-                Log.d("AttendanceViewModel", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}" else "null"}")
+                val pendingMessage = outcome.pendingMessage
+                Log.d(TAG, "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}" else "null"}")
 
                 _ui.value = _ui.value.copy(
                     isLoading = false,
@@ -155,19 +166,19 @@ class AttendanceViewModel(
                     checkInLateReasonRequired = outcome.lateReasonRequired,
                     checkInOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkInMessage = outcome.message,
-                    pendingMessage = pendingMessage,  // ✅ NEW: Store pending message
-                    showPendingMessageDialog = pendingMessage != null,  // ✅ NEW: Show message dialog if message exists
-                    showReasonDialog = (outcome.lateReasonRequired || outcome.outOfRangeReasonRequired) && pendingMessage == null  // ✅ NEW: Only show reasons if no message
+                    pendingMessage = pendingMessage,
+                    showPendingMessageDialog = pendingMessage != null,
+                    showReasonDialog = (outcome.lateReasonRequired || outcome.outOfRangeReasonRequired) && pendingMessage == null
                 )
 
-                // ✅ NEW: Auto-complete only if no reasons required AND no message
+                // ✅ FIXED: Added context
                 if (!outcome.lateReasonRequired && !outcome.outOfRangeReasonRequired && pendingMessage == null) {
-                    completeCheckIn(null, null)
+                    completeCheckIn(null, null, context)
                 }
             }
 
             is CheckInOutcome.Success -> {
-                Log.d("AttendanceViewModel", "✅ Check-in directly successful")
+                Log.d(TAG, "✅ Check-in directly successful")
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     currentState = "CHECK_OUT_NEEDED"
@@ -176,7 +187,7 @@ class AttendanceViewModel(
             }
 
             is CheckInOutcome.Error -> {
-                Log.e("AttendanceViewModel", "❌ CHECK-IN ERROR: ${outcome.message}")
+                Log.e(TAG, "❌ CHECK-IN ERROR: ${outcome.message}")
                 _ui.value = _ui.value.copy(isLoading = false)
                 emitError(outcome.message)
             }
@@ -189,7 +200,7 @@ class AttendanceViewModel(
 
             when (val locResult = LocationHelper(context).getCurrentLocation()) {
                 is LocationResult.Success -> {
-                    performCheckOut(locResult.latitude, locResult.longitude)
+                    performCheckOut(locResult.latitude, locResult.longitude, context)  // ✅ FIXED: Added context
                 }
                 is LocationResult.Error -> {
                     _ui.value = _ui.value.copy(isLoading = false)
@@ -199,10 +210,11 @@ class AttendanceViewModel(
         }
     }
 
-    private suspend fun performCheckOut(latitude: Double, longitude: Double) {
+    // ✅ FIXED: Added context parameter
+    private suspend fun performCheckOut(latitude: Double, longitude: Double, context: Context) {
         when (val outcome = repo.checkOut(latitude, longitude)) {
             is CheckOutOutcome.RequiresFaceVerification -> {
-                Log.d("AttendanceViewModel", "✅ Check-out requires face verification")
+                Log.d(TAG, "✅ Check-out requires face verification")
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     checkOutTToken = outcome.tToken,
@@ -220,7 +232,7 @@ class AttendanceViewModel(
             }
 
             is CheckOutOutcome.RequiresReasons -> {
-                Log.d("AttendanceViewModel", "✅ Check-out requires reasons")
+                Log.d(TAG, "✅ Check-out requires reasons")
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     checkOutTToken = outcome.tToken,
@@ -235,14 +247,14 @@ class AttendanceViewModel(
                     showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired
                 )
 
-                // Auto-complete if no reasons or work report required
+                // ✅ FIXED: Added context
                 if (!outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired && !outcome.workReportRequired) {
-                    completeCheckOut(null, null, null, null)
+                    completeCheckOut(null, null, null, null, context)
                 }
             }
 
             is CheckOutOutcome.Success -> {
-                Log.d("AttendanceViewModel", "✅ Check-out directly successful")
+                Log.d(TAG, "✅ Check-out directly successful")
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     currentState = "CHECK_IN_NEEDED",
@@ -253,43 +265,39 @@ class AttendanceViewModel(
             }
 
             is CheckOutOutcome.Error -> {
-                Log.e("AttendanceViewModel", "❌ CHECK-OUT ERROR: ${outcome.message}")
+                Log.e(TAG, "❌ CHECK-OUT ERROR: ${outcome.message}")
                 _ui.value = _ui.value.copy(isLoading = false)
                 emitError(outcome.message)
             }
         }
     }
 
-    fun onPendingMessageAcknowledged(acknowledgmentNote: String?) {
-        Log.d("AttendanceViewModel", "✅ Message acknowledged, note: ${acknowledgmentNote?.take(50)}")
+    fun onPendingMessageAcknowledged(acknowledgmentNote: String?, context: Context) {
+        Log.d(TAG, "✅ Message acknowledged, note: ${acknowledgmentNote?.take(50)}")
 
         _ui.value = _ui.value.copy(
             showPendingMessageDialog = false,
             acknowledgmentNote = acknowledgmentNote
         )
 
-        // Now proceed with the next step based on what's required
         val hasLateOrOutOfRangeReasons = _ui.value.checkInLateReasonRequired || _ui.value.checkInOutOfRangeReasonRequired
         val hasFaceVerification = _ui.value.checkInFaceVector != null
 
         when {
             hasFaceVerification -> {
-                // Show face verification
                 _ui.value = _ui.value.copy(showFaceVerification = true)
             }
             hasLateOrOutOfRangeReasons -> {
-                // Show reason dialog
                 _ui.value = _ui.value.copy(showReasonDialog = true)
             }
             else -> {
-                // Complete check-in directly
-                completeCheckIn(null, null)
+                completeCheckIn(null, null, context)
             }
         }
     }
 
     fun onPendingMessageDismissed() {
-        Log.d("AttendanceViewModel", "❌ Message cancelled - stopping check-in process")
+        Log.d(TAG, "❌ Message cancelled - stopping check-in process")
         _ui.value = _ui.value.copy(
             isLoading = false,
             showPendingMessageDialog = false,
@@ -307,17 +315,15 @@ class AttendanceViewModel(
             showReasonDialog = false
         )
 
-        // Optionally show a message
         emitError("Check-in cancelled")
     }
 
     fun onFaceVerificationCancelled() {
-        Log.d("AttendanceViewModel", "❌ Face verification cancelled - stopping process")
+        Log.d(TAG, "❌ Face verification cancelled - stopping process")
 
         val isCheckIn = _ui.value.checkInTToken != null
 
         if (isCheckIn) {
-            // Clear all check-in related state
             _ui.value = _ui.value.copy(
                 isLoading = false,
                 showFaceVerification = false,
@@ -337,7 +343,6 @@ class AttendanceViewModel(
                 faceVerificationSuccess = false
             )
         } else {
-            // Clear all check-out related state
             _ui.value = _ui.value.copy(
                 isLoading = false,
                 showFaceVerification = false,
@@ -360,11 +365,10 @@ class AttendanceViewModel(
             )
         }
 
-        // Show cancellation message
         emitError("${if (isCheckIn) "Check-in" else "Check-out"} cancelled")
     }
 
-    fun onFaceVerificationComplete(qualityScore: Float, verified: Boolean) {
+    fun onFaceVerificationComplete(qualityScore: Float, verified: Boolean, context: Context) {
         _ui.value = _ui.value.copy(
             faceVerificationQualityScore = qualityScore,
             faceVerificationSuccess = verified,
@@ -380,7 +384,7 @@ class AttendanceViewModel(
             if (lateReasonRequired || outOfRangeReasonRequired) {
                 _ui.value = _ui.value.copy(showReasonDialog = true)
             } else {
-                completeCheckIn(null, null)
+                completeCheckIn(null, null, context)
             }
         } else {
             val earlyReasonRequired = _ui.value.checkOutEarlyReasonRequired
@@ -395,7 +399,7 @@ class AttendanceViewModel(
                     _ui.value = _ui.value.copy(showWorkReportDialog = true)
                 }
                 else -> {
-                    completeCheckOut(null, null, null, null)
+                    completeCheckOut(null, null, null, null, context)
                 }
             }
         }
@@ -409,159 +413,361 @@ class AttendanceViewModel(
         _ui.value = _ui.value.copy(showWorkReportDialog = false)
     }
 
-    fun completeCheckIn(lateReason: String?, outOfRangeReason: String?) {
+    // ========================================
+    // ✅ COMPLETE CHECK-IN WITH LOCATION TRACKING
+    // ========================================
+    fun completeCheckIn(
+        lateReason: String?,
+        outOfRangeReason: String?,
+        context: Context,
+        activity: Activity? = null
+    ) {
         val tToken = _ui.value.checkInTToken
         if (tToken == null) {
-            Log.e("AttendanceViewModel", "❌ Invalid check-in session")
+            Log.e(TAG, "❌ Invalid check-in session")
             emitError("Invalid check-in session")
             return
         }
 
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(
-                isLoading = true,
-                showReasonDialog = false
-            )
+            try {
+                // ========================================
+                // ✅ STEP 1: Background sync of old data
+                // ========================================
+                _ui.value = _ui.value.copy(
+                    isLoading = true,
+                    loadingMessage = "Preparing check-in...",
+                    showReasonDialog = false
+                )
 
-            val acknowledgmentNote = _ui.value.acknowledgmentNote  // ✅ NEW: Get stored acknowledgment note
+                Log.d(TAG, "🔄 Starting check-in process...")
 
-            Log.d("AttendanceViewModel", "Completing check-in with acknowledgment: ${acknowledgmentNote?.take(50)}")
+                val syncManager = PersistentSyncManager.getInstance(context)
 
-            when (val outcome = repo.checkInSignature(
-                tToken = tToken,
-                faceRecognitionQualityScore = _ui.value.faceVerificationQualityScore,
-                faceVerify = _ui.value.faceVerificationSuccess,
-                lateReason = lateReason,
-                outOfRangeReason = outOfRangeReason,
-                acknowledgmentNote = acknowledgmentNote  // ✅ NEW: Pass acknowledgment note
-            )) {
-                is SignatureOutcome.Success -> {
-                    Log.d("AttendanceViewModel", "✅ Check-in signature SUCCESS")
-                    _ui.value = _ui.value.copy(
-                        isLoading = false,
-                        currentState = "CHECK_OUT_NEEDED",
-                        lastCheckInTime = outcome.checkInTime,
-                        checkInTToken = null,
-                        checkInFaceVector = null,
-                        checkInMessage = null,
-                        faceVerificationQualityScore = null,
-                        faceVerificationSuccess = false,
-                        pendingMessage = null,  // ✅ NEW: Clear pending message
-                        acknowledgmentNote = null  // ✅ NEW: Clear acknowledgment note
-                    )
-                    emitSuccess(outcome.message)
+                // Check if old data exists
+                val hasOldData = syncManager.hasPendingLocations()
+
+                if (hasOldData) {
+                    val oldCount = syncManager.getPendingCount()
+                    Log.w(TAG, "⚠️ Found $oldCount old locations - handling in background with retry")
+
+                    // Sync with retry logic (will take 5-45 seconds depending on retries)
+                    val syncResult = syncManager.backgroundSyncOrClearOldData()
+
+                    // Log result for monitoring
+                    when (syncResult) {
+                        is PersistentSyncManager.BackgroundSyncResult.Synced -> {
+                            Log.d(TAG, "✅ Background sync SUCCESS on attempt ${syncResult.attempts}: ${syncResult.count} old locations saved")
+                        }
+
+                        is PersistentSyncManager.BackgroundSyncResult.ClearedDueToNetwork -> {
+                            Log.w(TAG, "🌐 Cleared ${syncResult.count} old locations after ${syncResult.attempts} attempts (no network)")
+                        }
+
+                        is PersistentSyncManager.BackgroundSyncResult.ClearedDueToTimeout -> {
+                            Log.w(TAG, "⏱️ After ${syncResult.attempts} attempts: synced ${syncResult.synced}, cleared ${syncResult.cleared} old locations")
+                        }
+
+                        is PersistentSyncManager.BackgroundSyncResult.ClearedDueToError -> {
+                            Log.e(TAG, "❌ Cleared ${syncResult.count} old locations after ${syncResult.attempts} attempts: ${syncResult.message}")
+                        }
+
+                        is PersistentSyncManager.BackgroundSyncResult.Failed -> {
+                            Log.e(TAG, "❌ Failed to handle old data: ${syncResult.message}")
+                            // Continue anyway - don't block check-in
+                        }
+
+                        is PersistentSyncManager.BackgroundSyncResult.NoData -> {
+                            Log.d(TAG, "✅ No old data found")
+                        }
+                    }
+                } else {
+                    Log.d(TAG, "✅ No old data - proceeding with clean check-in")
                 }
 
-                is SignatureOutcome.Error -> {
-                    Log.e("AttendanceViewModel", "❌ CHECK-IN SIGNATURE ERROR: ${outcome.message}")
-                    _ui.value = _ui.value.copy(
-                        isLoading = false,
-                        checkInTToken = null,
-                        checkInFaceVector = null,
-                        checkInMessage = null,
-                        pendingMessage = null,  // ✅ NEW: Clear pending message on error
-                        acknowledgmentNote = null  // ✅ NEW: Clear acknowledgment note on error
-                    )
-                    emitError(outcome.message)
-                    delay(500)
-                    refreshStatus(force = true)
+                // ========================================
+                // ✅ STEP 2: Complete check-in signature
+                // ========================================
+                _ui.value = _ui.value.copy(
+                    loadingMessage = "Completing check-in..."
+                )
+
+                val acknowledgmentNote = _ui.value.acknowledgmentNote
+
+                Log.d(TAG, "Completing check-in with acknowledgment: ${acknowledgmentNote?.take(50)}")
+
+                when (val outcome = repo.checkInSignature(
+                    tToken = tToken,
+                    faceRecognitionQualityScore = _ui.value.faceVerificationQualityScore,
+                    faceVerify = _ui.value.faceVerificationSuccess,
+                    lateReason = lateReason,
+                    outOfRangeReason = outOfRangeReason,
+                    acknowledgmentNote = acknowledgmentNote
+                )) {
+                    is SignatureOutcome.Success -> {
+                        Log.d(TAG, "✅ Check-in signature SUCCESS")
+
+                        // ========================================
+                        // ✅ STEP 3: Start all tracking components
+                        // ========================================
+                        Log.d(TAG, "🚀 Starting tracking components...")
+
+                        try {
+                            // Set tracking state
+                            val trackingStateManager = TrackingStateManager(context)
+                            trackingStateManager.setTrackingActive(true)
+                            trackingStateManager.updateHeartbeat()
+
+                            // Start location tracking service
+                            LocationTrackingService.startTracking(context)
+
+                            // Schedule keep-alive mechanisms
+                            TrackingWorker.schedule(context)
+                            TrackingAlarmReceiver.schedule(context)
+
+                            // Request battery optimization exemption
+                            activity?.let {
+                                if (!BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)) {
+                                    Log.d(TAG, "🔋 Requesting battery optimization exemption")
+                                    BatteryOptimizationHelper.requestExemption(it)
+                                }
+                            }
+
+                            Log.d(TAG, "✅ All tracking components started successfully")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "⚠️ Error starting tracking components (non-critical)", e)
+                            // Continue anyway - tracking is optional
+                        }
+
+                        // Update UI
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            currentState = "CHECK_OUT_NEEDED",
+                            lastCheckInTime = outcome.checkInTime,
+                            checkInTToken = null,
+                            checkInFaceVector = null,
+                            checkInMessage = null,
+                            faceVerificationQualityScore = null,
+                            faceVerificationSuccess = false,
+                            pendingMessage = null,
+                            acknowledgmentNote = null
+                        )
+
+                        emitSuccess(outcome.message)
+                    }
+
+                    is SignatureOutcome.Error -> {
+                        Log.e(TAG, "❌ CHECK-IN SIGNATURE ERROR: ${outcome.message}")
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            checkInTToken = null,
+                            checkInFaceVector = null,
+                            checkInMessage = null,
+                            pendingMessage = null,
+                            acknowledgmentNote = null
+                        )
+                        emitError(outcome.message)
+                        delay(500)
+                        refreshStatus(force = true)
+                    }
                 }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Check-in error", e)
+                _ui.value = _ui.value.copy(
+                    isLoading = false,
+                    loadingMessage = null
+                )
+                emitError("Check-in failed: ${e.message}")
             }
         }
     }
 
+    // ========================================
+    // ✅ COMPLETE CHECK-OUT WITH FORCE SYNC
+    // ========================================
     fun completeCheckOut(
         earlyReason: String?,
         outOfRangeReason: String?,
         workReport: String?,
-        workReportFileUri: Uri?
+        workReportFileUri: Uri?,
+        context: Context
     ) {
         val tToken = _ui.value.checkOutTToken
         if (tToken == null) {
-            Log.e("AttendanceViewModel", "❌ Invalid check-out session")
+            Log.e(TAG, "❌ Invalid check-out session")
             emitError("Invalid check-out session")
             return
         }
 
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(
-                isLoading = true,
-                showReasonDialog = false,
-                showWorkReportDialog = false
-            )
+            try {
+                // ========================================
+                // ✅ STEP 1: Force sync pending locations
+                // ========================================
+                _ui.value = _ui.value.copy(
+                    isLoading = true,
+                    loadingMessage = "Syncing location data...",
+                    showReasonDialog = false,
+                    showWorkReportDialog = false
+                )
 
-            when (val outcome = repo.checkOutSignature(
-                tToken = tToken,
-                faceRecognitionQualityScore = _ui.value.faceVerificationQualityScore,
-                faceVerify = _ui.value.faceVerificationSuccess,
-                earlyReason = earlyReason,
-                outOfRangeReason = outOfRangeReason,
-                workReport = workReport,
-                workReportFileUri = workReportFileUri
-            )) {
-                is SignatureOutcome.Success -> {
-                    Log.d("AttendanceViewModel", "✅ Check-out signature SUCCESS")
-                    _ui.value = _ui.value.copy(
-                        isLoading = false,
-                        currentState = "CHECK_IN_NEEDED",
-                        lastCheckInTime = null,
-                        checkOutTToken = null,
-                        checkOutFaceVector = null,
-                        checkOutMessage = null,
-                        faceVerificationQualityScore = null,
-                        faceVerificationSuccess = false,
-                        tempEarlyReason = null,
-                        tempOutOfRangeReason = null,
-                        isComplete = true
+                Log.d(TAG, "🔄 Starting location sync before check-out...")
+
+                try {
+                    val syncManager = PersistentSyncManager.getInstance(context)
+                    val syncResult = syncManager.forceSyncAllBeforeCheckout(
+                        maxWaitTimeMs = 30_000L  // 30 seconds max
                     )
-                    emitSuccess(outcome.message)
+
+                    // Handle sync result
+                    when (syncResult) {
+                        is PersistentSyncManager.SyncResult.Success -> {
+                            Log.d(TAG, "✅ All locations synced: ${syncResult.synced} locations")
+                        }
+
+                        is PersistentSyncManager.SyncResult.Timeout -> {
+                            Log.w(TAG, "⏱️ Sync timeout: ${syncResult.synced} synced, ${syncResult.failed} failed")
+                            // Continue anyway - locations are in backend
+                        }
+
+                        is PersistentSyncManager.SyncResult.NetworkError -> {
+                            Log.e(TAG, "🌐 Network error during sync")
+                            _ui.value = _ui.value.copy(
+                                isLoading = false,
+                                loadingMessage = null
+                            )
+                            emitError("Network error. Please check your connection and try again.")
+                            return@launch
+                        }
+
+                        is PersistentSyncManager.SyncResult.Error -> {
+                            Log.e(TAG, "❌ Sync error: ${syncResult.message}")
+                            _ui.value = _ui.value.copy(
+                                isLoading = false,
+                                loadingMessage = null
+                            )
+                            emitError("Failed to sync locations: ${syncResult.message}")
+                            return@launch
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "⚠️ Error syncing locations (non-critical)", e)
+                    // Continue with check-out anyway
                 }
 
-                is SignatureOutcome.Error -> {
-                    Log.e("AttendanceViewModel", "❌ CHECK-OUT SIGNATURE ERROR: ${outcome.message}")
-                    _ui.value = _ui.value.copy(
-                        isLoading = false,
-                        checkOutTToken = null,
-                        checkOutFaceVector = null,
-                        checkOutMessage = null,
-                        tempEarlyReason = null,
-                        tempOutOfRangeReason = null
-                    )
-                    emitError(outcome.message)
-                    delay(500)
-                    refreshStatus(force = true)
+                // ========================================
+                // ✅ STEP 2: Complete check-out signature
+                // ========================================
+                _ui.value = _ui.value.copy(
+                    loadingMessage = "Completing check-out..."
+                )
+
+                when (val outcome = repo.checkOutSignature(
+                    tToken = tToken,
+                    faceRecognitionQualityScore = _ui.value.faceVerificationQualityScore,
+                    faceVerify = _ui.value.faceVerificationSuccess,
+                    earlyReason = earlyReason,
+                    outOfRangeReason = outOfRangeReason,
+                    workReport = workReport,
+                    workReportFileUri = workReportFileUri
+                )) {
+                    is SignatureOutcome.Success -> {
+                        Log.d(TAG, "✅ Check-out signature SUCCESS")
+
+                        // ========================================
+                        // ✅ STEP 3: Stop all tracking components
+                        // ========================================
+                        Log.d(TAG, "⏹️ Stopping tracking components...")
+
+                        try {
+                            LocationTrackingService.stopTracking(context)
+                            TrackingWorker.cancel(context)
+                            TrackingAlarmReceiver.cancel(context)
+
+                            val trackingStateManager = TrackingStateManager(context)
+                            trackingStateManager.clearState()
+
+                            Log.d(TAG, "✅ All tracking components stopped")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "⚠️ Error stopping tracking components (non-critical)", e)
+                            // Continue anyway
+                        }
+
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            currentState = "CHECK_IN_NEEDED",
+                            lastCheckInTime = null,
+                            checkOutTToken = null,
+                            checkOutFaceVector = null,
+                            checkOutMessage = null,
+                            faceVerificationQualityScore = null,
+                            faceVerificationSuccess = false,
+                            tempEarlyReason = null,
+                            tempOutOfRangeReason = null,
+                            isComplete = true
+                        )
+
+                        emitSuccess(outcome.message)
+                    }
+
+                    is SignatureOutcome.Error -> {
+                        Log.e(TAG, "❌ CHECK-OUT SIGNATURE ERROR: ${outcome.message}")
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            checkOutTToken = null,
+                            checkOutFaceVector = null,
+                            checkOutMessage = null,
+                            tempEarlyReason = null,
+                            tempOutOfRangeReason = null
+                        )
+                        emitError(outcome.message)
+                        delay(500)
+                        refreshStatus(force = true)
+                    }
                 }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Check-out error", e)
+                _ui.value = _ui.value.copy(
+                    isLoading = false,
+                    loadingMessage = null
+                )
+                emitError("Check-out failed: ${e.message}")
             }
         }
     }
 
-    fun onReasonSubmitted(lateOrEarlyReason: String?, outOfRangeReason: String?) {
+    fun onReasonSubmitted(lateOrEarlyReason: String?, outOfRangeReason: String?, context: Context) {
         val isCheckIn = _ui.value.checkInTToken != null
 
         if (isCheckIn) {
-            completeCheckIn(lateOrEarlyReason, outOfRangeReason)
+            completeCheckIn(lateOrEarlyReason, outOfRangeReason, context)
         } else {
-            // Check if work report is required after reasons
             if (_ui.value.checkOutWorkReportRequired) {
                 _ui.value = _ui.value.copy(
                     showReasonDialog = false,
                     showWorkReportDialog = true,
-                    // Store reasons temporarily
                     tempEarlyReason = lateOrEarlyReason,
                     tempOutOfRangeReason = outOfRangeReason
                 )
             } else {
-                completeCheckOut(lateOrEarlyReason, outOfRangeReason, null, null)
+                completeCheckOut(lateOrEarlyReason, outOfRangeReason, null, null, context)
             }
         }
     }
 
-    fun onWorkReportSubmitted(workReport: String, fileUri: Uri?) {
+    fun onWorkReportSubmitted(workReport: String, fileUri: Uri?, context: Context) {
         completeCheckOut(
             _ui.value.tempEarlyReason,
             _ui.value.tempOutOfRangeReason,
             workReport,
-            fileUri
+            fileUri,
+            context
         )
     }
 
@@ -573,6 +779,7 @@ class AttendanceViewModel(
 data class AttendanceUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
+    val loadingMessage: String? = null,
 
     val currentState: String = "CHECK_IN_NEEDED",
     val statusMessage: String = "",
@@ -603,7 +810,7 @@ data class AttendanceUiState(
     val showFaceVerification: Boolean = false,
     val showReasonDialog: Boolean = false,
     val showWorkReportDialog: Boolean = false,
-    val showPendingMessageDialog: Boolean = false,  // ✅ NEW: Show pending message dialog
+    val showPendingMessageDialog: Boolean = false,
 
     val faceVerificationQualityScore: Float? = null,
     val faceVerificationSuccess: Boolean = false,
@@ -611,7 +818,6 @@ data class AttendanceUiState(
     val tempEarlyReason: String? = null,
     val tempOutOfRangeReason: String? = null,
 
-    // ✅ NEW: Pending message fields
-    val pendingMessage: PendingMessage? = null,  // The pending message from server
-    val acknowledgmentNote: String? = null  // User's acknowledgment note (if required)
+    val pendingMessage: PendingMessage? = null,
+    val acknowledgmentNote: String? = null
 )
