@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
-import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
+// import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService  // ✅ DISABLED
 
 /**
  * Boot receiver - restarts tracking after device reboot
@@ -24,7 +24,7 @@ class BootReceiver : BroadcastReceiver() {
 
             if (stateManager.shouldTrackingBeActive()) {
                 Log.d(TAG, "✅ Tracking was active - restarting after boot")
-                LocationTrackingService.startTracking(context)
+                // LocationTrackingService.startTracking(context)  // ✅ DISABLED
                 TrackingWorker.schedule(context)
                 TrackingAlarmReceiver.schedule(context)
             } else {

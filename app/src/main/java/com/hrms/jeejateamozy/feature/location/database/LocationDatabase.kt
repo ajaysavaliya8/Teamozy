@@ -5,6 +5,9 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
+/**
+ * Room Database for pending location data
+ */
 @Database(
     entities = [PendingLocationEntity::class],
     version = 1,
@@ -15,14 +18,14 @@ abstract class LocationDatabase : RoomDatabase() {
     abstract fun pendingLocationDao(): PendingLocationDao
 
     companion object {
-        private const val DATABASE_NAME = "teamozy_location_db"
+        private const val DATABASE_NAME = "location_tracking.db"
 
         @Volatile
-        private var INSTANCE: LocationDatabase? = null
+        private var instance: LocationDatabase? = null
 
         fun getInstance(context: Context): LocationDatabase {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
+            return instance ?: synchronized(this) {
+                instance ?: buildDatabase(context).also { instance = it }
             }
         }
 
@@ -31,7 +34,9 @@ abstract class LocationDatabase : RoomDatabase() {
                 context.applicationContext,
                 LocationDatabase::class.java,
                 DATABASE_NAME
-            ).build()
+            )
+                .fallbackToDestructiveMigration()
+                .build()
         }
     }
 }

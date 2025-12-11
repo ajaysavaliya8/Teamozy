@@ -14,7 +14,7 @@ import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
 import com.hrms.jeejateamozy.feature.attendance.data.CheckInOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.CheckOutOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.SignatureOutcome
-import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
+// import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService  // ✅ DISABLED
 import com.hrms.jeejateamozy.feature.location.sync.PersistentSyncManager
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingWorker
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingAlarmReceiver
@@ -117,7 +117,7 @@ class AttendanceViewModel(
 
             when (val locResult = LocationHelper(context).getCurrentLocation()) {
                 is LocationResult.Success -> {
-                    performCheckIn(locResult.latitude, locResult.longitude, context)  // ✅ FIXED: Added context
+                    performCheckIn(locResult.latitude, locResult.longitude, context)
                 }
                 is LocationResult.Error -> {
                     _ui.value = _ui.value.copy(isLoading = false)
@@ -127,7 +127,6 @@ class AttendanceViewModel(
         }
     }
 
-    // ✅ FIXED: Added context parameter
     private suspend fun performCheckIn(latitude: Double, longitude: Double, context: Context) {
         when (val outcome = repo.checkIn(latitude, longitude)) {
             is CheckInOutcome.RequiresFaceVerification -> {
@@ -171,7 +170,6 @@ class AttendanceViewModel(
                     showReasonDialog = (outcome.lateReasonRequired || outcome.outOfRangeReasonRequired) && pendingMessage == null
                 )
 
-                // ✅ FIXED: Added context
                 if (!outcome.lateReasonRequired && !outcome.outOfRangeReasonRequired && pendingMessage == null) {
                     completeCheckIn(null, null, context)
                 }
@@ -200,7 +198,7 @@ class AttendanceViewModel(
 
             when (val locResult = LocationHelper(context).getCurrentLocation()) {
                 is LocationResult.Success -> {
-                    performCheckOut(locResult.latitude, locResult.longitude, context)  // ✅ FIXED: Added context
+                    performCheckOut(locResult.latitude, locResult.longitude, context)
                 }
                 is LocationResult.Error -> {
                     _ui.value = _ui.value.copy(isLoading = false)
@@ -210,7 +208,6 @@ class AttendanceViewModel(
         }
     }
 
-    // ✅ FIXED: Added context parameter
     private suspend fun performCheckOut(latitude: Double, longitude: Double, context: Context) {
         when (val outcome = repo.checkOut(latitude, longitude)) {
             is CheckOutOutcome.RequiresFaceVerification -> {
@@ -247,7 +244,6 @@ class AttendanceViewModel(
                     showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired
                 )
 
-                // ✅ FIXED: Added context
                 if (!outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired && !outcome.workReportRequired) {
                     completeCheckOut(null, null, null, null, context)
                 }
@@ -413,9 +409,6 @@ class AttendanceViewModel(
         _ui.value = _ui.value.copy(showWorkReportDialog = false)
     }
 
-    // ========================================
-    // ✅ COMPLETE CHECK-IN WITH LOCATION TRACKING
-    // ========================================
     fun completeCheckIn(
         lateReason: String?,
         outOfRangeReason: String?,
@@ -431,9 +424,6 @@ class AttendanceViewModel(
 
         viewModelScope.launch {
             try {
-                // ========================================
-                // ✅ STEP 1: Background sync of old data
-                // ========================================
                 _ui.value = _ui.value.copy(
                     isLoading = true,
                     loadingMessage = "Preparing check-in...",
@@ -444,17 +434,14 @@ class AttendanceViewModel(
 
                 val syncManager = PersistentSyncManager.getInstance(context)
 
-                // Check if old data exists
                 val hasOldData = syncManager.hasPendingLocations()
 
                 if (hasOldData) {
                     val oldCount = syncManager.getPendingCount()
                     Log.w(TAG, "⚠️ Found $oldCount old locations - handling in background with retry")
 
-                    // Sync with retry logic (will take 5-45 seconds depending on retries)
                     val syncResult = syncManager.backgroundSyncOrClearOldData()
 
-                    // Log result for monitoring
                     when (syncResult) {
                         is PersistentSyncManager.BackgroundSyncResult.Synced -> {
                             Log.d(TAG, "✅ Background sync SUCCESS on attempt ${syncResult.attempts}: ${syncResult.count} old locations saved")
@@ -474,7 +461,6 @@ class AttendanceViewModel(
 
                         is PersistentSyncManager.BackgroundSyncResult.Failed -> {
                             Log.e(TAG, "❌ Failed to handle old data: ${syncResult.message}")
-                            // Continue anyway - don't block check-in
                         }
 
                         is PersistentSyncManager.BackgroundSyncResult.NoData -> {
@@ -485,9 +471,6 @@ class AttendanceViewModel(
                     Log.d(TAG, "✅ No old data - proceeding with clean check-in")
                 }
 
-                // ========================================
-                // ✅ STEP 2: Complete check-in signature
-                // ========================================
                 _ui.value = _ui.value.copy(
                     loadingMessage = "Completing check-in..."
                 )
@@ -507,25 +490,18 @@ class AttendanceViewModel(
                     is SignatureOutcome.Success -> {
                         Log.d(TAG, "✅ Check-in signature SUCCESS")
 
-                        // ========================================
-                        // ✅ STEP 3: Start all tracking components
-                        // ========================================
                         Log.d(TAG, "🚀 Starting tracking components...")
 
                         try {
-                            // Set tracking state
                             val trackingStateManager = TrackingStateManager(context)
                             trackingStateManager.setTrackingActive(true)
                             trackingStateManager.updateHeartbeat()
 
-                            // Start location tracking service
-                            LocationTrackingService.startTracking(context)
+                            // ✅ DISABLED: LocationTrackingService.startTracking(context)
 
-                            // Schedule keep-alive mechanisms
                             TrackingWorker.schedule(context)
                             TrackingAlarmReceiver.schedule(context)
 
-                            // Request battery optimization exemption
                             activity?.let {
                                 if (!BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)) {
                                     Log.d(TAG, "🔋 Requesting battery optimization exemption")
@@ -536,10 +512,8 @@ class AttendanceViewModel(
                             Log.d(TAG, "✅ All tracking components started successfully")
                         } catch (e: Exception) {
                             Log.e(TAG, "⚠️ Error starting tracking components (non-critical)", e)
-                            // Continue anyway - tracking is optional
                         }
 
-                        // Update UI
                         _ui.value = _ui.value.copy(
                             isLoading = false,
                             loadingMessage = null,
@@ -585,9 +559,6 @@ class AttendanceViewModel(
         }
     }
 
-    // ========================================
-    // ✅ COMPLETE CHECK-OUT WITH FORCE SYNC
-    // ========================================
     fun completeCheckOut(
         earlyReason: String?,
         outOfRangeReason: String?,
@@ -604,9 +575,6 @@ class AttendanceViewModel(
 
         viewModelScope.launch {
             try {
-                // ========================================
-                // ✅ STEP 1: Force sync pending locations
-                // ========================================
                 _ui.value = _ui.value.copy(
                     isLoading = true,
                     loadingMessage = "Syncing location data...",
@@ -619,10 +587,9 @@ class AttendanceViewModel(
                 try {
                     val syncManager = PersistentSyncManager.getInstance(context)
                     val syncResult = syncManager.forceSyncAllBeforeCheckout(
-                        maxWaitTimeMs = 30_000L  // 30 seconds max
+                        maxWaitTimeMs = 30_000L
                     )
 
-                    // Handle sync result
                     when (syncResult) {
                         is PersistentSyncManager.SyncResult.Success -> {
                             Log.d(TAG, "✅ All locations synced: ${syncResult.synced} locations")
@@ -630,7 +597,6 @@ class AttendanceViewModel(
 
                         is PersistentSyncManager.SyncResult.Timeout -> {
                             Log.w(TAG, "⏱️ Sync timeout: ${syncResult.synced} synced, ${syncResult.failed} failed")
-                            // Continue anyway - locations are in backend
                         }
 
                         is PersistentSyncManager.SyncResult.NetworkError -> {
@@ -655,12 +621,8 @@ class AttendanceViewModel(
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "⚠️ Error syncing locations (non-critical)", e)
-                    // Continue with check-out anyway
                 }
 
-                // ========================================
-                // ✅ STEP 2: Complete check-out signature
-                // ========================================
                 _ui.value = _ui.value.copy(
                     loadingMessage = "Completing check-out..."
                 )
@@ -677,13 +639,10 @@ class AttendanceViewModel(
                     is SignatureOutcome.Success -> {
                         Log.d(TAG, "✅ Check-out signature SUCCESS")
 
-                        // ========================================
-                        // ✅ STEP 3: Stop all tracking components
-                        // ========================================
                         Log.d(TAG, "⏹️ Stopping tracking components...")
 
                         try {
-                            LocationTrackingService.stopTracking(context)
+                            // ✅ DISABLED: LocationTrackingService.stopTracking(context)
                             TrackingWorker.cancel(context)
                             TrackingAlarmReceiver.cancel(context)
 
@@ -693,7 +652,6 @@ class AttendanceViewModel(
                             Log.d(TAG, "✅ All tracking components stopped")
                         } catch (e: Exception) {
                             Log.e(TAG, "⚠️ Error stopping tracking components (non-critical)", e)
-                            // Continue anyway
                         }
 
                         _ui.value = _ui.value.copy(

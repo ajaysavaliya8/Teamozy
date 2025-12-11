@@ -4,43 +4,73 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.hrms.jeejateamozy.feature.location.model.LocationData
 
+/**
+ * Room entity for storing pending location data
+ */
 @Entity(tableName = "pending_locations")
 data class PendingLocationEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
+    val recordedAt: String,
     val latitude: Double,
     val longitude: Double,
-    val timestamp: Long,
-    val accuracy: Float?,
-    val provider: String?,
-    val deviceId: String?,
+    val locationAccuracy: Float?,
+    val altitude: Double?,
+    val verticalAccuracy: Float?,
+    val speed: Float?,
+    val heading: Float?,
+    val deviceId: String,
+    val appVersion: String,
+    val networkType: String?,
+    val wifiName: String?,
+    val wifiMacAddress: String?,
+    val batteryLevel: Int?,
+    val geofenceId: String?,
 
     val createdAt: Long = System.currentTimeMillis(),
     val syncAttempts: Int = 0,
-    val lastSyncAttempt: Long = 0
+    val lastSyncAttempt: Long? = null
 ) {
     companion object {
-        fun fromLocationData(data: LocationData): PendingLocationEntity {
+        fun fromLocationData(location: LocationData): PendingLocationEntity {
             return PendingLocationEntity(
-                latitude = data.latitude,
-                longitude = data.longitude,
-                timestamp = data.timestamp,
-                accuracy = data.accuracy,
-                provider = data.provider,
-                deviceId = data.deviceId
+                recordedAt = location.recordedAt,
+                latitude = location.latitude,
+                longitude = location.longitude,
+                locationAccuracy = location.locationAccuracy,
+                altitude = location.altitude,
+                verticalAccuracy = location.verticalAccuracy,
+                speed = location.speed,
+                heading = location.heading,
+                deviceId = location.deviceId,
+                appVersion = location.appVersion,
+                networkType = location.networkType,
+                wifiName = location.wifiName,
+                wifiMacAddress = location.wifiMacAddress,
+                batteryLevel = location.batteryLevel,
+                geofenceId = location.geofenceId
             )
         }
     }
 
     fun toLocationData(): LocationData {
         return LocationData(
+            recordedAt = recordedAt,
             latitude = latitude,
             longitude = longitude,
-            timestamp = timestamp,
-            accuracy = accuracy,
-            provider = provider,
-            deviceId = deviceId
+            locationAccuracy = locationAccuracy,
+            altitude = altitude,
+            verticalAccuracy = verticalAccuracy,
+            speed = speed,
+            heading = heading,
+            deviceId = deviceId,
+            appVersion = appVersion,
+            networkType = networkType,
+            wifiName = wifiName,
+            wifiMacAddress = wifiMacAddress,
+            batteryLevel = batteryLevel,
+            geofenceId = geofenceId
         )
     }
 }

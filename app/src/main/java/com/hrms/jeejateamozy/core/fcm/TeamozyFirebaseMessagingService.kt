@@ -4,20 +4,13 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
-import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
+// import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService  // ✅ DISABLED
 import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import com.hrms.jeejateamozy.feature.location.keepalive.TrackingWorker
+import com.hrms.jeejateamozy.feature.location.keepalive.TrackingAlarmReceiver
 
 /**
- * Firebase Messaging Service
- *
- * Handles FCM messages including:
- * - Tracking heartbeat messages (keeps service alive)
- * - Regular push notifications
- * - FCM token updates
+ * Firebase Cloud Messaging Service
  */
 class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -25,127 +18,120 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         private const val TAG = "TeamozyFCM"
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private lateinit var trackingStateManager: TrackingStateManager
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+        Log.d(TAG, "✅ FCM Token refreshed")
 
-    override fun onCreate() {
-        super.onCreate()
-        trackingStateManager = TrackingStateManager(applicationContext)
+        // Save token to preferences
+        val prefs = PreferencesManager.getInstance(this)
+        prefs.fcmToken = token
+
+        // TODO: Send token to your backend if needed
     }
 
-    /**
-     * Called when FCM message is received
-     * This can wake the app even if it's in background!
-     */
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        Log.d(TAG, "📩 FCM message received from: ${message.from}")
+        Log.d(TAG, "📨 FCM message received")
+        Log.d(TAG, "  From: ${message.from}")
+        Log.d(TAG, "  Data: ${message.data}")
 
-        // Check message type
-        val messageType = message.data["type"]
+        val data = message.data
 
-        when (messageType) {
-            "tracking_heartbeat" -> handleTrackingHeartbeat(message)
-            "notification" -> handleRegularNotification(message)
+        // Handle heartbeat/keep-alive messages
+        when (data["type"]) {
+            "heartbeat", "keep_alive" -> {
+                Log.d(TAG, "💓 Heartbeat message received")
+                handleHeartbeat()
+            }
+
+            "tracking_start" -> {
+                Log.d(TAG, "▶️ Start tracking command received")
+                startTracking()
+            }
+
+            "tracking_stop" -> {
+                Log.d(TAG, "⏹️ Stop tracking command received")
+                stopTracking()
+            }
+
             else -> {
-                Log.d(TAG, "Unknown message type: $messageType")
-                handleRegularNotification(message)
+                Log.d(TAG, "📬 Other message type: ${data["type"]}")
+                // Handle other message types
             }
         }
     }
 
-    /**
-     * Handle tracking heartbeat message
-     * This is sent periodically during active tracking sessions
-     */
-    private fun handleTrackingHeartbeat(message: RemoteMessage) {
-        Log.d(TAG, "💓 Tracking heartbeat received")
+    private fun handleHeartbeat() {
+        try {
+            val stateManager = TrackingStateManager(this)
 
-        serviceScope.launch {
-            try {
+            if (stateManager.shouldTrackingBeActive()) {
+                Log.d(TAG, "✅ Tracking is active - ensuring components are running")
+
                 // Update heartbeat timestamp
-                trackingStateManager.updateHeartbeat()
+                stateManager.updateHeartbeat()
 
-                // Check if tracking should be active
-                val shouldBeActive = trackingStateManager.shouldTrackingBeActive()
+                // Ensure tracking service is running
+                // LocationTrackingService.startTracking(this)  // ✅ DISABLED
 
-                if (shouldBeActive) {
-                    // Check if service is actually running
-                    val isServiceRunning = isLocationServiceRunning()
+                // Ensure keep-alive mechanisms are scheduled
+                TrackingWorker.schedule(this)
+                TrackingAlarmReceiver.schedule(this)
 
-                    if (!isServiceRunning) {
-                        Log.w(TAG, "⚠️ Tracking should be active but service is NOT running!")
-                        Log.d(TAG, "🔄 Attempting to restart LocationTrackingService...")
-
-                        // Restart the service
-                        LocationTrackingService.startTracking(applicationContext)
-
-                        Log.d(TAG, "✅ LocationTrackingService restart triggered")
-                    } else {
-                        Log.d(TAG, "✅ Service is running correctly")
-                    }
-                } else {
-                    Log.d(TAG, "⏹️ Tracking should NOT be active - ignoring heartbeat")
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error handling heartbeat", e)
-            }
-        }
-    }
-
-    /**
-     * Handle regular push notification
-     */
-    private fun handleRegularNotification(message: RemoteMessage) {
-        Log.d(TAG, "🔔 Regular notification received")
-
-        // Show notification if there's a notification payload
-        message.notification?.let { notification ->
-            val title = notification.title ?: "Teamozy"
-            val body = notification.body ?: ""
-
-            Log.d(TAG, "Notification: $title - $body")
-
-            // You can show notification here using NotificationManager
-            // Or let FCM handle it automatically if notification payload exists
-        }
-    }
-
-    /**
-     * Check if LocationTrackingService is running
-     */
-    private fun isLocationServiceRunning(): Boolean {
-        return try {
-            val manager = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
-            @Suppress("DEPRECATION")
-            manager.getRunningServices(Int.MAX_VALUE).any { service ->
-                service.service.className == LocationTrackingService::class.java.name
+                Log.d(TAG, "✅ Heartbeat processed - tracking ensured")
+            } else {
+                Log.d(TAG, "⏹️ Tracking is not active - ignoring heartbeat")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error checking service status", e)
-            false
+            Log.e(TAG, "❌ Error handling heartbeat", e)
         }
     }
 
-    /**
-     * Called when FCM token is updated
-     * Send new token to your backend
-     */
-    override fun onNewToken(token: String) {
-        super.onNewToken(token)
-        Log.d(TAG, "🔄 New FCM token received")
+    private fun startTracking() {
+        try {
+            val stateManager = TrackingStateManager(this)
+            stateManager.setTrackingActive(true)
+            stateManager.updateHeartbeat()
 
-        // Save token using PreferencesManager
-        val prefs = PreferencesManager.getInstance(this)
-        prefs.fcmToken = token  // ✅ This is correct for your PreferencesManager
+            // LocationTrackingService.startTracking(this)  // ✅ DISABLED
+            TrackingWorker.schedule(this)
+            TrackingAlarmReceiver.schedule(this)
 
-        Log.d(TAG, "✅ FCM token saved: ${token.take(20)}...")
+            Log.d(TAG, "✅ Tracking started via FCM")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error starting tracking", e)
+        }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        // Note: Don't cancel serviceScope here as messages may arrive after onDestroy
+    private fun stopTracking() {
+        try {
+            val stateManager = TrackingStateManager(this)
+            stateManager.clearState()
+
+            // Stop all tracking components
+            // LocationTrackingService.stopTracking(this)  // ✅ DISABLED
+            TrackingWorker.cancel(this)
+            TrackingAlarmReceiver.cancel(this)
+
+            Log.d(TAG, "✅ Tracking stopped via FCM")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error stopping tracking", e)
+        }
+    }
+
+    override fun onDeletedMessages() {
+        super.onDeletedMessages()
+        Log.w(TAG, "⚠️ Messages deleted on server")
+    }
+
+    override fun onMessageSent(msgId: String) {
+        super.onMessageSent(msgId)
+        Log.d(TAG, "✅ Message sent: $msgId")
+    }
+
+    override fun onSendError(msgId: String, exception: Exception) {
+        super.onSendError(msgId, exception)
+        Log.e(TAG, "❌ Message send error: $msgId", exception)
     }
 }

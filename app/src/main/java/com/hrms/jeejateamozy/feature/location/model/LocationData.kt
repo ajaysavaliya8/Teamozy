@@ -1,26 +1,22 @@
 package com.hrms.jeejateamozy.feature.location.model
 
-import com.google.gson.annotations.SerializedName
-
 /**
- * Location data model for API
+ * Location data model for API sync
  */
 data class LocationData(
-    @SerializedName("latitude")
+    val recordedAt: String,
     val latitude: Double,
-
-    @SerializedName("longitude")
     val longitude: Double,
-
-    @SerializedName("timestamp")
-    val timestamp: Long,
-
-    @SerializedName("accuracy")
-    val accuracy: Float? = null,
-
-    @SerializedName("provider")
-    val provider: String? = null,
-
-    @SerializedName("device_id")
-    val deviceId: String? = null
+    val locationAccuracy: Float?,
+    val altitude: Double?,
+    val verticalAccuracy: Float?,
+    val speed: Float?,
+    val heading: Float?,
+    val deviceId: String,
+    val appVersion: String,
+    val networkType: String?,
+    val wifiName: String?,
+    val wifiMacAddress: String?,
+    val batteryLevel: Int?,
+    val geofenceId: String?
 )
