@@ -14,19 +14,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/**
- * Reusable Server Status Banner Component
- * ✅ Shows server loading, maintenance, or error states
- *
- * Usage:
- * ```kotlin
- * ServerStatusBanner(
- *     serverStatus = serverStatus,
- *     onRetry = { viewModel.retry() }
- * )
- * ```
- */
-
 sealed class ServerStatus {
     object Available : ServerStatus()
     object Loading : ServerStatus()
