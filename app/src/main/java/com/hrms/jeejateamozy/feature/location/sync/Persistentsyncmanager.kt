@@ -23,7 +23,7 @@ class PersistentSyncManager private constructor(
 
     companion object {
         private const val TAG = "PersistentSyncManager"
-        private const val OPTIMAL_BATCH_SIZE = 15
+        private const val OPTIMAL_BATCH_SIZE = 3
         private const val MAX_RETRY_ATTEMPTS = 3
         private const val RETRY_DELAY_MS = 5_000L
 
@@ -100,166 +100,162 @@ class PersistentSyncManager private constructor(
     }
 
     suspend fun backgroundSyncOrClearOldData(
-        maxWaitTimeMs: Long = 15_000L,
+        maxWaitTimeMs: Long = 5_000L,
         maxRetries: Int = MAX_RETRY_ATTEMPTS,
         retryDelayMs: Long = RETRY_DELAY_MS
-    ): BackgroundSyncResult = withContext(Dispatchers.IO) {
-        Log.d(TAG, "🔄 Background sync initiated for old data")
+    ): BackgroundSyncResult {
+        return withContext(Dispatchers.IO) {
+            Log.d(TAG, "🔄 Background sync initiated for old data")
 
-        try {
-            val count = dao.getCount()
+            try {
+                val count = dao.getCount()
 
-            if (count == 0) {
-                Log.d(TAG, "✅ No old data to handle")
-                return@withContext BackgroundSyncResult.NoData
-            }
+                if (count == 0) {
+                    Log.d(TAG, "✅ No old data to handle")
+                    return@withContext BackgroundSyncResult.NoData
+                }
 
-            Log.d(TAG, "📊 Found $count old locations from previous session")
+                Log.d(TAG, "📊 Found $count old locations from previous session")
 
-            // ✅ RESTRUCTURED: Try sync with retries
-            for (attempt in 1..maxRetries) {
-                Log.d(TAG, "🔄 Sync attempt $attempt of $maxRetries...")
+                var finalResult: BackgroundSyncResult? = null
 
-                val syncResult = forceSyncAllBeforeCheckout(maxWaitTimeMs)
+                var attempt = 1
+                while (attempt <= maxRetries && finalResult == null) {
+                    Log.d(TAG, "🔄 Sync attempt $attempt of $maxRetries...")
 
-                // Handle success
-                when {
-                    syncResult is SyncResult.Success -> {
+                    val syncResult = forceSyncAllBeforeCheckout(maxWaitTimeMs)
+
+                    if (syncResult is SyncResult.Success) {
                         Log.d(TAG, "✅ Background sync SUCCESS on attempt $attempt: ${syncResult.synced} locations saved")
-                        return@withContext BackgroundSyncResult.Synced(
+                        finalResult = BackgroundSyncResult.Synced(
                             count = syncResult.synced,
                             attempts = attempt
                         )
+                        break
                     }
 
-                    syncResult is SyncResult.NetworkError && attempt >= maxRetries -> {
+                    if (attempt >= maxRetries) {
                         Log.w(TAG, "❌ Max retries reached - auto-clearing")
                         clearAllPendingLocations()
-                        return@withContext BackgroundSyncResult.ClearedDueToNetwork(count, attempt)
+
+                        if (syncResult is SyncResult.NetworkError) {
+                            finalResult = BackgroundSyncResult.ClearedDueToNetwork(count, attempt)
+                        } else if (syncResult is SyncResult.Timeout) {
+                            finalResult = BackgroundSyncResult.ClearedDueToTimeout(
+                                syncResult.synced,
+                                count - syncResult.synced,
+                                attempt
+                            )
+                        } else if (syncResult is SyncResult.Error) {
+                            finalResult = BackgroundSyncResult.ClearedDueToError(count, syncResult.message, attempt)
+                        } else {
+                            finalResult = BackgroundSyncResult.ClearedDueToError(count, "Unknown error", attempt)
+                        }
+                        break
                     }
 
-                    syncResult is SyncResult.Timeout && attempt >= maxRetries -> {
-                        Log.w(TAG, "❌ Max retries reached - auto-clearing")
-                        clearAllPendingLocations()
-                        return@withContext BackgroundSyncResult.ClearedDueToTimeout(
-                            syncResult.synced,
-                            count - syncResult.synced,
-                            attempt
-                        )
-                    }
-
-                    syncResult is SyncResult.Error && attempt >= maxRetries -> {
-                        Log.w(TAG, "❌ Max retries reached - auto-clearing")
-                        clearAllPendingLocations()
-                        return@withContext BackgroundSyncResult.ClearedDueToError(count, syncResult.message, attempt)
-                    }
-
-                    else -> {
-                        // Retry on next iteration
-                        Log.d(TAG, "⏳ Waiting ${retryDelayMs}ms before retry...")
-                        delay(retryDelayMs)
-                    }
+                    Log.d(TAG, "⏳ Waiting ${retryDelayMs}ms before retry...")
+                    delay(retryDelayMs)
+                    attempt++
                 }
+
+                return@withContext finalResult ?: BackgroundSyncResult.ClearedDueToError(count, "Max retries exceeded", maxRetries)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error in background sync", e)
+                clearAllPendingLocations()
+                return@withContext BackgroundSyncResult.ClearedDueToError(0, e.message ?: "Unknown", 1)
             }
-
-            // If we get here, all retries failed
-            clearAllPendingLocations()
-            return@withContext BackgroundSyncResult.ClearedDueToError(count, "Max retries exceeded", maxRetries)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error in background sync", e)
-            clearAllPendingLocations()
-            return@withContext BackgroundSyncResult.ClearedDueToError(0, e.message ?: "Unknown", 1)
         }
     }
 
     suspend fun forceSyncAllBeforeCheckout(
-        maxWaitTimeMs: Long = 30_000L
-    ): SyncResult = withContext(Dispatchers.IO) {
-        Log.d(TAG, "🔄 Force sync initiated before check-out")
+        maxWaitTimeMs: Long = 5_000L
+    ): SyncResult {
+        return withContext(Dispatchers.IO) {
+            Log.d(TAG, "🔄 Force sync initiated before check-out")
 
-        val startTime = System.currentTimeMillis()
-        var totalSynced = 0
-        var totalFailed = 0
+            val startTime = System.currentTimeMillis()
+            var totalSynced = 0
+            var totalFailed = 0
 
-        try {
-            val totalPending = dao.getCount()
-            Log.d(TAG, "📊 Total pending locations: $totalPending")
+            try {
+                val totalPending = dao.getCount()
+                Log.d(TAG, "📊 Total pending locations: $totalPending")
 
-            if (totalPending == 0) {
-                Log.d(TAG, "✅ No pending locations to sync")
-                return@withContext SyncResult.Success(0)
-            }
-
-            // ✅ RESTRUCTURED: Process batches until done or timeout
-            while (true) {
-                // Check timeout
-                val elapsedTime = System.currentTimeMillis() - startTime
-                if (elapsedTime >= maxWaitTimeMs) {
-                    Log.w(TAG, "⏱️ Sync timeout reached")
-                    return@withContext SyncResult.Timeout(totalSynced, totalFailed)
+                if (totalPending == 0) {
+                    Log.d(TAG, "✅ No pending locations to sync")
+                    return@withContext SyncResult.Success(0)
                 }
 
-                // Get next batch
-                val batch = dao.getOldestLocations(OPTIMAL_BATCH_SIZE)
+                // ✅ FIXED: Process batches with explicit loop control
+                var shouldContinue = true
+                while (shouldContinue) {
+                    // Check timeout
+                    val elapsedTime = System.currentTimeMillis() - startTime
+                    if (elapsedTime >= maxWaitTimeMs) {
+                        Log.w(TAG, "⏱️ Sync timeout reached")
+                        return@withContext SyncResult.Timeout(totalSynced, totalFailed)
+                    }
 
-                if (batch.isEmpty()) {
-                    Log.d(TAG, "✅ All locations synced successfully")
-                    return@withContext SyncResult.Success(totalSynced)
+                    // Get next batch
+                    val batch = dao.getOldestLocations(OPTIMAL_BATCH_SIZE)
+
+                    if (batch.isEmpty()) {
+                        Log.d(TAG, "✅ All locations synced successfully")
+                        return@withContext SyncResult.Success(totalSynced)
+                    }
+
+                    Log.d(TAG, "📤 Syncing batch of ${batch.size} locations...")
+
+                    // Sync this batch
+                    val locations = batch.map { it.toLocationData() }
+                    val syncOutcome = syncLocations(locations)
+
+                    if (syncOutcome is SyncOutcome.Success) {
+                        // Success - delete and continue
+                        val ids = batch.map { it.id }
+                        dao.deleteByIds(ids)
+                        totalSynced += batch.size
+
+                        Log.d(TAG, "✅ Batch synced: ${batch.size} locations")
+                        Log.d(TAG, "📊 Progress: $totalSynced synced, ${dao.getCount()} remaining")
+
+                        // Continue to next batch
+                        shouldContinue = true
+
+                    } else if (syncOutcome is SyncOutcome.Error) {
+                        // Error - update attempts
+                        val ids = batch.map { it.id }
+                        dao.updateSyncAttempts(ids, System.currentTimeMillis())
+                        totalFailed += batch.size
+
+                        Log.e(TAG, "❌ Batch sync failed: ${syncOutcome.message}")
+
+                        // Check if it's a network error
+                        val isNetworkError = syncOutcome.message.contains("network", ignoreCase = true) ||
+                                syncOutcome.message.contains("timeout", ignoreCase = true)
+
+                        if (isNetworkError) {
+                            Log.w(TAG, "🌐 Network error - stopping sync")
+                            return@withContext SyncResult.NetworkError(totalSynced, totalFailed)
+                        }
+
+                        // Continue to next batch (not a network error)
+                        shouldContinue = true
+
+                    } else {
+                        // Unknown outcome - stop
+                        shouldContinue = false
+                    }
                 }
 
-                Log.d(TAG, "📤 Syncing batch of ${batch.size} locations...")
+                // If we exit the loop normally (shouldn't happen), return what we have
+                return@withContext SyncResult.Success(totalSynced)
 
-                // Sync this batch
-                val locations = batch.map { it.toLocationData() }
-                val syncOutcome = syncLocations(locations)
-
-                // Handle outcome
-                val shouldContinue = handleSyncOutcome(
-                    outcome = syncOutcome,
-                    batch = batch,
-                    onSuccess = { totalSynced += batch.size },
-                    onFailure = { totalFailed += batch.size }
-                )
-
-                if (!shouldContinue) {
-                    Log.w(TAG, "🌐 Network error - stopping sync")
-                    return@withContext SyncResult.NetworkError(totalSynced, totalFailed)
-                }
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Force sync error", e)
-            return@withContext SyncResult.Error(totalSynced, totalFailed, e.message ?: "Unknown error")
-        }
-    }
-
-    private suspend fun handleSyncOutcome(
-        outcome: SyncOutcome,
-        batch: List<PendingLocationEntity>,
-        onSuccess: () -> Unit,
-        onFailure: () -> Unit
-    ): Boolean {
-        return when (outcome) {
-            is SyncOutcome.Success -> {
-                val ids = batch.map { it.id }
-                dao.deleteByIds(ids)
-                onSuccess()
-                Log.d(TAG, "✅ Batch synced: ${batch.size} locations")
-                Log.d(TAG, "📊 Progress: ${dao.getCount()} remaining")
-                true // Continue
-            }
-
-            is SyncOutcome.Error -> {
-                val ids = batch.map { it.id }
-                dao.updateSyncAttempts(ids, System.currentTimeMillis())
-                onFailure()
-                Log.e(TAG, "❌ Batch sync failed: ${outcome.message}")
-
-                // Check if it's a network error
-                val isNetworkError = outcome.message.contains("network", ignoreCase = true) ||
-                        outcome.message.contains("timeout", ignoreCase = true)
-                !isNetworkError // Continue if not network error
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Force sync error", e)
+                return@withContext SyncResult.Error(totalSynced, totalFailed, e.message ?: "Unknown error")
             }
         }
     }

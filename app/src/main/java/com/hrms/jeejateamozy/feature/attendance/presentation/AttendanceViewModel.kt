@@ -415,6 +415,10 @@ class AttendanceViewModel(
         context: Context,
         activity: Activity? = null
     ) {
+        // ✅ DEBUG: Entry point
+        Log.d(TAG, "🔍 DEBUG 1: completeCheckIn() CALLED")
+        Log.d(TAG, "🔍 DEBUG 2: tToken from UI state = ${_ui.value.checkInTToken}")
+
         val tToken = _ui.value.checkInTToken
         if (tToken == null) {
             Log.e(TAG, "❌ Invalid check-in session")
@@ -422,25 +426,53 @@ class AttendanceViewModel(
             return
         }
 
+        // ✅ DEBUG: Before coroutine launch
+        Log.d(TAG, "🔍 DEBUG 3: About to launch viewModelScope...")
+
         viewModelScope.launch {
+            // ✅ DEBUG: Inside coroutine
+            Log.d(TAG, "🔍 DEBUG 4: Inside viewModelScope coroutine!")
+
             try {
+                // ✅ DEBUG: Inside try block
+                Log.d(TAG, "🔍 DEBUG 5: Entered try block successfully")
+
                 _ui.value = _ui.value.copy(
                     isLoading = true,
                     loadingMessage = "Preparing check-in...",
                     showReasonDialog = false
                 )
 
+                Log.d(TAG, "🔍 DEBUG 6: UI state updated with loading")
                 Log.d(TAG, "🔄 Starting check-in process...")
+
+                // ✅ DEBUG: Before creating sync manager
+                Log.d(TAG, "🔍 DEBUG 7: About to get PersistentSyncManager instance...")
 
                 val syncManager = PersistentSyncManager.getInstance(context)
 
+                Log.d(TAG, "🔍 DEBUG 8: PersistentSyncManager instance created: $syncManager")
+
+                // ✅ DEBUG: Before checking pending
+                Log.d(TAG, "🔍 DEBUG 9: About to check hasPendingLocations()...")
+
                 val hasOldData = syncManager.hasPendingLocations()
 
+                Log.d(TAG, "🔍 DEBUG 10: hasPendingLocations() returned: $hasOldData")
+
                 if (hasOldData) {
+                    Log.d(TAG, "🔍 DEBUG 11: hasOldData is TRUE - getting count...")
+
                     val oldCount = syncManager.getPendingCount()
+
+                    Log.d(TAG, "🔍 DEBUG 12: Old data count: $oldCount")
                     Log.w(TAG, "⚠️ Found $oldCount old locations - handling in background with retry")
 
+                    Log.d(TAG, "🔍 DEBUG 13: About to call backgroundSyncOrClearOldData()...")
+
                     val syncResult = syncManager.backgroundSyncOrClearOldData()
+
+                    Log.d(TAG, "🔍 DEBUG 14: backgroundSyncOrClearOldData() returned: $syncResult")
 
                     when (syncResult) {
                         is PersistentSyncManager.BackgroundSyncResult.Synced -> {
@@ -468,8 +500,11 @@ class AttendanceViewModel(
                         }
                     }
                 } else {
+                    Log.d(TAG, "🔍 DEBUG 15: hasOldData is FALSE")
                     Log.d(TAG, "✅ No old data - proceeding with clean check-in")
                 }
+
+                Log.d(TAG, "🔍 DEBUG 16: Background sync completed, proceeding to signature...")
 
                 _ui.value = _ui.value.copy(
                     loadingMessage = "Completing check-in..."
@@ -550,6 +585,8 @@ class AttendanceViewModel(
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Check-in error", e)
+                Log.e(TAG, "🔍 DEBUG ERROR: Exception caught: ${e.message}")
+                Log.e(TAG, "🔍 DEBUG ERROR: Stack trace:", e)
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     loadingMessage = null
@@ -587,7 +624,7 @@ class AttendanceViewModel(
                 try {
                     val syncManager = PersistentSyncManager.getInstance(context)
                     val syncResult = syncManager.forceSyncAllBeforeCheckout(
-                        maxWaitTimeMs = 30_000L
+                        maxWaitTimeMs = 5_000L
                     )
 
                     when (syncResult) {
