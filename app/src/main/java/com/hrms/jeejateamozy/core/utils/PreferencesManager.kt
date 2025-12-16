@@ -3,18 +3,7 @@ package com.hrms.jeejateamozy.core.utils
 import android.content.Context
 import android.content.SharedPreferences
 
-/**
- * PreferencesManager - Singleton for managing SharedPreferences
- *
- * Stores:
- * - Authentication data (token, device ID)
- * - User profile information
- * - Face recognition settings
- * - Company information
- * - Social media links
- * - Support information
- * - Firebase Cloud Messaging token (NEW)
- */
+
 class PreferencesManager private constructor(context: Context) {
 
     private val prefs: SharedPreferences =
@@ -187,6 +176,15 @@ class PreferencesManager private constructor(context: Context) {
         get() = prefs.getBoolean(KEY_HAS_SHOWN_PERMISSIONS, false)
         set(value) = prefs.edit().putBoolean(KEY_HAS_SHOWN_PERMISSIONS, value).apply()
 
+    /**
+     * Track if background permission dialog has been shown
+     * For aggressive OEMs (Xiaomi, Huawei, Oppo, Vivo) that need
+     * extra autostart/background permissions for reliable location tracking
+     */
+    var hasShownBackgroundPermissionDialog: Boolean
+        get() = prefs.getBoolean(KEY_HAS_SHOWN_BG_PERMISSION, false)
+        set(value) = prefs.edit().putBoolean(KEY_HAS_SHOWN_BG_PERMISSION, value).apply()
+
     // ============================================
     // UTILITY METHODS
     // ============================================
@@ -251,11 +249,12 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_TECH_SUPPORT_NUMBER = "tech_support_number"
         private const val KEY_TECH_SUPPORT_EMAIL = "tech_support_email"
 
-        // Firebase Cloud Messaging Key (NEW)
+        // Firebase Cloud Messaging Key
         private const val KEY_FCM_TOKEN = "fcm_token"
 
         // UI State Keys
         private const val KEY_HAS_SHOWN_PERMISSIONS = "has_shown_permissions"
+        private const val KEY_HAS_SHOWN_BG_PERMISSION = "has_shown_bg_permission"
 
         @Volatile
         private var INSTANCE: PreferencesManager? = null

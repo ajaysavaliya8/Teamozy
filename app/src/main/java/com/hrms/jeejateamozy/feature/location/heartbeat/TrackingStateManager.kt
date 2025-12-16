@@ -1,17 +1,9 @@
-// ============================================
-// FILE: TrackingStateManager.kt
-// LOCATION: feature/location/heartbeat/
-// STATUS: ✅ CORRECTED - Works with your PreferencesManager
-// ============================================
-
 package com.hrms.jeejateamozy.feature.location.heartbeat
 
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Tracking State Manager

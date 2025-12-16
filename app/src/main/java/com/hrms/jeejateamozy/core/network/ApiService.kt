@@ -1,5 +1,4 @@
 package com.hrms.jeejateamozy.core.network
-
 import com.hrms.jeejateamozy.feature.profile.data.BankingInfoResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -10,12 +9,12 @@ import com.hrms.jeejateamozy.feature.profile.data.PersonalInfoResponse
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentDetailResponse
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityResponse
 import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsResponse
-import com.hrms.jeejateamozy.core.network.WorkReportListResponse
-import com.hrms.jeejateamozy.core.network.CreateWorkReportResponse
 import com.hrms.jeejateamozy.feature.location.model.LocationData
 import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.POST
+import com.hrms.jeejateamozy.feature.location.data.remote.LocationSyncRequest
+
 
 data class DeviceChangeResponse(
     val detail: String
@@ -91,7 +90,6 @@ interface ApiService {
         @Field("late_reason") lateReason: String? = null,
         @Field("out_of_range_reason") outOfRangeReason: String? = null,
         @Field("acknowledgment_note") acknowledgmentNote: String? = null,
-
         // NEW: First location tracking data
         @Field("first_location_recorded_at") firstLocationRecordedAt: String? = null,
         @Field("first_location_latitude") firstLocationLatitude: Double? = null,
@@ -106,7 +104,6 @@ interface ApiService {
         @Field("first_location_wifi_name") firstLocationWifiName: String? = null,
         @Field("first_location_wifi_mac_address") firstLocationWifiMacAddress: String? = null,
         @Field("first_location_battery_level") firstLocationBatteryLevel: Int? = null,
-
         @Query("token") token: String
     ): Response<CheckInSignatureResponse>
 
@@ -127,8 +124,7 @@ interface ApiService {
         @Part("early_reason") earlyReason: RequestBody? = null,
         @Part("out_of_range_reason") outOfRangeReason: RequestBody? = null,
         @Part("work_description") workReport: RequestBody? = null,
-        @Part attachments: List<MultipartBody.Part>? = null,
-
+        @Part work_report_file: MultipartBody.Part? = null,
         // NEW: Last location tracking data
         @Part("last_location_recorded_at") lastLocationRecordedAt: RequestBody? = null,
         @Part("last_location_latitude") lastLocationLatitude: RequestBody? = null,
@@ -143,7 +139,6 @@ interface ApiService {
         @Part("last_location_wifi_name") lastLocationWifiName: RequestBody? = null,
         @Part("last_location_wifi_mac_address") lastLocationWifiMacAddress: RequestBody? = null,
         @Part("last_location_battery_level") lastLocationBatteryLevel: RequestBody? = null,
-
         @Query("token") token: String
     ): Response<CheckOutSignatureResponse>
 
@@ -380,6 +375,6 @@ interface ApiService {
 
     @POST("location/sync")
     suspend fun syncLocationTracking(
-        @Body locations: List<LocationData>
+        @Body locations: List<LocationSyncRequest>
     ): Response<Any>
 }

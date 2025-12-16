@@ -1,5 +1,6 @@
 package com.hrms.jeejateamozy.feature.attendance.presentation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,6 +33,7 @@ import org.koin.androidx.compose.koinViewModel
  * - Added submit correction button
  * - Added submit correction dialog
  * - Added withdrawal and attachment download handling
+ * - ✅ FIX: Added BackHandler for gesture navigation
  */
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,6 +46,11 @@ fun AttendanceDayDetailScreen(
     val uiState by viewModel.dayDetailUiState.collectAsState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // ✅ FIX: Handle gesture back navigation
+    BackHandler {
+        onNavigateBack()
+    }
 
     // Load day timesheet when screen opens
     LaunchedEffect(date) {

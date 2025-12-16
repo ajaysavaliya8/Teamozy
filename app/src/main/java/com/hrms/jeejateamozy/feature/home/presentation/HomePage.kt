@@ -305,7 +305,7 @@ fun HomePage(
                     vm.onPendingMessageDismissed()
                 },
                 onAcknowledge = { acknowledgmentNote ->
-                    vm.onPendingMessageAcknowledged(acknowledgmentNote)
+                    vm.onPendingMessageAcknowledged(acknowledgmentNote, context)
                 }
             )
         }

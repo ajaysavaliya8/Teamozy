@@ -102,7 +102,9 @@ fun ViewPersonalInfoScreen(
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
-                        .padding(bottom = 80.dp),  // Add extra bottom padding for navigation bar
+                        // ✅ FIX: Use navigationBarsPadding() instead of hardcoded padding(bottom = 80.dp)
+                        // This adapts automatically to both gesture navigation and 3-button navigation
+                        .navigationBarsPadding(),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Error message

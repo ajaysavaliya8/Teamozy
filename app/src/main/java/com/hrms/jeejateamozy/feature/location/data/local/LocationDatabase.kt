@@ -1,4 +1,4 @@
-package com.hrms.jeejateamozy.feature.location.database
+package com.hrms.jeejateamozy.feature.location.data.local
 
 import android.content.Context
 import androidx.room.Database
@@ -7,10 +7,15 @@ import androidx.room.RoomDatabase
 
 /**
  * Room Database for pending location data
+ * Separate database to avoid migrations in main app database
+ *
+ * VERSION HISTORY:
+ * - v1: Initial schema
+ * - v2: Schema update (uses destructive migration)
  */
 @Database(
     entities = [PendingLocationEntity::class],
-    version = 1,
+    version = 2,  // ← BUMPED from 1 to 2 to fix schema mismatch
     exportSchema = false
 )
 abstract class LocationDatabase : RoomDatabase() {
@@ -35,8 +40,15 @@ abstract class LocationDatabase : RoomDatabase() {
                 LocationDatabase::class.java,
                 DATABASE_NAME
             )
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration()  // This will clear old data on schema change
                 .build()
+        }
+
+        /**
+         * Clear instance (for testing)
+         */
+        fun clearInstance() {
+            instance = null
         }
     }
 }

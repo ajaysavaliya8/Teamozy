@@ -1,37 +1,47 @@
 package com.hrms.jeejateamozy.feature.main.presentation
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import android.app.Activity
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
+import com.hrms.jeejateamozy.feature.profile.presentation.*
 import com.hrms.jeejateamozy.feature.home.presentation.HomePage
-import com.hrms.jeejateamozy.feature.profile.presentation.ProfileScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.EditSocialMediaScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.EditContactDetailScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.EditPersonalInfoScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentDetailScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.EditBankingInfoScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.ViewEmploymentIdentityScreen
-import com.hrms.jeejateamozy.feature.profile.presentation.ViewShiftDetailsScreen
 import com.hrms.jeejateamozy.feature.workreport.presentation.WorkReportScreen
 import com.hrms.jeejateamozy.feature.workreport.presentation.WorkReportViewModel
+import com.hrms.jeejateamozy.feature.circular.presentation.CircularViewModel
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularListScreen
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularDetailScreen
-import com.hrms.jeejateamozy.feature.circular.presentation.CircularViewModel
-import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
-import com.hrms.jeejateamozy.feature.leave.presentation.ApplyLeaveScreen
 import com.hrms.jeejateamozy.feature.leave.presentation.LeaveViewModel
+import com.hrms.jeejateamozy.feature.leave.presentation.ApplyLeaveScreen
+import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryViewModel
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryScreen
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceDayDetailScreen
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun MainScreen(
     onLogout: () -> Unit
 ) {
+    val context = LocalContext.current
+
+    // ============================================
+    // DOUBLE-BACK TO EXIT STATE
+    // ============================================
+    var backPressedOnce by remember { mutableStateOf(false) }
+
+    // Reset backPressedOnce after 2 seconds
+    LaunchedEffect(backPressedOnce) {
+        if (backPressedOnce) {
+            delay(2000)
+            backPressedOnce = false
+        }
+    }
+
     // State to track current selected bottom navigation screen
     var currentNavigationScreen by remember { mutableStateOf(NavigationScreen.HOME) }
 
@@ -51,9 +61,104 @@ fun MainScreen(
     var showApplyLeave by remember { mutableStateOf(false) }
     var showLeaveHistory by remember { mutableStateOf(false) }
 
-    // ⭐ Attendance History States - MOVED INSIDE @Composable function
+    // Attendance History States
     var showAttendanceHistory by remember { mutableStateOf(false) }
     var selectedAttendanceDate by remember { mutableStateOf<String?>(null) }
+
+    // ============================================
+    // Helper function to check if any child screen is open
+    // ============================================
+    val isAnyChildScreenOpen = remember(
+        selectedAttendanceDate, showCircularDetail, showCircularList,
+        showLeaveHistory, showApplyLeave, showWorkReport,
+        showEditSocialMedia, showEditContactDetail, showEditPersonalInfo,
+        showViewEmploymentDetail, showEditBankingInfo, showViewEmploymentIdentity,
+        showViewShiftDetails
+    ) {
+        selectedAttendanceDate != null ||
+                showCircularDetail != null ||
+                showCircularList ||
+                showLeaveHistory ||
+                showApplyLeave ||
+                showWorkReport ||
+                showEditSocialMedia ||
+                showEditContactDetail ||
+                showEditPersonalInfo ||
+                showViewEmploymentDetail ||
+                showEditBankingInfo ||
+                showViewEmploymentIdentity ||
+                showViewShiftDetails
+    }
+
+    // ============================================
+    // BACK HANDLER - ALWAYS ENABLED
+    // Priority Order:
+    // 1. Close child screens
+    // 2. Switch to HOME tab
+    // 3. Double-back to exit
+    // ============================================
+    BackHandler(enabled = true) {
+        when {
+            // Priority 1: Close any open child screen (step-by-step back)
+            selectedAttendanceDate != null -> {
+                selectedAttendanceDate = null
+                showAttendanceHistory = false
+            }
+            showCircularDetail != null -> {
+                showCircularDetail = null
+                showCircularList = true  // Go back to list, not HOME
+            }
+            showCircularList -> {
+                showCircularList = false
+            }
+            showLeaveHistory -> {
+                showLeaveHistory = false
+            }
+            showApplyLeave -> {
+                showApplyLeave = false
+            }
+            showWorkReport -> {
+                showWorkReport = false
+            }
+            showEditSocialMedia -> {
+                showEditSocialMedia = false
+            }
+            showEditContactDetail -> {
+                showEditContactDetail = false
+            }
+            showEditPersonalInfo -> {
+                showEditPersonalInfo = false
+            }
+            showViewEmploymentDetail -> {
+                showViewEmploymentDetail = false
+            }
+            showEditBankingInfo -> {
+                showEditBankingInfo = false
+            }
+            showViewEmploymentIdentity -> {
+                showViewEmploymentIdentity = false
+            }
+            showViewShiftDetails -> {
+                showViewShiftDetails = false
+            }
+
+            // Priority 2: Switch to HOME tab if on other tabs
+            currentNavigationScreen != NavigationScreen.HOME -> {
+                currentNavigationScreen = NavigationScreen.HOME
+            }
+
+            // Priority 3: Double-back to exit (only when on HOME with no child screens)
+            else -> {
+                if (backPressedOnce) {
+                    // Exit the app
+                    (context as? Activity)?.finish()
+                } else {
+                    backPressedOnce = true
+                    Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -75,15 +180,16 @@ fun MainScreen(
                     showCircularDetail = null
                     showApplyLeave = false
                     showLeaveHistory = false
-                    showAttendanceHistory = false  // ⭐ ADD THIS
-                    selectedAttendanceDate = null  // ⭐ ADD THIS
+                    showAttendanceHistory = false
+                    selectedAttendanceDate = null
                 }
             )
-        }
+        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         // Handle child screens (full screen overlays)
         when {
-            // ⭐ ATTENDANCE DAY DETAIL SCREEN
+            // ATTENDANCE DAY DETAIL SCREEN
             selectedAttendanceDate != null -> {
                 val attendanceHistoryViewModel: AttendanceHistoryViewModel = koinViewModel()
 
@@ -132,7 +238,7 @@ fun MainScreen(
                 )
             }
 
-            // ⭐ NEW: Circular Detail Screen
+            // Circular Detail Screen
             showCircularDetail != null -> {
                 val circularViewModel: CircularViewModel = koinViewModel()
 
@@ -141,12 +247,12 @@ fun MainScreen(
                     circularId = showCircularDetail!!,
                     onNavigateBack = {
                         showCircularDetail = null
-                        showCircularList = true
+                        showCircularList = true  // Step-by-step: go back to list
                     }
                 )
             }
 
-            // ⭐ NEW: Circular List Screen
+            // Circular List Screen
             showCircularList -> {
                 val circularViewModel: CircularViewModel = koinViewModel()
 
@@ -226,7 +332,7 @@ fun MainScreen(
                 )
             }
 
-            // ⭐ WORK REPORT SCREEN ⭐
+            // WORK REPORT SCREEN
             showWorkReport -> {
                 val workReportViewModel: WorkReportViewModel = koinViewModel()
 
@@ -251,7 +357,6 @@ fun MainScreen(
                             onNavigateToWorkReport = {
                                 showWorkReport = true
                             },
-                            // ⭐ NEW: Circular navigation callback
                             onNavigateToCircular = {
                                 showCircularList = true
                             },
@@ -263,7 +368,6 @@ fun MainScreen(
                     }
 
                     NavigationScreen.ATTENDANCE -> {
-                        // ⭐ ATTENDANCE HISTORY SCREEN
                         val attendanceHistoryViewModel: AttendanceHistoryViewModel = koinViewModel()
 
                         AttendanceHistoryScreen(
@@ -279,7 +383,6 @@ fun MainScreen(
                     }
 
                     NavigationScreen.PROFILE -> {
-                        // ✅ ProfileScreen with ALL required parameters
                         ProfileScreen(
                             onNavigateToFaceChange = {
                                 // No action needed - ProfileScreen handles it internally
@@ -307,7 +410,6 @@ fun MainScreen(
                             },
                             onLogout = onLogout,
                             onBack = {
-                                // Go back to HOME tab
                                 currentNavigationScreen = NavigationScreen.HOME
                             }
                         )

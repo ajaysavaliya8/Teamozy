@@ -8,8 +8,10 @@ import com.hrms.jeejateamozy.core.network.ApiService
 import com.hrms.jeejateamozy.core.network.BasicResponse
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import retrofit2.Response
 
@@ -24,7 +26,7 @@ sealed class AuthOutcome {
     data class Success(val message: String) : AuthOutcome()
     data class Error(val message: String) : AuthOutcome()
     data class DeviceNotRegistered(val message: String) : AuthOutcome()
-    data class UpdateRequired(val message: String) : AuthOutcome() // ⚡ NEW: For 426 status
+    data class UpdateRequired(val message: String) : AuthOutcome() // For 426 status
 }
 
 // ============================================
@@ -32,7 +34,7 @@ sealed class AuthOutcome {
 // ============================================
 
 /**
- * ✅ UPDATED: Now using NetworkErrorHandler
+ * ✅ UPDATED: Now fetches FCM token inline if not available
  */
 class AuthRepository(
     private val api: ApiService,
@@ -66,6 +68,32 @@ class AuthRepository(
     }
 
     /**
+     * ✅ NEW: Get FCM token - fetch from preferences or Firebase if not available
+     * This ensures FCM token is always available during login
+     */
+    private suspend fun getFcmToken(): String? {
+        // First check if we already have it in preferences
+        var token = pm.fcmToken
+
+        if (token.isNullOrBlank()) {
+            Log.d("AUTH", "⚠️ FCM token not in preferences, fetching from Firebase...")
+            try {
+                token = FirebaseMessaging.getInstance().token.await()
+                if (!token.isNullOrBlank()) {
+                    pm.fcmToken = token
+                    Log.d("AUTH", "✅ FCM token fetched and saved: ${token.take(30)}...")
+                }
+            } catch (e: Exception) {
+                Log.e("AUTH", "❌ Failed to get FCM token from Firebase", e)
+                // Don't fail login if FCM token fetch fails
+                token = null
+            }
+        }
+
+        return token
+    }
+
+    /**
      * Extract error message from response
      * ✅ SIMPLIFIED: Now using NetworkErrorHandler
      */
@@ -84,7 +112,7 @@ class AuthRepository(
             val res = api.sendLogin(mobileNumber = phone.toLong(), deviceId = deviceId)
             Log.d("NET", "sendLogin -> code=${res.code()}")
 
-            // ✅ Handle both 409 and 426 status codes
+            // Handle both 409 and 426 status codes
             when (res.code()) {
                 409 -> {
                     val msg = extractMessage(res)
@@ -109,14 +137,15 @@ class AuthRepository(
 
     /**
      * Login with password - includes FCM token
+     * ✅ UPDATED: Now fetches FCM token inline if not available
      */
     suspend fun loginWithPassword(phone: String, password: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val deviceId = androidId()
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
 
-            // Get FCM token from preferences
-            val fcmToken = pm.fcmToken
+            // ✅ UPDATED: Get FCM token - fetch from Firebase if not in preferences
+            val fcmToken = getFcmToken()
 
             // Get device information
             val deviceManufacturer = getDeviceManufacturer()
@@ -142,7 +171,6 @@ class AuthRepository(
             )
             Log.d("NET", "verifyLogin(password) -> code=${res.code()}")
 
-            // ⚡ UPDATED: Added 426 handling
             when (res.code()) {
                 409 -> {
                     val msg = extractMessage(res)
@@ -162,14 +190,15 @@ class AuthRepository(
 
     /**
      * Login with OTP - includes FCM token
+     * ✅ UPDATED: Now fetches FCM token inline if not available
      */
     suspend fun loginWithOtp(phone: String, otp: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val deviceId = androidId()
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
 
-            // Get FCM token from preferences
-            val fcmToken = pm.fcmToken
+            // ✅ UPDATED: Get FCM token - fetch from Firebase if not in preferences
+            val fcmToken = getFcmToken()
 
             // Get device information
             val deviceManufacturer = getDeviceManufacturer()
@@ -195,7 +224,6 @@ class AuthRepository(
             )
             Log.d("NET", "verifyLogin(otp) -> code=${res.code()}")
 
-            // ⚡ UPDATED: Added 426 handling
             when (res.code()) {
                 409 -> {
                     val msg = extractMessage(res)
@@ -226,7 +254,6 @@ class AuthRepository(
             val res = api.verifyToken(appVersion)
             Log.d("NET", "verifyToken -> app_version=$appVersion, code=${res.code()}")
 
-            // ⚡ UPDATED: Added 426 handling
             when (res.code()) {
                 426 -> {
                     val msg = extractMessage(res)

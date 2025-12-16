@@ -1,10 +1,14 @@
 package com.hrms.jeejateamozy.feature.main.presentation
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 // Enum for navigation screens
@@ -17,6 +21,10 @@ enum class NavigationScreen {
 /**
  * Bottom Navigation Bar Component
  * Manages navigation between main app screens
+ *
+ * ✅ Properly handles both:
+ * - 3-button navigation (back, home, recent)
+ * - Gesture navigation (swipe up)
  */
 @Composable
 fun BottomNavigationBar(
@@ -25,7 +33,9 @@ fun BottomNavigationBar(
 ) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp
+        tonalElevation = 3.dp,
+        // ✅ KEY FIX: Add navigation bar padding to prevent content from going behind system nav bar
+        modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
     ) {
         NavigationBarItem(
             selected = currentScreen == NavigationScreen.HOME,

@@ -1,5 +1,6 @@
 package com.hrms.jeejateamozy.feature.circular.presentation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +34,11 @@ fun CircularDetailScreen(
     onNavigateBack: () -> Unit
 ) {
     val detailState by viewModel.detailUiState.collectAsState()
+
+    // ✅ FIX: Handle gesture back navigation
+    BackHandler {
+        onNavigateBack()
+    }
 
     // Load circular detail
     LaunchedEffect(circularId) {

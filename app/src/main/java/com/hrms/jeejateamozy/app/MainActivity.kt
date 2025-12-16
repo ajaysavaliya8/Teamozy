@@ -51,6 +51,7 @@ import com.hrms.jeejateamozy.di.attendanceHistoryModule
 // Firebase imports
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
+import com.hrms.jeejateamozy.di.locationModule
 
 private enum class AppScreen {
     SPLASH,
@@ -97,7 +98,8 @@ class MainActivity : ComponentActivity() {
                     homeModule,
                     circularModule,
                     leaveModule,
-                    attendanceHistoryModule
+                    attendanceHistoryModule ,
+                    locationModule
                 )
             }
         }

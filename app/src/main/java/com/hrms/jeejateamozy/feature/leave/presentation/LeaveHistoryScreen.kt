@@ -1,13 +1,11 @@
 package com.hrms.jeejateamozy.feature.leave.presentation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,17 +14,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.core.network.LeaveApplication
 import com.hrms.jeejateamozy.core.network.LeaveSummary
 import com.hrms.jeejateamozy.core.network.PaginationInfo
-import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -39,12 +34,16 @@ fun LeaveHistoryScreen(
     onNavigateToApplyLeave: () -> Unit
 ) {
     val uiState by viewModel.historyUiState.collectAsState()
-    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Withdraw dialog state
     var showWithdrawDialog by remember { mutableStateOf(false) }
     var selectedApplicationId by remember { mutableIntStateOf(0) }
+
+    // ✅ FIX: Handle gesture back navigation
+    BackHandler {
+        onNavigateBack()
+    }
 
     // Handle events
     LaunchedEffect(Unit) {
@@ -94,7 +93,8 @@ fun LeaveHistoryScreen(
             ExtendedFloatingActionButton(
                 onClick = onNavigateToApplyLeave,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Apply Leave") }
+                text = { Text("Apply Leave") },
+                modifier = Modifier.navigationBarsPadding()
             )
         }
     ) { paddingValues ->
@@ -105,7 +105,12 @@ fun LeaveHistoryScreen(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 16.dp,
+                    bottom = 88.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Leave Summary
@@ -220,7 +225,7 @@ private fun LeaveSummaryCard(summary: LeaveSummary) {
                 )
             }
 
-            Divider()
+            HorizontalDivider()
 
             // Total Days Taken
             Row(
@@ -343,7 +348,7 @@ private fun LeaveApplicationCard(
                 StatusBadge(status = application.status)
             }
 
-            Divider()
+            HorizontalDivider()
 
             // Date Range
             Row(

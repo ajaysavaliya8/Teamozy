@@ -1,6 +1,7 @@
 package com.hrms.jeejateamozy.feature.leave.presentation
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -58,6 +59,11 @@ fun ApplyLeaveScreen(
     // Date pickers
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
+
+    // ✅ FIX: Handle gesture back navigation
+    BackHandler {
+        onNavigateBack()
+    }
 
     // File picker
     val filePickerLauncher = rememberLauncherForActivityResult(

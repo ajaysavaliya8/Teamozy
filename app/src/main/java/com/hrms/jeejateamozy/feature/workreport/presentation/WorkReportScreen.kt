@@ -1,5 +1,6 @@
 package com.hrms.jeejateamozy.feature.workreport.presentation
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -25,6 +26,11 @@ fun WorkReportScreen(
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // ✅ FIX: Handle gesture back navigation
+    BackHandler {
+        onNavigateBack()
+    }
 
     Scaffold(
         topBar = {

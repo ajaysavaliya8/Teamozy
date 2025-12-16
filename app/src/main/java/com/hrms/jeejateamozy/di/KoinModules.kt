@@ -15,10 +15,12 @@ import com.hrms.jeejateamozy.feature.circular.data.CircularRepository
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularViewModel
 import com.hrms.jeejateamozy.feature.leave.data.LeaveRepository
 import com.hrms.jeejateamozy.feature.leave.presentation.LeaveViewModel
+import com.hrms.jeejateamozy.feature.attendance.data.CorrectionRequestRepository
+import com.hrms.jeejateamozy.feature.location.data.local.LocationDatabase
+import com.hrms.jeejateamozy.feature.location.data.repository.LocationRepository
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
-import com.hrms.jeejateamozy.feature.attendance.data.CorrectionRequestRepository
 
 
 val authModule = module {
@@ -60,6 +62,26 @@ val leaveModule = module {
 
 val attendanceHistoryModule = module {
     single { AttendanceHistoryRepository(androidContext()) }
-    single { CorrectionRequestRepository(androidContext()) }  // ⚡ ADD THIS
-    viewModel { AttendanceHistoryViewModel(get(), get()) }  // ⚡ UPDATE THIS (add second get())
+    single { CorrectionRequestRepository(androidContext()) }
+    viewModel { AttendanceHistoryViewModel(get(), get()) }
+}
+
+/**
+ * Location tracking module
+ * Provides LocationDatabase, DAO, and LocationRepository
+ */
+val locationModule = module {
+    // Database
+    single { LocationDatabase.getInstance(androidContext()) }
+
+    // DAO
+    single { get<LocationDatabase>().pendingLocationDao() }
+
+    // Repository
+    single {
+        LocationRepository(
+            context = androidContext(),
+            apiService = NetworkModule.apiService
+        )
+    }
 }

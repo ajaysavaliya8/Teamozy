@@ -60,6 +60,11 @@ fun FaceCaptureScreen(
     val cameraProviderRef = remember { mutableStateOf<ProcessCameraProvider?>(null) }
     val analysisRef = remember { mutableStateOf<ImageAnalysis?>(null) }
 
+    // ============================================
+    // BACK CONFIRMATION DIALOG STATE
+    // ============================================
+    var showCancelDialog by remember { mutableStateOf(false) }
+
     // ✨ Cleanup function - defined BEFORE use
     fun cleanupCameraSync() {
         Log.d(TAG, "🧹 Starting camera cleanup (generation=$generation)")
@@ -74,11 +79,13 @@ fun FaceCaptureScreen(
         }
     }
 
-    // ✨ Handle system back button
+    // ✨ Handle system back button - Show confirmation dialog
     BackHandler {
         Log.d(TAG, "⬅️ System back button pressed (generation=$generation)")
-        cleanupCameraSync()
-        onDismiss()
+        if (!isSubmitting) {
+            showCancelDialog = true
+        }
+        // If submitting, ignore back press
     }
 
     // ✨ DisposableEffect tied to generation
@@ -98,12 +105,47 @@ fun FaceCaptureScreen(
             delay(1000)
             secondsLeft--
         }
+    }
+
+    if (secondsLeft <= 0) {
         Log.d(TAG, "⏱️ Timeout reached (generation=$generation)")
         cleanupCameraSync()
         onDismiss()
     }
 
     var reason by remember { mutableStateOf("") }
+
+    // ============================================
+    // CANCEL CONFIRMATION DIALOG
+    // ============================================
+    if (showCancelDialog) {
+        AlertDialog(
+            onDismissRequest = { showCancelDialog = false },
+            title = { Text("Cancel Face Verification?") },
+            text = {
+                Text("Are you sure you want to cancel the face verification process?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showCancelDialog = false
+                        cleanupCameraSync()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Yes, Cancel")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showCancelDialog = false }) {
+                    Text("Continue Verification")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -112,8 +154,9 @@ fun FaceCaptureScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         Log.d(TAG, "⬅️ TopBar back button pressed (generation=$generation)")
-                        cleanupCameraSync()
-                        onDismiss()
+                        if (!isSubmitting) {
+                            showCancelDialog = true
+                        }
                     }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
@@ -128,6 +171,27 @@ fun FaceCaptureScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Timer display
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (secondsLeft <= 10)
+                        MaterialTheme.colorScheme.errorContainer
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Text(
+                    text = "Time remaining: ${secondsLeft}s",
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (secondsLeft <= 10)
+                        MaterialTheme.colorScheme.onErrorContainer
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             // Camera preview
             Box(
                 modifier = Modifier
@@ -187,32 +251,22 @@ fun FaceCaptureScreen(
                                             generation = generation
                                         )
                                     } catch (e: Exception) {
-                                        Log.e(TAG, "❌ Analyzer error (generation=$generation)", e)
-                                        errorText = "Camera error: ${e.message}"
-                                        try {
-                                            imageProxy.close()
-                                        } catch (e2: Exception) {
-                                            Log.e(TAG, "❌ Error closing imageProxy", e2)
-                                        }
+                                        Log.e(TAG, "❌ Analyzer error", e)
+                                        imageProxy.close()
                                     }
                                 }
 
-                                try {
-                                    cameraProvider.bindToLifecycle(
-                                        lifecycleOwner,
-                                        CameraSelector.DEFAULT_FRONT_CAMERA,
-                                        preview,
-                                        analysis
-                                    )
-                                    Log.d(TAG, "✅ Camera started successfully (generation=$generation)")
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "❌ Failed to bind camera (generation=$generation)", e)
-                                    errorText = e.message ?: "Failed to start camera"
-                                }
+                                cameraProvider.bindToLifecycle(
+                                    lifecycleOwner,
+                                    CameraSelector.DEFAULT_FRONT_CAMERA,
+                                    preview,
+                                    analysis
+                                )
 
+                                Log.d(TAG, "✅ Camera bound successfully (generation=$generation)")
                             } catch (e: Exception) {
-                                Log.e(TAG, "❌ Camera initialization failed (generation=$generation)", e)
-                                errorText = e.message ?: "Camera initialization failed"
+                                Log.e(TAG, "❌ Camera setup error (generation=$generation)", e)
+                                errorText = "Camera initialization failed: ${e.message}"
                             }
                         }, ContextCompat.getMainExecutor(ctx))
 
@@ -220,102 +274,57 @@ fun FaceCaptureScreen(
                     }
                 )
 
-                // Overlay frame
-                Canvas(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .padding(8.dp)
-                ) {
-                    drawRoundRect(
-                        color = JetColor(0xFFFFC107),
-                        size = size,
-                        style = Stroke(width = 10f),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(36f, 36f)
+                // Oval guide overlay
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    drawOval(
+                        color = JetColor.White,
+                        style = Stroke(width = 4.dp.toPx()),
+                        topLeft = androidx.compose.ui.geometry.Offset(
+                            size.width * 0.15f,
+                            size.height * 0.1f
+                        ),
+                        size = androidx.compose.ui.geometry.Size(
+                            size.width * 0.7f,
+                            size.height * 0.8f
+                        )
                     )
                 }
-
-                // Status chip
-                ElevatedCard(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(10.dp),
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(statusText)
-                        if (attemptCount > 0) {
-                            Text(
-                                "Attempts: $attemptCount",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
             }
 
-            LinearProgressIndicator(
-                progress = { (60 - secondsLeft) / 60f },
-                modifier = Modifier.fillMaxWidth()
+            // Status text
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.bodyLarge
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Time remaining: %02d:%02d".format(secondsLeft / 60, secondsLeft % 60))
-                if (attemptCount > 0) {
-                    Text("Attempts: $attemptCount", style = MaterialTheme.typography.bodyMedium)
-                }
+            // Error text
+            errorText?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
 
-            if (errorText != null) {
-                Text(errorText!!, color = MaterialTheme.colorScheme.error)
-            }
-
-            if (!serverError.isNullOrBlank()) {
+            // Server error
+            serverError?.let {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
                     Text(
-                        serverError!!,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.padding(12.dp)
+                        text = it,
+                        modifier = Modifier.padding(12.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
             }
 
-            // Info card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                )
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        "Keep your face visible",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "• Look at the camera\n• Good lighting\n• Hold steady\n• Will retry automatically",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-
-            // Reason field
+            // Reason field (for late check-in, etc.)
             if (showReasonField) {
-                if (!reasonMessage.isNullOrBlank()) {
-                    Text(reasonMessage!!, style = MaterialTheme.typography.labelLarge)
+                reasonMessage?.let {
+                    Text(text = it, style = MaterialTheme.typography.labelLarge)
                 }
                 OutlinedTextField(
                     value = reason,
@@ -334,8 +343,7 @@ fun FaceCaptureScreen(
                         modifier = Modifier.weight(1f),
                         enabled = !isSubmitting,
                         onClick = {
-                            cleanupCameraSync()
-                            onDismiss()
+                            showCancelDialog = true
                         }
                     ) { Text("Cancel") }
 

@@ -1,5 +1,6 @@
 package com.hrms.jeejateamozy.feature.circular.presentation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -40,6 +41,11 @@ fun CircularListScreen(
     val events = viewModel.events
 
     var showFilterDialog by remember { mutableStateOf(false) }
+
+    // ✅ FIX: Handle gesture back navigation
+    BackHandler {
+        onNavigateBack()
+    }
 
     // Handle events
     LaunchedEffect(events) {

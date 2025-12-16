@@ -4,7 +4,7 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
-// import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService  // ✅ DISABLED
+import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
 import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingWorker
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingAlarmReceiver
@@ -73,7 +73,7 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
                 stateManager.updateHeartbeat()
 
                 // Ensure tracking service is running
-                // LocationTrackingService.startTracking(this)  // ✅ DISABLED
+                LocationTrackingService.startTracking(this)
 
                 // Ensure keep-alive mechanisms are scheduled
                 TrackingWorker.schedule(this)
@@ -94,7 +94,7 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
             stateManager.setTrackingActive(true)
             stateManager.updateHeartbeat()
 
-            // LocationTrackingService.startTracking(this)  // ✅ DISABLED
+            LocationTrackingService.startTracking(this)
             TrackingWorker.schedule(this)
             TrackingAlarmReceiver.schedule(this)
 
@@ -110,7 +110,7 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
             stateManager.clearState()
 
             // Stop all tracking components
-            // LocationTrackingService.stopTracking(this)  // ✅ DISABLED
+            LocationTrackingService.stopTracking(this)
             TrackingWorker.cancel(this)
             TrackingAlarmReceiver.cancel(this)
 

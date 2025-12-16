@@ -37,6 +37,9 @@ data class BasicResponse(
     val hr_email: String? = null,
     val technical_support_number: String? = null,
     val technical_support_email: String? = null
+
+    // Note: Push notification status removed - no longer returned by API
+    // Firebase FCM token is registered silently in the backend
 )
 
 data class PushNotificationStatus(
@@ -85,9 +88,7 @@ data class CheckInSignatureResponse(
     val status: String,           // "success" | "error"
     val message: String,
     val attendance_record_id: Int? = null,
-    val check_in_time: String? = null,
-    val first_location_tracked: Boolean?,
-    val location_history_id: Int?
+    val check_in_time: String? = null
 )
 
 // -------- Check-Out Response --------
@@ -108,21 +109,23 @@ data class CheckOutResponse(
 
 // -------- Check-Out Signature Response --------
 data class CheckOutSignatureResponse(
-    val status: String,
+    val status: String,           // "success" | "error"
     val message: String,
-    val check_out_time: String?,
-    val work_hours: Float?,
-    val work_minutes: Int?,
-    val attendance_status: String?,
-    val early_leave_minutes: Int?,
-    val location_violation: Boolean?,
-    val work_report_submitted: Boolean?,
-    val work_report_id: Int?,
-    val attachments_count: Int?,
-    val last_location_tracked: Boolean?,
-    val location_history_id: Int?
+    val check_out_time: String? = null,
+    val work_hours: Float? = null,
+    val work_minutes: Int? = null,
+    val attendance_status: String? = null,
+    val early_leave_minutes: Int? = null,
+    val location_violation: Boolean? = null
 )
 
+// ========================================
+// ATTENDANCE HISTORY / TIMESHEET MODELS
+// ========================================
+
+/**
+ * GET /timesheet/monthly Response
+ */
 data class MonthlyTimesheetResponse(
     val status: String,
     val data: MonthlyTimesheetData
@@ -1002,10 +1005,6 @@ data class CircularListData(
     val pagination: PaginationDto
 )
 
-/**
- * ✅ FIXED: Changed attachments from List<String> to String?
- * API returns "attachments":"[]" (string) instead of attachments:[] (array)
- */
 data class CircularDto(
     val id: Int,
     val title: String,
@@ -1078,10 +1077,6 @@ data class CircularDetailResponse(
     val data: CircularDetailDto
 )
 
-/**
- * ✅ FIXED: Changed attachments from List<String> to String?
- * API returns "attachments":"[]" (string) instead of attachments:[] (array)
- */
 data class CircularDetailDto(
     val id: Int,
     val title: String,

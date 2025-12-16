@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.*
 import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
-// import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService  // ✅ DISABLED
+import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
 import java.util.concurrent.TimeUnit
 
 /**
@@ -57,7 +57,7 @@ class TrackingWorker(
 
         if (stateManager.shouldTrackingBeActive()) {
             Log.d(TAG, "✅ Tracking should be active - ensuring service is running")
-            // LocationTrackingService.startTracking(applicationContext)  // ✅ DISABLED
+            LocationTrackingService.startTracking(applicationContext)
             return Result.success()
         } else {
             Log.d(TAG, "⏹️ Tracking should NOT be active")

@@ -8,7 +8,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
 import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
-// import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService  // ✅ DISABLED
+import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
 
 /**
  * AlarmManager keep-alive (every 10 minutes)
@@ -67,7 +67,7 @@ class TrackingAlarmReceiver : BroadcastReceiver() {
 
             if (stateManager.shouldTrackingBeActive()) {
                 Log.d(TAG, "✅ Tracking should be active - ensuring service is running")
-                // LocationTrackingService.startTracking(context)  // ✅ DISABLED
+                LocationTrackingService.startTracking(context)
             } else {
                 Log.d(TAG, "⏹️ Tracking should NOT be active")
             }

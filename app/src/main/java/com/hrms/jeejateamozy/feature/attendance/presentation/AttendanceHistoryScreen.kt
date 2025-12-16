@@ -1,5 +1,6 @@
 package com.hrms.jeejateamozy.feature.attendance.presentation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +37,7 @@ import org.koin.androidx.compose.koinViewModel
  * - Added correction request mini badges on calendar days
  * - Added correction request summary card below month summary
  * - Import correction request components
+ * - ✅ FIX: Added BackHandler for gesture navigation
  */
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +50,11 @@ fun AttendanceHistoryScreen(
     val uiState by viewModel.historyUiState.collectAsState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // ✅ FIX: Handle gesture back navigation (swipe from left edge)
+    BackHandler {
+        onNavigateBack()
+    }
 
     // Handle events
     LaunchedEffect(Unit) {
