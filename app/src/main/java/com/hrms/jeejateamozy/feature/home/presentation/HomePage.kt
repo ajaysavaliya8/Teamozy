@@ -264,13 +264,13 @@ fun HomePage(
                         if (embedding == null) {
                             faceVerifyError = "No face detected or face is unclear. Please try again."
                             faceVerifyBusy = false
-                            return@launch
+                            return@launch  // ✅ Stop after error
                         }
 
                         if (faceVector == null) {
                             faceVerifyError = "No registered face vector. Please contact admin."
                             faceVerifyBusy = false
-                            return@launch
+                            return@launch  // ✅ Stop after error
                         }
 
                         val similarity = EmbeddingExtractor.cosineSimilarity(faceVector, embedding)
@@ -284,6 +284,7 @@ fun HomePage(
                                 verified = true,
                                 context = context
                             )
+                            return@launch  // ✅ CRITICAL: Stop processing after success!
                         } else {
                             Log.e(TAG, "❌ Face NOT verified! Similarity: $similarity < $minimumThreshold")
                             faceVerifyError = "Face does not match (${String.format("%.2f", similarity * 100)}% match). Please try again."
@@ -293,6 +294,7 @@ fun HomePage(
                         Log.e(TAG, "Face capture error: ${e.message}", e)
                         faceVerifyError = "Face capture failed: ${e.message}"
                         faceVerifyBusy = false
+                        return@launch  // ✅ Stop after exception
                     }
                 }
             },
@@ -335,7 +337,7 @@ fun HomePage(
         )
     }
 
-    // Pending Message Dialog
+    // ✅ FIXED: Pending Message Dialog - Only pass acknowledgmentNote
     ui.pendingMessage?.let { message ->
         if (ui.showPendingMessageDialog) {
             PendingMessageDialog(
@@ -344,7 +346,8 @@ fun HomePage(
                     vm.onPendingMessageDismissed()
                 },
                 onAcknowledge = { acknowledgmentNote ->
-                    vm.onPendingMessageAcknowledged(acknowledgmentNote, context)
+                    // ✅ FIXED: Only pass acknowledgmentNote, NOT context
+                    vm.onPendingMessageAcknowledged(acknowledgmentNote)
                 }
             )
         }

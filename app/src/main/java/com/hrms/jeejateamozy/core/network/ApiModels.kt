@@ -37,9 +37,6 @@ data class BasicResponse(
     val hr_email: String? = null,
     val technical_support_number: String? = null,
     val technical_support_email: String? = null
-
-    // Note: Push notification status removed - no longer returned by API
-    // Firebase FCM token is registered silently in the backend
 )
 
 data class PushNotificationStatus(
@@ -88,7 +85,9 @@ data class CheckInSignatureResponse(
     val status: String,           // "success" | "error"
     val message: String,
     val attendance_record_id: Int? = null,
-    val check_in_time: String? = null
+    val check_in_time: String? = null,
+    val first_location_tracked: Boolean?,
+    val location_history_id: Int?
 )
 
 // -------- Check-Out Response --------
@@ -109,23 +108,21 @@ data class CheckOutResponse(
 
 // -------- Check-Out Signature Response --------
 data class CheckOutSignatureResponse(
-    val status: String,           // "success" | "error"
+    val status: String,
     val message: String,
-    val check_out_time: String? = null,
-    val work_hours: Float? = null,
-    val work_minutes: Int? = null,
-    val attendance_status: String? = null,
-    val early_leave_minutes: Int? = null,
-    val location_violation: Boolean? = null
+    val check_out_time: String?,
+    val work_hours: Float?,
+    val work_minutes: Int?,
+    val attendance_status: String?,
+    val early_leave_minutes: Int?,
+    val location_violation: Boolean?,
+    val work_report_submitted: Boolean?,
+    val work_report_id: Int?,
+    val attachments_count: Int?,
+    val last_location_tracked: Boolean?,
+    val location_history_id: Int?
 )
 
-// ========================================
-// ATTENDANCE HISTORY / TIMESHEET MODELS
-// ========================================
-
-/**
- * GET /timesheet/monthly Response
- */
 data class MonthlyTimesheetResponse(
     val status: String,
     val data: MonthlyTimesheetData
@@ -1005,13 +1002,17 @@ data class CircularListData(
     val pagination: PaginationDto
 )
 
+/**
+ * ✅ FIXED: Changed attachments from List<String> to String?
+ * API returns "attachments":"[]" (string) instead of attachments:[] (array)
+ */
 data class CircularDto(
     val id: Int,
     val title: String,
     val description: String,
     val circular_type: String,
     val priority: String,
-    val attachments: List<String>,
+    val attachments: String?,  // ✅ Changed from List<String> to String?
     val effective_date: String?,
     val expiry_date: String?,
     val published_date: String?,
@@ -1028,7 +1029,7 @@ data class CircularDto(
         description = description,
         circularType = circular_type,
         priority = priority,
-        attachments = attachments,
+        attachments = parseAttachments(attachments),  // ✅ Parse string to list
         effectiveDate = effective_date,
         expiryDate = expiry_date,
         publishedDate = published_date,
@@ -1039,6 +1040,23 @@ data class CircularDto(
         approvedAt = approved_at,
         createdAt = created_at
     )
+
+    private fun parseAttachments(attachmentsJson: String?): List<String> {
+        if (attachmentsJson.isNullOrBlank() || attachmentsJson == "[]") {
+            return emptyList()
+        }
+        return try {
+            if (attachmentsJson.startsWith("[")) {
+                val gson = com.google.gson.Gson()
+                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
+                gson.fromJson(attachmentsJson, type) ?: emptyList()
+            } else {
+                listOf(attachmentsJson)
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 }
 
 data class PaginationDto(
@@ -1060,13 +1078,17 @@ data class CircularDetailResponse(
     val data: CircularDetailDto
 )
 
+/**
+ * ✅ FIXED: Changed attachments from List<String> to String?
+ * API returns "attachments":"[]" (string) instead of attachments:[] (array)
+ */
 data class CircularDetailDto(
     val id: Int,
     val title: String,
     val description: String,
     val circular_type: String,
     val priority: String,
-    val attachments: List<String>,
+    val attachments: String?,  // ✅ Changed from List<String> to String?
     val effective_date: String?,
     val expiry_date: String?,
     val published_date: String?,
@@ -1085,7 +1107,7 @@ data class CircularDetailDto(
         description = description,
         circularType = circular_type,
         priority = priority,
-        attachments = attachments,
+        attachments = parseAttachments(attachments),  // ✅ Parse string to list
         effectiveDate = effective_date,
         expiryDate = expiry_date,
         publishedDate = published_date,
@@ -1098,6 +1120,23 @@ data class CircularDetailDto(
         createdAt = created_at,
         updatedAt = updated_at
     )
+
+    private fun parseAttachments(attachmentsJson: String?): List<String> {
+        if (attachmentsJson.isNullOrBlank() || attachmentsJson == "[]") {
+            return emptyList()
+        }
+        return try {
+            if (attachmentsJson.startsWith("[")) {
+                val gson = com.google.gson.Gson()
+                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
+                gson.fromJson(attachmentsJson, type) ?: emptyList()
+            } else {
+                listOf(attachmentsJson)
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 }
 
 data class CreatedByDto(

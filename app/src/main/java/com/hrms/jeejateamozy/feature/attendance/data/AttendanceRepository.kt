@@ -7,13 +7,18 @@ import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.PendingMessage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.core.state.AppStateManager
+import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
+import com.hrms.jeejateamozy.feature.location.model.LocationData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import com.hrms.jeejateamozy.feature.face.util.FaceVectorUtil
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+
+// ==========================================
+// SEALED CLASSES FOR OUTCOMES
+// ==========================================
 
 sealed class AttendanceOutcome {
     data class Success(
@@ -37,7 +42,7 @@ sealed class CheckInOutcome {
         val lateReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
         val message: String,
-        val pendingMessage: PendingMessage? = null  // ✅ NEW
+        val pendingMessage: PendingMessage? = null
     ) : CheckInOutcome()
 
     data class RequiresReasons(
@@ -47,7 +52,7 @@ sealed class CheckInOutcome {
         val lateReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
         val message: String,
-        val pendingMessage: PendingMessage? = null  // ✅ NEW
+        val pendingMessage: PendingMessage? = null
     ) : CheckInOutcome()
 
     data class Success(val message: String) : CheckInOutcome()
@@ -93,10 +98,18 @@ sealed class SignatureOutcome {
     data class Error(val message: String) : SignatureOutcome()
 }
 
+// ==========================================
+// ATTENDANCE REPOSITORY
+// ==========================================
+
 class AttendanceRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
     private val pm = PreferencesManager.getInstance(context)
+
+    // ==========================================
+    // HELPER FUNCTIONS
+    // ==========================================
 
     private fun deviceId(): String {
         val id = android.provider.Settings.Secure.getString(
@@ -115,6 +128,47 @@ class AttendanceRepository(private val context: Context) {
         Log.d("ATTENDANCE", "token() called = ${if (t.isBlank()) "BLANK" else "EXISTS (${t.take(20)}...)"}")
         return t
     }
+
+    private fun extractError(res: retrofit2.Response<*>): String {
+        return try {
+            val errorBody = res.errorBody()?.string()
+            if (!errorBody.isNullOrBlank()) {
+                val json = JSONObject(errorBody)
+                json.optString("message", "Unknown error")
+            } else {
+                "Server error: ${res.code()}"
+            }
+        } catch (e: Exception) {
+            "Server error: ${res.code()}"
+        }
+    }
+
+    private fun friendlyNetError(e: Exception): String {
+        return when {
+            e.message?.contains("Unable to resolve host") == true ||
+                    e.message?.contains("Failed to connect") == true -> "No internet connection"
+            e.message?.contains("timeout") == true -> "Connection timeout. Please try again"
+            else -> "Network error. Please try again"
+        }
+    }
+
+    private fun getFileName(uri: Uri): String? {
+        var fileName: String? = null
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1) {
+                    fileName = it.getString(nameIndex)
+                }
+            }
+        }
+        return fileName
+    }
+
+    // ==========================================
+    // STATUS CHECK
+    // ==========================================
 
     /**
      * Get current attendance status
@@ -163,6 +217,10 @@ class AttendanceRepository(private val context: Context) {
         }
     }
 
+    // ==========================================
+    // CHECK-IN FLOW
+    // ==========================================
+
     /**
      * Initial check-in request
      */
@@ -194,7 +252,7 @@ class AttendanceRepository(private val context: Context) {
                         val lateReasonRequired = body.late_reason_required ?: false
                         val outOfRangeReasonRequired = body.out_of_range_reason_required ?: false
                         val message = body.message ?: "Ready for check-in"
-                        val pendingMessage = body.pending_message  // ✅ NEW: Extract pending message
+                        val pendingMessage = body.pending_message
 
                         Log.d("NET", "Check-in initial success:")
                         Log.d("NET", "  face_verification_required: $faceVerificationRequired")
@@ -203,7 +261,7 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  is_out_of_range: $isOutOfRange")
                         Log.d("NET", "  late_reason_required: $lateReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
-                        Log.d("NET", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}, Type=${pendingMessage.type}" else "null"}")  // ✅ NEW
+                        Log.d("NET", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}, Type=${pendingMessage.type}" else "null"}")
 
                         val faceVector = body.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
@@ -213,13 +271,7 @@ class AttendanceRepository(private val context: Context) {
                             Log.d("NET", "  face_vector present: ${body.face_vector != null}")
                             Log.d("NET", "  face_vector parsed: ${faceVector != null}")
                             if (faceVector != null) {
-                                Log.d("NET", "  face_vector size: ${faceVector.size}")
-                                Log.d("NET", "  face_vector valid: ${FaceVectorUtil.isValidFaceVector(faceVector)}")
-                            }
-                        }
-
-                        when {
-                            faceVerificationRequired -> {
+                                Log.d("NET", "  → Returning RequiresFaceVerification")
                                 CheckInOutcome.RequiresFaceVerification(
                                     tToken = body.t_token,
                                     faceVector = faceVector,
@@ -229,34 +281,37 @@ class AttendanceRepository(private val context: Context) {
                                     lateReasonRequired = lateReasonRequired,
                                     outOfRangeReasonRequired = outOfRangeReasonRequired,
                                     message = message,
-                                    pendingMessage = pendingMessage  // ✅ NEW
+                                    pendingMessage = pendingMessage
                                 )
+                            } else {
+                                Log.e("NET", "  → Face vector required but parsing failed")
+                                CheckInOutcome.Error("Face verification data not available")
                             }
-
-                            lateReasonRequired || outOfRangeReasonRequired -> {
-                                CheckInOutcome.RequiresReasons(
-                                    tToken = body.t_token,
-                                    isLate = isLate,
-                                    isOutOfRange = isOutOfRange,
-                                    lateReasonRequired = lateReasonRequired,
-                                    outOfRangeReasonRequired = outOfRangeReasonRequired,
-                                    message = message,
-                                    pendingMessage = pendingMessage  // ✅ NEW
-                                )
-                            }
-
-                            else -> {
-                                CheckInOutcome.RequiresReasons(
-                                    tToken = body.t_token,
-                                    isLate = false,
-                                    isOutOfRange = false,
-                                    lateReasonRequired = false,
-                                    outOfRangeReasonRequired = false,
-                                    message = message,
-                                    pendingMessage = pendingMessage  // ✅ NEW
-                                )
-                            }
+                        } else if (lateReasonRequired || outOfRangeReasonRequired) {
+                            Log.d("NET", "  → Returning RequiresReasons")
+                            CheckInOutcome.RequiresReasons(
+                                tToken = body.t_token,
+                                isLate = isLate,
+                                isOutOfRange = isOutOfRange,
+                                lateReasonRequired = lateReasonRequired,
+                                outOfRangeReasonRequired = outOfRangeReasonRequired,
+                                message = message,
+                                pendingMessage = pendingMessage
+                            )
+                        } else {
+                            Log.d("NET", "  → Returning RequiresReasons (no additional requirements)")
+                            CheckInOutcome.RequiresReasons(
+                                tToken = body.t_token,
+                                isLate = false,
+                                isOutOfRange = false,
+                                lateReasonRequired = false,
+                                outOfRangeReasonRequired = false,
+                                message = message,
+                                pendingMessage = pendingMessage
+                            )
                         }
+                    } else if (body != null) {
+                        CheckInOutcome.Success(body.message ?: "Check-in successful")
                     } else {
                         CheckInOutcome.Error("Invalid response from server")
                     }
@@ -276,7 +331,7 @@ class AttendanceRepository(private val context: Context) {
     }
 
     /**
-     * Complete check-in with signature
+     * REVISED: Complete check-in with signature and LIVE location data
      */
     suspend fun checkInSignature(
         tToken: String,
@@ -284,7 +339,9 @@ class AttendanceRepository(private val context: Context) {
         faceVerify: Boolean = false,
         lateReason: String? = null,
         outOfRangeReason: String? = null,
-        acknowledgmentNote: String? = null  // ✅ NEW: Acknowledgment note for pending message
+        acknowledgmentNote: String? = null,
+        // ✅ NEW: First location tracking data
+        firstLocationData: LocationData? = null
     ): SignatureOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("NET", "checkInSignature called:")
@@ -293,7 +350,8 @@ class AttendanceRepository(private val context: Context) {
             Log.d("NET", "  face_verify: $faceVerify")
             Log.d("NET", "  late_reason: ${lateReason?.take(50)}")
             Log.d("NET", "  out_of_range_reason: ${outOfRangeReason?.take(50)}")
-            Log.d("NET", "  acknowledgment_note: ${acknowledgmentNote?.take(50)}")  // ✅ NEW
+            Log.d("NET", "  acknowledgment_note: ${acknowledgmentNote?.take(50)}")
+            Log.d("NET", "  first_location_data: ${if (firstLocationData != null) "Present (${firstLocationData.latitude}, ${firstLocationData.longitude})" else "null"}")
 
             val res = api.checkInSignature(
                 tToken = tToken,
@@ -301,7 +359,21 @@ class AttendanceRepository(private val context: Context) {
                 faceVerify = faceVerify,
                 lateReason = lateReason,
                 outOfRangeReason = outOfRangeReason,
-                acknowledgmentNote = acknowledgmentNote,  // ✅ NEW
+                acknowledgmentNote = acknowledgmentNote,
+                // ✅ NEW: First location tracking parameters
+                firstLocationRecordedAt = firstLocationData?.recordedAt,
+                firstLocationLatitude = firstLocationData?.latitude,
+                firstLocationLongitude = firstLocationData?.longitude,
+                firstLocationAccuracy = firstLocationData?.locationAccuracy,
+                firstLocationAltitude = firstLocationData?.altitude,
+                firstLocationVerticalAccuracy = firstLocationData?.verticalAccuracy,
+                firstLocationSpeed = firstLocationData?.speed,
+                firstLocationHeading = firstLocationData?.heading,
+                firstLocationAppVersion = firstLocationData?.appVersion,
+                firstLocationNetworkType = firstLocationData?.networkType,
+                firstLocationWifiName = firstLocationData?.wifiName,
+                firstLocationWifiMacAddress = firstLocationData?.wifiMacAddress,
+                firstLocationBatteryLevel = firstLocationData?.batteryLevel,
                 token = token()
             )
 
@@ -313,6 +385,15 @@ class AttendanceRepository(private val context: Context) {
 
                     if (body != null) {
                         Log.d("NET", "Check-in signature success: ${body.message}")
+
+                        // Log if location was tracked
+                        val firstLocationTracked = body.first_location_tracked ?: false
+                        if (firstLocationTracked) {
+                            Log.d("NET", "✅ First location was tracked: location_history_id=${body.location_history_id}")
+                        } else {
+                            Log.d("NET", "ℹ️ No location data was tracked")
+                        }
+
                         SignatureOutcome.Success(
                             message = body.message,
                             attendanceRecordId = body.attendance_record_id,
@@ -343,6 +424,10 @@ class AttendanceRepository(private val context: Context) {
             SignatureOutcome.Error(friendlyNetError(e))
         }
     }
+
+    // ==========================================
+    // CHECK-OUT FLOW
+    // ==========================================
 
     /**
      * Initial check-out request
@@ -386,23 +471,14 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  is_out_of_range: $isOutOfRange")
                         Log.d("NET", "  early_reason_required: $earlyReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
-                        Log.d("NET", "  work_report_required: $workReportRequired")
+                        Log.d("NET", "  work_report_require: $workReportRequired")
 
                         val faceVector = body.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
                         }
 
                         if (faceVerificationRequired) {
-                            Log.d("NET", "  face_vector present: ${body.face_vector != null}")
-                            Log.d("NET", "  face_vector parsed: ${faceVector != null}")
                             if (faceVector != null) {
-                                Log.d("NET", "  face_vector size: ${faceVector.size}")
-                                Log.d("NET", "  face_vector valid: ${FaceVectorUtil.isValidFaceVector(faceVector)}")
-                            }
-                        }
-
-                        when {
-                            faceVerificationRequired -> {
                                 CheckOutOutcome.RequiresFaceVerification(
                                     tToken = body.t_token,
                                     faceVector = faceVector,
@@ -415,34 +491,34 @@ class AttendanceRepository(private val context: Context) {
                                     workReportRequired = workReportRequired,
                                     message = message
                                 )
+                            } else {
+                                CheckOutOutcome.Error("Face verification data not available")
                             }
-
-                            earlyReasonRequired || outOfRangeReasonRequired || workReportRequired -> {
-                                CheckOutOutcome.RequiresReasons(
-                                    tToken = body.t_token,
-                                    workHours = workHours,
-                                    isEarly = isEarly,
-                                    isOutOfRange = isOutOfRange,
-                                    earlyReasonRequired = earlyReasonRequired,
-                                    outOfRangeReasonRequired = outOfRangeReasonRequired,
-                                    workReportRequired = workReportRequired,
-                                    message = message
-                                )
-                            }
-
-                            else -> {
-                                CheckOutOutcome.RequiresReasons(
-                                    tToken = body.t_token,
-                                    workHours = workHours,
-                                    isEarly = false,
-                                    isOutOfRange = false,
-                                    earlyReasonRequired = false,
-                                    outOfRangeReasonRequired = false,
-                                    workReportRequired = false,
-                                    message = message
-                                )
-                            }
+                        } else if (earlyReasonRequired || outOfRangeReasonRequired || workReportRequired) {
+                            CheckOutOutcome.RequiresReasons(
+                                tToken = body.t_token,
+                                workHours = workHours,
+                                isEarly = isEarly,
+                                isOutOfRange = isOutOfRange,
+                                earlyReasonRequired = earlyReasonRequired,
+                                outOfRangeReasonRequired = outOfRangeReasonRequired,
+                                workReportRequired = workReportRequired,
+                                message = message
+                            )
+                        } else {
+                            CheckOutOutcome.RequiresReasons(
+                                tToken = body.t_token,
+                                workHours = workHours,
+                                isEarly = false,
+                                isOutOfRange = false,
+                                earlyReasonRequired = false,
+                                outOfRangeReasonRequired = false,
+                                workReportRequired = false,
+                                message = message
+                            )
                         }
+                    } else if (body != null) {
+                        CheckOutOutcome.Success(body.message ?: "Check-out successful")
                     } else {
                         CheckOutOutcome.Error("Invalid response from server")
                     }
@@ -466,7 +542,7 @@ class AttendanceRepository(private val context: Context) {
     }
 
     /**
-     * Complete check-out with signature and optional work report
+     * REVISED: Complete check-out with signature, work report, and LIVE location data
      */
     suspend fun checkOutSignature(
         tToken: String,
@@ -475,7 +551,9 @@ class AttendanceRepository(private val context: Context) {
         earlyReason: String? = null,
         outOfRangeReason: String? = null,
         workReport: String? = null,
-        workReportFileUri: Uri? = null
+        workReportFileUri: Uri? = null,
+        // ✅ NEW: Last location tracking data
+        lastLocationData: LocationData? = null
     ): SignatureOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("NET", "checkOutSignature called:")
@@ -485,6 +563,7 @@ class AttendanceRepository(private val context: Context) {
             Log.d("NET", "  early_reason: ${earlyReason?.take(50)}")
             Log.d("NET", "  out_of_range_reason: ${outOfRangeReason?.take(50)}")
             Log.d("NET", "  work_report: ${workReport?.take(50)}")
+            Log.d("NET", "  last_location_data: ${if (lastLocationData != null) "Present (${lastLocationData.latitude}, ${lastLocationData.longitude})" else "null"}")
 
             // Prepare multipart request bodies
             val tTokenBody = tToken.toRequestBody("text/plain".toMediaTypeOrNull())
@@ -493,6 +572,21 @@ class AttendanceRepository(private val context: Context) {
             val earlyReasonBody = earlyReason?.toRequestBody("text/plain".toMediaTypeOrNull())
             val outOfRangeReasonBody = outOfRangeReason?.toRequestBody("text/plain".toMediaTypeOrNull())
             val workReportBody = workReport?.toRequestBody("text/plain".toMediaTypeOrNull())
+
+            // ✅ NEW: Prepare location tracking request bodies
+            val lastLocationRecordedAtBody = lastLocationData?.recordedAt?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationLatitudeBody = lastLocationData?.latitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationLongitudeBody = lastLocationData?.longitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationAccuracyBody = lastLocationData?.locationAccuracy?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationAltitudeBody = lastLocationData?.altitude?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationVerticalAccuracyBody = lastLocationData?.verticalAccuracy?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationSpeedBody = lastLocationData?.speed?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationHeadingBody = lastLocationData?.heading?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationAppVersionBody = lastLocationData?.appVersion?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationNetworkTypeBody = lastLocationData?.networkType?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationWifiNameBody = lastLocationData?.wifiName?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationWifiMacAddressBody = lastLocationData?.wifiMacAddress?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val lastLocationBatteryLevelBody = lastLocationData?.batteryLevel?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
 
             // Prepare file part if provided
             var filePart: MultipartBody.Part? = null
@@ -509,7 +603,7 @@ class AttendanceRepository(private val context: Context) {
 
                         val requestBody = bytes.toRequestBody(mimeType.toMediaTypeOrNull())
                         filePart = MultipartBody.Part.createFormData(
-                            "work_report_file",
+                            "attachments",  // Changed to match backend
                             fileName,
                             requestBody
                         )
@@ -527,7 +621,21 @@ class AttendanceRepository(private val context: Context) {
                 earlyReason = earlyReasonBody,
                 outOfRangeReason = outOfRangeReasonBody,
                 workReport = workReportBody,
-                filePart,
+                attachments = if (filePart != null) listOf(filePart) else null,
+                // ✅ NEW: Last location tracking parameters
+                lastLocationRecordedAt = lastLocationRecordedAtBody,
+                lastLocationLatitude = lastLocationLatitudeBody,
+                lastLocationLongitude = lastLocationLongitudeBody,
+                lastLocationAccuracy = lastLocationAccuracyBody,
+                lastLocationAltitude = lastLocationAltitudeBody,
+                lastLocationVerticalAccuracy = lastLocationVerticalAccuracyBody,
+                lastLocationSpeed = lastLocationSpeedBody,
+                lastLocationHeading = lastLocationHeadingBody,
+                lastLocationAppVersion = lastLocationAppVersionBody,
+                lastLocationNetworkType = lastLocationNetworkTypeBody,
+                lastLocationWifiName = lastLocationWifiNameBody,
+                lastLocationWifiMacAddress = lastLocationWifiMacAddressBody,
+                lastLocationBatteryLevel = lastLocationBatteryLevelBody,
                 token = token()
             )
 
@@ -539,6 +647,15 @@ class AttendanceRepository(private val context: Context) {
 
                     if (body != null) {
                         Log.d("NET", "Check-out signature success: ${body.message}")
+
+                        // Log if location was tracked
+                        val lastLocationTracked = body.last_location_tracked ?: false
+                        if (lastLocationTracked) {
+                            Log.d("NET", "✅ Last location was tracked: location_history_id=${body.location_history_id}")
+                        } else {
+                            Log.d("NET", "ℹ️ No location data was tracked")
+                        }
+
                         SignatureOutcome.Success(
                             message = body.message,
                             attendanceRecordId = null,
@@ -567,43 +684,6 @@ class AttendanceRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e("NET", "Exception in checkOutSignature", e)
             SignatureOutcome.Error(friendlyNetError(e))
-        }
-    }
-
-    private fun getFileName(uri: Uri): String? {
-        var fileName: String? = null
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameIndex != -1) {
-                    fileName = it.getString(nameIndex)
-                }
-            }
-        }
-        return fileName
-    }
-
-    private fun extractError(res: retrofit2.Response<*>): String {
-        return try {
-            val errorBody = res.errorBody()?.string()
-            if (!errorBody.isNullOrBlank()) {
-                val json = JSONObject(errorBody)
-                json.optString("message", "Unknown error")
-            } else {
-                "Server error: ${res.code()}"
-            }
-        } catch (e: Exception) {
-            "Server error: ${res.code()}"
-        }
-    }
-
-    private fun friendlyNetError(e: Exception): String {
-        return when {
-            e.message?.contains("Unable to resolve host") == true ||
-                    e.message?.contains("Failed to connect") == true -> "No internet connection"
-            e.message?.contains("timeout") == true -> "Connection timeout. Please try again"
-            else -> "Network error. Please try again"
         }
     }
 }

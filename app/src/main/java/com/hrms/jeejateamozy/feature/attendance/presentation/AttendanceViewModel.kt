@@ -14,7 +14,7 @@ import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
 import com.hrms.jeejateamozy.feature.attendance.data.CheckInOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.CheckOutOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.SignatureOutcome
-// import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService  // ✅ DISABLED
+import com.hrms.jeejateamozy.feature.location.model.LocationData
 import com.hrms.jeejateamozy.feature.location.sync.PersistentSyncManager
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingWorker
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingAlarmReceiver
@@ -50,19 +50,9 @@ class AttendanceViewModel(
 
     private var hasLoadedInitialStatus = false
 
-    private fun emitError(message: String) {
-        viewModelScope.launch {
-            Log.e(TAG, "Emitting error event: $message")
-            _events.emit(AttendanceEvent.ShowError(message))
-        }
-    }
-
-    private fun emitSuccess(message: String) {
-        viewModelScope.launch {
-            Log.d(TAG, "Emitting success event: $message")
-            _events.emit(AttendanceEvent.ShowSuccess(message))
-        }
-    }
+    // ==========================================
+    // LIFECYCLE & STATUS
+    // ==========================================
 
     fun loadInitialStatusIfNeeded() {
         if (!hasLoadedInitialStatus) {
@@ -110,6 +100,10 @@ class AttendanceViewModel(
             }
         }
     }
+
+    // ==========================================
+    // CHECK-IN FLOW
+    // ==========================================
 
     fun startCheckIn(context: Context) {
         viewModelScope.launch {
@@ -192,6 +186,185 @@ class AttendanceViewModel(
         }
     }
 
+    /**
+     * REVISED: Complete check-in with CLEAR database + LIVE location capture
+     * ✅ FIXED: All compilation errors resolved
+     */
+    fun completeCheckIn(
+        lateReason: String?,
+        outOfRangeReason: String?,
+        context: Context,
+        activity: Activity? = null
+    ) {
+        val tToken = _ui.value.checkInTToken
+        if (tToken == null) {
+            Log.e(TAG, "❌ Invalid check-in session")
+            emitError("Invalid check-in session")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                _ui.value = _ui.value.copy(
+                    isLoading = true,
+                    loadingMessage = "Clearing old location data...",
+                    showReasonDialog = false
+                )
+
+                // ==========================================
+                // STEP 1: CLEAR all existing pending locations (fresh start)
+                // ==========================================
+                Log.d(TAG, "🗑️ Clearing all old pending locations before check-in...")
+
+                val syncManager = PersistentSyncManager.getInstance(context)
+
+                try {
+                    val cleared = syncManager.clearAllPendingLocations()
+                    if (cleared) {
+                        Log.d(TAG, "✅ Successfully cleared all old location data")
+                    } else {
+                        Log.w(TAG, "⚠️ Failed to clear old location data, but continuing...")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error clearing old locations", e)
+                    // Continue anyway - this shouldn't block check-in
+                }
+
+                // ==========================================
+                // STEP 2: Capture CURRENT LIVE location
+                // ==========================================
+                _ui.value = _ui.value.copy(
+                    loadingMessage = "Getting current location..."
+                )
+
+                val firstLocationData = try {
+                    Log.d(TAG, "📍 Capturing LIVE location for check-in...")
+
+                    val locationHelper = LocationHelper(context)
+
+                    // Check if location is enabled
+                    if (!locationHelper.isLocationEnabled()) {
+                        Log.w(TAG, "⚠️ Location is disabled - check-in will proceed without location")
+                        null
+                    } else {
+                        // Capture fresh location
+                        when (val result = locationHelper.getCurrentLocation(
+                            desiredAccuracyMeters = 75f,
+                            hardTimeoutMs = 10_000
+                        )) {
+                            is LocationResult.Success -> {
+                                Log.d(TAG, "✅ Live location captured: (${result.latitude}, ${result.longitude}), accuracy: ${result.accuracy}m")
+
+                                // Create LocationData from live location
+                                createLocationData(context, result.latitude, result.longitude, result.accuracy)
+                            }
+                            is LocationResult.Error -> {
+                                Log.w(TAG, "⚠️ Failed to capture live location: ${result.message}")
+                                null
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error capturing live location", e)
+                    null
+                }
+
+                if (firstLocationData == null) {
+                    Log.w(TAG, "⚠️ No live location data available - check-in will proceed without location")
+                }
+
+                // ==========================================
+                // STEP 3: Complete check-in with LIVE location data
+                // ==========================================
+                _ui.value = _ui.value.copy(
+                    loadingMessage = "Completing check-in..."
+                )
+
+                val acknowledgmentNote = _ui.value.acknowledgmentNote
+
+                Log.d(TAG, "Completing check-in with acknowledgment: ${acknowledgmentNote?.take(50)}")
+
+                val outcome = repo.checkInSignature(
+                    tToken = tToken,
+                    faceRecognitionQualityScore = _ui.value.faceRecognitionQualityScore,
+                    faceVerify = _ui.value.faceVerificationSuccess,
+                    lateReason = lateReason,
+                    outOfRangeReason = outOfRangeReason,
+                    acknowledgmentNote = acknowledgmentNote,
+                    firstLocationData = firstLocationData  // ✅ NEW: Pass LIVE location data
+                )
+
+                when (outcome) {
+                    is SignatureOutcome.Success -> {
+                        Log.d(TAG, "✅ Check-in completed: ${outcome.message}")
+
+                        // Start location tracking after successful check-in
+                        try {
+                            val trackingStateManager = TrackingStateManager(context)
+                            trackingStateManager.setTrackingActive(true)
+
+                            TrackingWorker.schedule(context)
+                            TrackingAlarmReceiver.schedule(context)
+
+                            if (activity != null) {
+                                // ✅ FIXED: Changed from requestIgnoreBatteryOptimizations to requestExemption
+                                BatteryOptimizationHelper.requestExemption(activity)
+                            }
+
+                            Log.d(TAG, "✅ Location tracking started")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "⚠️ Error starting tracking (non-critical)", e)
+                        }
+
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            currentState = "CHECK_OUT_NEEDED",
+                            lastCheckInTime = outcome.checkInTime,
+                            checkInTToken = null,
+                            checkInFaceVector = null,
+                            checkInMessage = null,
+                            faceRecognitionQualityScore = null,
+                            faceVerificationSuccess = false,
+                            pendingMessage = null,
+                            acknowledgmentNote = null
+                        )
+
+                        emitSuccess(outcome.message)
+                    }
+
+                    is SignatureOutcome.Error -> {
+                        Log.e(TAG, "❌ CHECK-IN SIGNATURE ERROR: ${outcome.message}")
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            checkInTToken = null,
+                            checkInFaceVector = null,
+                            checkInMessage = null,
+                            pendingMessage = null,
+                            acknowledgmentNote = null
+                        )
+                        emitError(outcome.message)
+                        delay(500)
+                        refreshStatus(force = true)
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error in completeCheckIn", e)
+                _ui.value = _ui.value.copy(
+                    isLoading = false,
+                    loadingMessage = null
+                )
+                emitError("An error occurred during check-in")
+            }
+        }
+    }
+
+    // ==========================================
+    // CHECK-OUT FLOW
+    // ==========================================
+
     fun startCheckOut(context: Context) {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(isLoading = true)
@@ -240,12 +413,15 @@ class AttendanceViewModel(
                     checkOutOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkOutWorkReportRequired = outcome.workReportRequired,
                     checkOutMessage = outcome.message,
-                    showReasonDialog = outcome.earlyReasonRequired || outcome.outOfRangeReasonRequired,
-                    showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired
+                    showReasonDialog = outcome.earlyReasonRequired || outcome.outOfRangeReasonRequired
                 )
 
-                if (!outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired && !outcome.workReportRequired) {
-                    completeCheckOut(null, null, null, null, context)
+                if (!outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired) {
+                    if (outcome.workReportRequired) {
+                        _ui.value = _ui.value.copy(showWorkReportDialog = true)
+                    } else {
+                        completeCheckOut(null, null, null, null, context)
+                    }
                 }
             }
 
@@ -253,9 +429,7 @@ class AttendanceViewModel(
                 Log.d(TAG, "✅ Check-out directly successful")
                 _ui.value = _ui.value.copy(
                     isLoading = false,
-                    currentState = "CHECK_IN_NEEDED",
-                    lastCheckInTime = null,
-                    isComplete = true
+                    currentState = "CHECK_IN_NEEDED"
                 )
                 emitSuccess(outcome.message)
             }
@@ -268,105 +442,257 @@ class AttendanceViewModel(
         }
     }
 
-    fun onPendingMessageAcknowledged(acknowledgmentNote: String?, context: Context) {
-        Log.d(TAG, "✅ Message acknowledged, note: ${acknowledgmentNote?.take(50)}")
+    /**
+     * REVISED: Complete check-out with SYNC ALL + LIVE location capture
+     * ✅ FIXED: All compilation errors resolved
+     */
+    fun completeCheckOut(
+        earlyReason: String?,
+        outOfRangeReason: String?,
+        workReport: String?,
+        workReportFileUri: Uri?,
+        context: Context
+    ) {
+        val tToken = _ui.value.checkOutTToken
+        if (tToken == null) {
+            Log.e(TAG, "❌ Invalid check-out session")
+            emitError("Invalid check-out session")
+            return
+        }
 
+        viewModelScope.launch {
+            try {
+                _ui.value = _ui.value.copy(
+                    isLoading = true,
+                    loadingMessage = "Syncing location history...",
+                    showReasonDialog = false,
+                    showWorkReportDialog = false
+                )
+
+                // ==========================================
+                // STEP 1: PUSH/SYNC all existing pending locations FIRST
+                // ==========================================
+                Log.d(TAG, "🔄 Syncing ALL pending locations before check-out...")
+
+                val syncManager = PersistentSyncManager.getInstance(context)
+
+                try {
+                    val hasPending = syncManager.hasPendingLocations()
+
+                    if (hasPending) {
+                        Log.d(TAG, "📊 Found pending locations - starting sync...")
+
+                        val syncResult = syncManager.forceSyncAllBeforeCheckout(
+                            maxWaitTimeMs = 10_000L  // Give 10 seconds for sync
+                        )
+
+                        when (syncResult) {
+                            is PersistentSyncManager.SyncResult.Success -> {
+                                Log.d(TAG, "✅ All ${syncResult.synced} pending locations synced successfully")
+                            }
+
+                            is PersistentSyncManager.SyncResult.Timeout -> {
+                                Log.w(TAG, "⏱️ Sync timeout: ${syncResult.synced} synced, ${syncResult.failed} failed")
+
+                                // Show warning but allow check-out to continue
+                                if (syncResult.failed > 0) {
+                                    Log.w(TAG, "⚠️ ${syncResult.failed} locations could not be synced in time")
+                                }
+                            }
+
+                            is PersistentSyncManager.SyncResult.NetworkError -> {
+                                Log.e(TAG, "🌐 Network error during sync: ${syncResult.synced} synced, ${syncResult.failed} failed")
+
+                                // Don't block check-out for network errors
+                                Log.w(TAG, "⚠️ Proceeding with check-out despite network error")
+                            }
+
+                            is PersistentSyncManager.SyncResult.Error -> {
+                                Log.e(TAG, "❌ Sync error: ${syncResult.message}")
+                                Log.w(TAG, "⚠️ Proceeding with check-out despite sync error")
+                            }
+                        }
+                    } else {
+                        Log.d(TAG, "✅ No pending locations to sync")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error during location sync", e)
+                    // Don't block check-out - this is best effort
+                    Log.w(TAG, "⚠️ Proceeding with check-out despite sync error")
+                }
+
+                // ==========================================
+                // STEP 2: Capture CURRENT LIVE location
+                // ==========================================
+                _ui.value = _ui.value.copy(
+                    loadingMessage = "Getting current location..."
+                )
+
+                val lastLocationData = try {
+                    Log.d(TAG, "📍 Capturing LIVE location for check-out...")
+
+                    val locationHelper = LocationHelper(context)
+
+                    // Check if location is enabled
+                    if (!locationHelper.isLocationEnabled()) {
+                        Log.w(TAG, "⚠️ Location is disabled - check-out will proceed without location")
+                        null
+                    } else {
+                        // Capture fresh location
+                        when (val result = locationHelper.getCurrentLocation(
+                            desiredAccuracyMeters = 75f,
+                            hardTimeoutMs = 10_000
+                        )) {
+                            is LocationResult.Success -> {
+                                Log.d(TAG, "✅ Live location captured: (${result.latitude}, ${result.longitude}), accuracy: ${result.accuracy}m")
+
+                                // Create LocationData from live location
+                                createLocationData(context, result.latitude, result.longitude, result.accuracy)
+                            }
+                            is LocationResult.Error -> {
+                                Log.w(TAG, "⚠️ Failed to capture live location: ${result.message}")
+                                null
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error capturing live location", e)
+                    null
+                }
+
+                if (lastLocationData == null) {
+                    Log.w(TAG, "⚠️ No live location data available - check-out will proceed without location")
+                }
+
+                // ==========================================
+                // STEP 3: Complete check-out with LIVE location data
+                // ==========================================
+                _ui.value = _ui.value.copy(
+                    loadingMessage = "Completing check-out..."
+                )
+
+                val outcome = repo.checkOutSignature(
+                    tToken = tToken,
+                    faceRecognitionQualityScore = _ui.value.faceRecognitionQualityScore,
+                    faceVerify = _ui.value.faceVerificationSuccess,
+                    earlyReason = earlyReason,
+                    outOfRangeReason = outOfRangeReason,
+                    workReport = workReport,
+                    workReportFileUri = workReportFileUri,
+                    lastLocationData = lastLocationData  // ✅ NEW: Pass LIVE location data
+                )
+
+                when (outcome) {
+                    is SignatureOutcome.Success -> {
+                        Log.d(TAG, "✅ Check-out completed: ${outcome.message}")
+
+                        // Stop location tracking after successful check-out
+                        try {
+                            TrackingWorker.cancel(context)
+                            TrackingAlarmReceiver.cancel(context)
+
+                            val trackingStateManager = TrackingStateManager(context)
+                            trackingStateManager.clearState()
+
+                            Log.d(TAG, "✅ All tracking components stopped")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "⚠️ Error stopping tracking components (non-critical)", e)
+                        }
+
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            currentState = "CHECK_IN_NEEDED",
+                            lastCheckInTime = null,
+                            checkOutTToken = null,
+                            checkOutFaceVector = null,
+                            checkOutMessage = null,
+                            faceRecognitionQualityScore = null,
+                            faceVerificationSuccess = false,
+                            tempEarlyReason = null,
+                            tempOutOfRangeReason = null,
+                            isComplete = true
+                        )
+
+                        emitSuccess(outcome.message)
+                    }
+
+                    is SignatureOutcome.Error -> {
+                        Log.e(TAG, "❌ CHECK-OUT SIGNATURE ERROR: ${outcome.message}")
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            checkOutTToken = null,
+                            checkOutFaceVector = null,
+                            checkOutMessage = null,
+                            tempEarlyReason = null,
+                            tempOutOfRangeReason = null
+                        )
+                        emitError(outcome.message)
+                        delay(500)
+                        refreshStatus(force = true)
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error in completeCheckOut", e)
+                _ui.value = _ui.value.copy(
+                    isLoading = false,
+                    loadingMessage = null
+                )
+                emitError("An error occurred during check-out")
+            }
+        }
+    }
+
+    // ==========================================
+    // UI INTERACTION HANDLERS
+    // ==========================================
+
+    /**
+     * ✅ FIXED: Changed requiresAcknowledgment to requires_acknowledgment
+     */
+    fun onPendingMessageAcknowledged(note: String?) {
         _ui.value = _ui.value.copy(
+            acknowledgmentNote = note,
             showPendingMessageDialog = false,
-            acknowledgmentNote = acknowledgmentNote
+            // ✅ FIXED: Changed from requiresAcknowledgment to requires_acknowledgment
+            requiresAcknowledgment = _ui.value.pendingMessage?.requires_acknowledgment ?: false
         )
 
-        val hasLateOrOutOfRangeReasons = _ui.value.checkInLateReasonRequired || _ui.value.checkInOutOfRangeReasonRequired
-        val hasFaceVerification = _ui.value.checkInFaceVector != null
+        val lateReasonRequired = _ui.value.checkInLateReasonRequired
+        val outOfRangeReasonRequired = _ui.value.checkInOutOfRangeReasonRequired
+        val faceVerificationRequired = _ui.value.checkInFaceVector != null
 
         when {
-            hasFaceVerification -> {
+            faceVerificationRequired -> {
                 _ui.value = _ui.value.copy(showFaceVerification = true)
             }
-            hasLateOrOutOfRangeReasons -> {
+            lateReasonRequired || outOfRangeReasonRequired -> {
                 _ui.value = _ui.value.copy(showReasonDialog = true)
             }
             else -> {
-                completeCheckIn(null, null, context)
+                // No additional requirements, complete check-in
+                // This will be handled by the UI
             }
         }
     }
 
+    /**
+     * ✅ NEW: Added method for dismissing pending message dialog
+     */
     fun onPendingMessageDismissed() {
-        Log.d(TAG, "❌ Message cancelled - stopping check-in process")
         _ui.value = _ui.value.copy(
-            isLoading = false,
             showPendingMessageDialog = false,
             pendingMessage = null,
-            acknowledgmentNote = null,
-            checkInTToken = null,
-            checkInFaceVector = null,
-            checkInMessage = null,
-            checkInMinimumQualityScore = null,
-            checkInIsLate = false,
-            checkInIsOutOfRange = false,
-            checkInLateReasonRequired = false,
-            checkInOutOfRangeReasonRequired = false,
-            showFaceVerification = false,
-            showReasonDialog = false
+            acknowledgmentNote = null
         )
-
         emitError("Check-in cancelled")
-    }
-
-    fun onFaceVerificationCancelled() {
-        Log.d(TAG, "❌ Face verification cancelled - stopping process")
-
-        val isCheckIn = _ui.value.checkInTToken != null
-
-        if (isCheckIn) {
-            _ui.value = _ui.value.copy(
-                isLoading = false,
-                showFaceVerification = false,
-                showReasonDialog = false,
-                showPendingMessageDialog = false,
-                checkInTToken = null,
-                checkInFaceVector = null,
-                checkInMessage = null,
-                checkInMinimumQualityScore = null,
-                checkInIsLate = false,
-                checkInIsOutOfRange = false,
-                checkInLateReasonRequired = false,
-                checkInOutOfRangeReasonRequired = false,
-                pendingMessage = null,
-                acknowledgmentNote = null,
-                faceVerificationQualityScore = null,
-                faceVerificationSuccess = false
-            )
-        } else {
-            _ui.value = _ui.value.copy(
-                isLoading = false,
-                showFaceVerification = false,
-                showReasonDialog = false,
-                showWorkReportDialog = false,
-                checkOutTToken = null,
-                checkOutFaceVector = null,
-                checkOutMessage = null,
-                checkOutMinimumQualityScore = null,
-                checkOutWorkHours = null,
-                checkOutIsEarly = false,
-                checkOutIsOutOfRange = false,
-                checkOutEarlyReasonRequired = false,
-                checkOutOutOfRangeReasonRequired = false,
-                checkOutWorkReportRequired = false,
-                faceVerificationQualityScore = null,
-                faceVerificationSuccess = false,
-                tempEarlyReason = null,
-                tempOutOfRangeReason = null
-            )
-        }
-
-        emitError("${if (isCheckIn) "Check-in" else "Check-out"} cancelled")
     }
 
     fun onFaceVerificationComplete(qualityScore: Float, verified: Boolean, context: Context) {
         _ui.value = _ui.value.copy(
-            faceVerificationQualityScore = qualityScore,
+            faceRecognitionQualityScore = qualityScore,
             faceVerificationSuccess = verified,
             showFaceVerification = false
         )
@@ -401,342 +727,6 @@ class AttendanceViewModel(
         }
     }
 
-    fun onReasonDialogDismissed() {
-        _ui.value = _ui.value.copy(showReasonDialog = false)
-    }
-
-    fun onWorkReportDialogDismissed() {
-        _ui.value = _ui.value.copy(showWorkReportDialog = false)
-    }
-
-    fun completeCheckIn(
-        lateReason: String?,
-        outOfRangeReason: String?,
-        context: Context,
-        activity: Activity? = null
-    ) {
-        // ✅ DEBUG: Entry point
-        Log.d(TAG, "🔍 DEBUG 1: completeCheckIn() CALLED")
-        Log.d(TAG, "🔍 DEBUG 2: tToken from UI state = ${_ui.value.checkInTToken}")
-
-        val tToken = _ui.value.checkInTToken
-        if (tToken == null) {
-            Log.e(TAG, "❌ Invalid check-in session")
-            emitError("Invalid check-in session")
-            return
-        }
-
-        // ✅ DEBUG: Before coroutine launch
-        Log.d(TAG, "🔍 DEBUG 3: About to launch viewModelScope...")
-
-        viewModelScope.launch {
-            // ✅ DEBUG: Inside coroutine
-            Log.d(TAG, "🔍 DEBUG 4: Inside viewModelScope coroutine!")
-
-            try {
-                // ✅ DEBUG: Inside try block
-                Log.d(TAG, "🔍 DEBUG 5: Entered try block successfully")
-
-                _ui.value = _ui.value.copy(
-                    isLoading = true,
-                    loadingMessage = "Preparing check-in...",
-                    showReasonDialog = false
-                )
-
-                Log.d(TAG, "🔍 DEBUG 6: UI state updated with loading")
-                Log.d(TAG, "🔄 Starting check-in process...")
-
-                // ✅ DEBUG: Before creating sync manager
-                Log.d(TAG, "🔍 DEBUG 7: About to get PersistentSyncManager instance...")
-
-                val syncManager = PersistentSyncManager.getInstance(context)
-
-                Log.d(TAG, "🔍 DEBUG 8: PersistentSyncManager instance created: $syncManager")
-
-                // ✅ DEBUG: Before checking pending
-                Log.d(TAG, "🔍 DEBUG 9: About to check hasPendingLocations()...")
-
-                val hasOldData = syncManager.hasPendingLocations()
-
-                Log.d(TAG, "🔍 DEBUG 10: hasPendingLocations() returned: $hasOldData")
-
-                if (hasOldData) {
-                    Log.d(TAG, "🔍 DEBUG 11: hasOldData is TRUE - getting count...")
-
-                    val oldCount = syncManager.getPendingCount()
-
-                    Log.d(TAG, "🔍 DEBUG 12: Old data count: $oldCount")
-                    Log.w(TAG, "⚠️ Found $oldCount old locations - handling in background with retry")
-
-                    Log.d(TAG, "🔍 DEBUG 13: About to call backgroundSyncOrClearOldData()...")
-
-                    val syncResult = syncManager.backgroundSyncOrClearOldData()
-
-                    Log.d(TAG, "🔍 DEBUG 14: backgroundSyncOrClearOldData() returned: $syncResult")
-
-                    when (syncResult) {
-                        is PersistentSyncManager.BackgroundSyncResult.Synced -> {
-                            Log.d(TAG, "✅ Background sync SUCCESS on attempt ${syncResult.attempts}: ${syncResult.count} old locations saved")
-                        }
-
-                        is PersistentSyncManager.BackgroundSyncResult.ClearedDueToNetwork -> {
-                            Log.w(TAG, "🌐 Cleared ${syncResult.count} old locations after ${syncResult.attempts} attempts (no network)")
-                        }
-
-                        is PersistentSyncManager.BackgroundSyncResult.ClearedDueToTimeout -> {
-                            Log.w(TAG, "⏱️ After ${syncResult.attempts} attempts: synced ${syncResult.synced}, cleared ${syncResult.cleared} old locations")
-                        }
-
-                        is PersistentSyncManager.BackgroundSyncResult.ClearedDueToError -> {
-                            Log.e(TAG, "❌ Cleared ${syncResult.count} old locations after ${syncResult.attempts} attempts: ${syncResult.message}")
-                        }
-
-                        is PersistentSyncManager.BackgroundSyncResult.Failed -> {
-                            Log.e(TAG, "❌ Failed to handle old data: ${syncResult.message}")
-                        }
-
-                        is PersistentSyncManager.BackgroundSyncResult.NoData -> {
-                            Log.d(TAG, "✅ No old data found")
-                        }
-                    }
-                } else {
-                    Log.d(TAG, "🔍 DEBUG 15: hasOldData is FALSE")
-                    Log.d(TAG, "✅ No old data - proceeding with clean check-in")
-                }
-
-                Log.d(TAG, "🔍 DEBUG 16: Background sync completed, proceeding to signature...")
-
-                _ui.value = _ui.value.copy(
-                    loadingMessage = "Completing check-in..."
-                )
-
-                val acknowledgmentNote = _ui.value.acknowledgmentNote
-
-                Log.d(TAG, "Completing check-in with acknowledgment: ${acknowledgmentNote?.take(50)}")
-
-                when (val outcome = repo.checkInSignature(
-                    tToken = tToken,
-                    faceRecognitionQualityScore = _ui.value.faceVerificationQualityScore,
-                    faceVerify = _ui.value.faceVerificationSuccess,
-                    lateReason = lateReason,
-                    outOfRangeReason = outOfRangeReason,
-                    acknowledgmentNote = acknowledgmentNote
-                )) {
-                    is SignatureOutcome.Success -> {
-                        Log.d(TAG, "✅ Check-in signature SUCCESS")
-
-                        Log.d(TAG, "🚀 Starting tracking components...")
-
-                        try {
-                            val trackingStateManager = TrackingStateManager(context)
-                            trackingStateManager.setTrackingActive(true)
-                            trackingStateManager.updateHeartbeat()
-
-                            // ✅ DISABLED: LocationTrackingService.startTracking(context)
-
-                            TrackingWorker.schedule(context)
-                            TrackingAlarmReceiver.schedule(context)
-
-                            activity?.let {
-                                if (!BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)) {
-                                    Log.d(TAG, "🔋 Requesting battery optimization exemption")
-                                    BatteryOptimizationHelper.requestExemption(it)
-                                }
-                            }
-
-                            Log.d(TAG, "✅ All tracking components started successfully")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "⚠️ Error starting tracking components (non-critical)", e)
-                        }
-
-                        _ui.value = _ui.value.copy(
-                            isLoading = false,
-                            loadingMessage = null,
-                            currentState = "CHECK_OUT_NEEDED",
-                            lastCheckInTime = outcome.checkInTime,
-                            checkInTToken = null,
-                            checkInFaceVector = null,
-                            checkInMessage = null,
-                            faceVerificationQualityScore = null,
-                            faceVerificationSuccess = false,
-                            pendingMessage = null,
-                            acknowledgmentNote = null
-                        )
-
-                        emitSuccess(outcome.message)
-                    }
-
-                    is SignatureOutcome.Error -> {
-                        Log.e(TAG, "❌ CHECK-IN SIGNATURE ERROR: ${outcome.message}")
-                        _ui.value = _ui.value.copy(
-                            isLoading = false,
-                            loadingMessage = null,
-                            checkInTToken = null,
-                            checkInFaceVector = null,
-                            checkInMessage = null,
-                            pendingMessage = null,
-                            acknowledgmentNote = null
-                        )
-                        emitError(outcome.message)
-                        delay(500)
-                        refreshStatus(force = true)
-                    }
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Check-in error", e)
-                Log.e(TAG, "🔍 DEBUG ERROR: Exception caught: ${e.message}")
-                Log.e(TAG, "🔍 DEBUG ERROR: Stack trace:", e)
-                _ui.value = _ui.value.copy(
-                    isLoading = false,
-                    loadingMessage = null
-                )
-                emitError("Check-in failed: ${e.message}")
-            }
-        }
-    }
-
-    fun completeCheckOut(
-        earlyReason: String?,
-        outOfRangeReason: String?,
-        workReport: String?,
-        workReportFileUri: Uri?,
-        context: Context
-    ) {
-        val tToken = _ui.value.checkOutTToken
-        if (tToken == null) {
-            Log.e(TAG, "❌ Invalid check-out session")
-            emitError("Invalid check-out session")
-            return
-        }
-
-        viewModelScope.launch {
-            try {
-                _ui.value = _ui.value.copy(
-                    isLoading = true,
-                    loadingMessage = "Syncing location data...",
-                    showReasonDialog = false,
-                    showWorkReportDialog = false
-                )
-
-                Log.d(TAG, "🔄 Starting location sync before check-out...")
-
-                try {
-                    val syncManager = PersistentSyncManager.getInstance(context)
-                    val syncResult = syncManager.forceSyncAllBeforeCheckout(
-                        maxWaitTimeMs = 5_000L
-                    )
-
-                    when (syncResult) {
-                        is PersistentSyncManager.SyncResult.Success -> {
-                            Log.d(TAG, "✅ All locations synced: ${syncResult.synced} locations")
-                        }
-
-                        is PersistentSyncManager.SyncResult.Timeout -> {
-                            Log.w(TAG, "⏱️ Sync timeout: ${syncResult.synced} synced, ${syncResult.failed} failed")
-                        }
-
-                        is PersistentSyncManager.SyncResult.NetworkError -> {
-                            Log.e(TAG, "🌐 Network error during sync")
-                            _ui.value = _ui.value.copy(
-                                isLoading = false,
-                                loadingMessage = null
-                            )
-                            emitError("Network error. Please check your connection and try again.")
-                            return@launch
-                        }
-
-                        is PersistentSyncManager.SyncResult.Error -> {
-                            Log.e(TAG, "❌ Sync error: ${syncResult.message}")
-                            _ui.value = _ui.value.copy(
-                                isLoading = false,
-                                loadingMessage = null
-                            )
-                            emitError("Failed to sync locations: ${syncResult.message}")
-                            return@launch
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "⚠️ Error syncing locations (non-critical)", e)
-                }
-
-                _ui.value = _ui.value.copy(
-                    loadingMessage = "Completing check-out..."
-                )
-
-                when (val outcome = repo.checkOutSignature(
-                    tToken = tToken,
-                    faceRecognitionQualityScore = _ui.value.faceVerificationQualityScore,
-                    faceVerify = _ui.value.faceVerificationSuccess,
-                    earlyReason = earlyReason,
-                    outOfRangeReason = outOfRangeReason,
-                    workReport = workReport,
-                    workReportFileUri = workReportFileUri
-                )) {
-                    is SignatureOutcome.Success -> {
-                        Log.d(TAG, "✅ Check-out signature SUCCESS")
-
-                        Log.d(TAG, "⏹️ Stopping tracking components...")
-
-                        try {
-                            // ✅ DISABLED: LocationTrackingService.stopTracking(context)
-                            TrackingWorker.cancel(context)
-                            TrackingAlarmReceiver.cancel(context)
-
-                            val trackingStateManager = TrackingStateManager(context)
-                            trackingStateManager.clearState()
-
-                            Log.d(TAG, "✅ All tracking components stopped")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "⚠️ Error stopping tracking components (non-critical)", e)
-                        }
-
-                        _ui.value = _ui.value.copy(
-                            isLoading = false,
-                            loadingMessage = null,
-                            currentState = "CHECK_IN_NEEDED",
-                            lastCheckInTime = null,
-                            checkOutTToken = null,
-                            checkOutFaceVector = null,
-                            checkOutMessage = null,
-                            faceVerificationQualityScore = null,
-                            faceVerificationSuccess = false,
-                            tempEarlyReason = null,
-                            tempOutOfRangeReason = null,
-                            isComplete = true
-                        )
-
-                        emitSuccess(outcome.message)
-                    }
-
-                    is SignatureOutcome.Error -> {
-                        Log.e(TAG, "❌ CHECK-OUT SIGNATURE ERROR: ${outcome.message}")
-                        _ui.value = _ui.value.copy(
-                            isLoading = false,
-                            loadingMessage = null,
-                            checkOutTToken = null,
-                            checkOutFaceVector = null,
-                            checkOutMessage = null,
-                            tempEarlyReason = null,
-                            tempOutOfRangeReason = null
-                        )
-                        emitError(outcome.message)
-                        delay(500)
-                        refreshStatus(force = true)
-                    }
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Check-out error", e)
-                _ui.value = _ui.value.copy(
-                    isLoading = false,
-                    loadingMessage = null
-                )
-                emitError("Check-out failed: ${e.message}")
-            }
-        }
-    }
-
     fun onReasonSubmitted(lateOrEarlyReason: String?, outOfRangeReason: String?, context: Context) {
         val isCheckIn = _ui.value.checkInTToken != null
 
@@ -766,10 +756,216 @@ class AttendanceViewModel(
         )
     }
 
+    fun onFaceVerificationCancelled() {
+        val isCheckIn = _ui.value.checkInTToken != null
+
+        _ui.value = _ui.value.copy(
+            showFaceVerification = false,
+            checkInTToken = if (isCheckIn) null else _ui.value.checkInTToken,
+            checkInFaceVector = if (isCheckIn) null else _ui.value.checkInFaceVector,
+            checkInMessage = if (isCheckIn) null else _ui.value.checkInMessage,
+            checkOutTToken = if (!isCheckIn) null else _ui.value.checkOutTToken,
+            checkOutFaceVector = if (!isCheckIn) null else _ui.value.checkOutFaceVector,
+            checkOutMessage = if (!isCheckIn) null else _ui.value.checkOutMessage
+        )
+
+        emitError("${if (isCheckIn) "Check-in" else "Check-out"} cancelled")
+    }
+
+    fun onReasonDialogDismissed() {
+        val isCheckIn = _ui.value.checkInTToken != null
+
+        _ui.value = _ui.value.copy(
+            showReasonDialog = false,
+            checkInTToken = if (isCheckIn) null else _ui.value.checkInTToken,
+            checkInMessage = if (isCheckIn) null else _ui.value.checkInMessage,
+            checkInIsLate = false,
+            checkInIsOutOfRange = false,
+            checkInLateReasonRequired = false,
+            checkInOutOfRangeReasonRequired = false,
+            checkOutTToken = if (!isCheckIn) null else _ui.value.checkOutTToken,
+            checkOutMessage = if (!isCheckIn) null else _ui.value.checkOutMessage,
+            checkOutIsEarly = false,
+            checkOutIsOutOfRange = false,
+            checkOutEarlyReasonRequired = false,
+            checkOutOutOfRangeReasonRequired = false,
+            faceRecognitionQualityScore = null,
+            faceVerificationSuccess = false
+        )
+
+        emitError("${if (isCheckIn) "Check-in" else "Check-out"} cancelled")
+    }
+
+    fun onWorkReportDialogDismissed() {
+        _ui.value = _ui.value.copy(
+            showWorkReportDialog = false,
+            checkOutTToken = null,
+            checkOutMessage = null,
+            checkOutMinimumQualityScore = null,
+            checkOutWorkHours = null,
+            checkOutIsEarly = false,
+            checkOutIsOutOfRange = false,
+            checkOutEarlyReasonRequired = false,
+            checkOutOutOfRangeReasonRequired = false,
+            checkOutWorkReportRequired = false,
+            faceRecognitionQualityScore = null,
+            faceVerificationSuccess = false,
+            tempEarlyReason = null,
+            tempOutOfRangeReason = null
+        )
+
+        emitError("Check-out cancelled")
+    }
+
+    // ==========================================
+    // HELPER FUNCTIONS
+    // ==========================================
+
+    private fun emitError(message: String) {
+        viewModelScope.launch {
+            Log.e(TAG, "Emitting error event: $message")
+            _events.emit(AttendanceEvent.ShowError(message))
+        }
+    }
+
+    private fun emitSuccess(message: String) {
+        viewModelScope.launch {
+            Log.d(TAG, "Emitting success event: $message")
+            _events.emit(AttendanceEvent.ShowSuccess(message))
+        }
+    }
+
+    /**
+     * ✅ FIXED: Changed ISO timestamp formatting to support older Android versions
+     */
+    /**
+     * Creates ISO 8601 timestamp - guaranteed non-null
+     */
+    private fun createIsoTimestamp(): String {
+        val timestamp = System.currentTimeMillis()
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                java.time.Instant.ofEpochMilli(timestamp)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            } else {
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", java.util.Locale.US)
+                sdf.timeZone = java.util.TimeZone.getDefault()
+                sdf.format(java.util.Date(timestamp))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error formatting timestamp", e)
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", java.util.Locale.US)
+            sdf.timeZone = java.util.TimeZone.getDefault()
+            sdf.format(java.util.Date(timestamp))
+        }
+    }
+
+    private fun createLocationData(
+        context: Context,
+        latitude: Double,
+        longitude: Double,
+        accuracy: Float
+    ): LocationData {
+        // Create ISO timestamp - guaranteed non-null
+        val isoTimestamp = createIsoTimestamp()
+
+        // Get device info
+        val deviceId = android.provider.Settings.Secure.getString(
+            context.contentResolver,
+            android.provider.Settings.Secure.ANDROID_ID
+        ) ?: ""
+
+        val appVersion: String = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
+        } catch (e: Exception) {
+            "unknown"
+        }
+
+        // Get network info
+        val networkType = getNetworkType(context)
+
+        // Get WiFi info
+        val (wifiName, wifiMac) = getWifiInfo(context)
+
+        // Get battery level
+        val batteryLevel = getBatteryLevel(context)
+
+        return LocationData(
+            recordedAt = isoTimestamp,
+            latitude = latitude,
+            longitude = longitude,
+            locationAccuracy = accuracy,
+            altitude = null, // Not available from getCurrentLocation
+            verticalAccuracy = null,
+            speed = null,
+            heading = null,
+            deviceId = deviceId,
+            appVersion = appVersion,
+            networkType = networkType,
+            wifiName = wifiName,
+            wifiMacAddress = wifiMac,
+            batteryLevel = batteryLevel,
+            geofenceId = null // Will be determined by backend
+        )
+    }
+
+    private fun getNetworkType(context: Context): String {
+        return try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val activeNetwork = connectivityManager.activeNetwork
+            val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+
+            when {
+                capabilities == null -> "NONE"
+                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "WIFI"
+                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "CELLULAR"
+                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) -> "ETHERNET"
+                else -> "UNKNOWN"
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting network type", e)
+            "UNKNOWN"
+        }
+    }
+
+    private fun getWifiInfo(context: Context): Pair<String?, String?> {
+        return try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+            val wifiInfo = wifiManager.connectionInfo
+
+            val ssid = wifiInfo?.ssid?.trim('"') ?: null
+            val bssid = wifiInfo?.bssid ?: null
+
+            Pair(ssid, bssid)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting WiFi info", e)
+            Pair(null, null)
+        }
+    }
+
+    private fun getBatteryLevel(context: Context): Int? {
+        return try {
+            val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+            batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting battery level", e)
+            null
+        }
+    }
+
+    // ==========================================
+    // UTILITY FUNCTIONS
+    // ==========================================
+
     fun canCheckIn(): Boolean = _ui.value.currentState == "CHECK_IN_NEEDED"
     fun canCheckOut(): Boolean = _ui.value.currentState == "CHECK_OUT_NEEDED"
     fun isComplete(): Boolean = _ui.value.isComplete == true
 }
+
+// ==========================================
+// UI STATE
+// ==========================================
 
 data class AttendanceUiState(
     val isLoading: Boolean = false,
@@ -782,6 +978,7 @@ data class AttendanceUiState(
     val attendanceStatus: String? = null,
     val isComplete: Boolean? = null,
 
+    // Check-in state
     val checkInTToken: String? = null,
     val checkInMinimumQualityScore: Float? = null,
     val checkInIsLate: Boolean = false,
@@ -791,6 +988,7 @@ data class AttendanceUiState(
     val checkInMessage: String? = null,
     val checkInFaceVector: FloatArray? = null,
 
+    // Check-out state
     val checkOutTToken: String? = null,
     val checkOutMinimumQualityScore: Float? = null,
     val checkOutWorkHours: Float? = null,
@@ -802,17 +1000,53 @@ data class AttendanceUiState(
     val checkOutMessage: String? = null,
     val checkOutFaceVector: FloatArray? = null,
 
+    // Face verification state
+    val faceRecognitionQualityScore: Float? = null,
+    val faceVerificationSuccess: Boolean = false,
+
+    // Dialog states
     val showFaceVerification: Boolean = false,
     val showReasonDialog: Boolean = false,
     val showWorkReportDialog: Boolean = false,
     val showPendingMessageDialog: Boolean = false,
 
-    val faceVerificationQualityScore: Float? = null,
-    val faceVerificationSuccess: Boolean = false,
+    // Pending message state
+    val pendingMessage: PendingMessage? = null,
+    val requiresAcknowledgment: Boolean = false,
+    val acknowledgmentNote: String? = null,
 
+    // Temporary state for multi-step flows
     val tempEarlyReason: String? = null,
     val tempOutOfRangeReason: String? = null,
+    val workReportFileUri: Uri? = null
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
 
-    val pendingMessage: PendingMessage? = null,
-    val acknowledgmentNote: String? = null
-)
+        other as AttendanceUiState
+
+        if (isLoading != other.isLoading) return false
+        if (isRefreshing != other.isRefreshing) return false
+        if (loadingMessage != other.loadingMessage) return false
+        if (currentState != other.currentState) return false
+        if (statusMessage != other.statusMessage) return false
+        if (lastCheckInTime != other.lastCheckInTime) return false
+        if (attendanceStatus != other.attendanceStatus) return false
+        if (isComplete != other.isComplete) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = isLoading.hashCode()
+        result = 31 * result + isRefreshing.hashCode()
+        result = 31 * result + (loadingMessage?.hashCode() ?: 0)
+        result = 31 * result + currentState.hashCode()
+        result = 31 * result + statusMessage.hashCode()
+        result = 31 * result + (lastCheckInTime?.hashCode() ?: 0)
+        result = 31 * result + (attendanceStatus?.hashCode() ?: 0)
+        result = 31 * result + (isComplete?.hashCode() ?: 0)
+        return result
+    }
+}

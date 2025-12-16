@@ -39,13 +39,13 @@ fun HomeTopBar(
     // ✅ Use primary color background to match status bar
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.primary,  // ✅ Changed from surface to primary
-        tonalElevation = 0.dp  // ✅ Remove elevation for seamless look
+        color = MaterialTheme.colorScheme.primary,
+        tonalElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),  // ✅ Reduced vertical padding
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -57,12 +57,12 @@ fun HomeTopBar(
                     text = (companyName ?: "COMPANY").uppercase(),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimary  // ✅ Changed to onPrimary for contrast
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
                 Text(
                     text = userName ?: "User",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)  // ✅ Changed color
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
                 )
             }
 
@@ -80,13 +80,13 @@ fun HomeTopBar(
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary  // ✅ White color
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                     } else {
                         Icon(
                             Icons.Filled.Refresh,
                             contentDescription = "Refresh Status",
-                            tint = MaterialTheme.colorScheme.onPrimary  // ✅ White color
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 }
@@ -94,18 +94,18 @@ fun HomeTopBar(
                 // Profile Picture - ✅ BIGGER & ROUNDER
                 Box(
                     modifier = Modifier
-                        .size(52.dp)  // ✅ Increased from 40.dp to 52.dp
+                        .size(52.dp)
                         .clip(CircleShape)
                         .border(
                             width = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f),  // ✅ White border
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f),
                             shape = CircleShape
                         )
-                        .background(MaterialTheme.colorScheme.surface)  // ✅ Surface background for image
+                        .background(MaterialTheme.colorScheme.surface)
                         .clickable { onProfileClick() }
                 ) {
                     if (!profileUrl.isNullOrBlank()) {
-                        // ✅ Use authenticated image loader for profile pictures
+
                         AsyncImage(
                             model = ImageRequest.Builder(context)
                                 .data(profileUrl)
@@ -126,7 +126,7 @@ fun HomeTopBar(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .align(Alignment.Center)
-                                .size(28.dp)  // ✅ Bigger icon
+                                .size(28.dp)
                         )
                     }
                 }

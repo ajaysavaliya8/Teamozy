@@ -91,6 +91,22 @@ interface ApiService {
         @Field("late_reason") lateReason: String? = null,
         @Field("out_of_range_reason") outOfRangeReason: String? = null,
         @Field("acknowledgment_note") acknowledgmentNote: String? = null,
+
+        // NEW: First location tracking data
+        @Field("first_location_recorded_at") firstLocationRecordedAt: String? = null,
+        @Field("first_location_latitude") firstLocationLatitude: Double? = null,
+        @Field("first_location_longitude") firstLocationLongitude: Double? = null,
+        @Field("first_location_accuracy") firstLocationAccuracy: Float? = null,
+        @Field("first_location_altitude") firstLocationAltitude: Double? = null,
+        @Field("first_location_vertical_accuracy") firstLocationVerticalAccuracy: Float? = null,
+        @Field("first_location_speed") firstLocationSpeed: Float? = null,
+        @Field("first_location_heading") firstLocationHeading: Float? = null,
+        @Field("first_location_app_version") firstLocationAppVersion: String? = null,
+        @Field("first_location_network_type") firstLocationNetworkType: String? = null,
+        @Field("first_location_wifi_name") firstLocationWifiName: String? = null,
+        @Field("first_location_wifi_mac_address") firstLocationWifiMacAddress: String? = null,
+        @Field("first_location_battery_level") firstLocationBatteryLevel: Int? = null,
+
         @Query("token") token: String
     ): Response<CheckInSignatureResponse>
 
@@ -111,7 +127,23 @@ interface ApiService {
         @Part("early_reason") earlyReason: RequestBody? = null,
         @Part("out_of_range_reason") outOfRangeReason: RequestBody? = null,
         @Part("work_description") workReport: RequestBody? = null,
-        @Part work_report_file: MultipartBody.Part? = null,
+        @Part attachments: List<MultipartBody.Part>? = null,
+
+        // NEW: Last location tracking data
+        @Part("last_location_recorded_at") lastLocationRecordedAt: RequestBody? = null,
+        @Part("last_location_latitude") lastLocationLatitude: RequestBody? = null,
+        @Part("last_location_longitude") lastLocationLongitude: RequestBody? = null,
+        @Part("last_location_accuracy") lastLocationAccuracy: RequestBody? = null,
+        @Part("last_location_altitude") lastLocationAltitude: RequestBody? = null,
+        @Part("last_location_vertical_accuracy") lastLocationVerticalAccuracy: RequestBody? = null,
+        @Part("last_location_speed") lastLocationSpeed: RequestBody? = null,
+        @Part("last_location_heading") lastLocationHeading: RequestBody? = null,
+        @Part("last_location_app_version") lastLocationAppVersion: RequestBody? = null,
+        @Part("last_location_network_type") lastLocationNetworkType: RequestBody? = null,
+        @Part("last_location_wifi_name") lastLocationWifiName: RequestBody? = null,
+        @Part("last_location_wifi_mac_address") lastLocationWifiMacAddress: RequestBody? = null,
+        @Part("last_location_battery_level") lastLocationBatteryLevel: RequestBody? = null,
+
         @Query("token") token: String
     ): Response<CheckOutSignatureResponse>
 

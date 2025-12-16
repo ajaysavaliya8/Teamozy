@@ -1,6 +1,8 @@
 package com.hrms.jeejateamozy.core.network
 
 import android.content.Context
+import com.google.gson.GsonBuilder
+import com.google.gson.reflect.TypeToken
 import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import okhttp3.Interceptor
@@ -34,7 +36,6 @@ object NetworkModule {
 
     /**
      * Adds Authorization: Bearer <token> header to all requests (except login endpoints)
-     * Note: For now, token is ALSO sent in query params until backend is fully migrated
      */
     private val authInterceptor = Interceptor { chain ->
         val originalRequest = chain.request()
@@ -46,18 +47,15 @@ object NetworkModule {
         if (skipAuth) {
             chain.proceed(originalRequest)
         } else {
-            // Add Authorization header with Bearer token AND X-Device-Id header
             val token = PreferencesManager.getInstance(appContext).authToken
             val deviceId = PreferencesManager.getInstance(appContext).deviceId
 
             val newRequest = originalRequest.newBuilder()
 
-            // Add Bearer token if available
             if (!token.isNullOrBlank()) {
                 newRequest.header("Authorization", "Bearer $token")
             }
 
-            // Add X-Device-Id header if available
             if (deviceId.isNotBlank()) {
                 newRequest.header("X-Device-Id", deviceId)
             }
@@ -74,24 +72,32 @@ object NetworkModule {
         res
     }
 
-    // ✅ CHANGED: Make okHttp public so Coil can use it for authenticated image loading
     val okHttp by lazy {
         OkHttpClient.Builder()
             .addInterceptor(headersInterceptor)
-            .addInterceptor(authInterceptor)        // ← Add Bearer token
+            .addInterceptor(authInterceptor)
             .addInterceptor(logging)
-            .addInterceptor(unauthorizedInterceptor) // ← Handle 401
+            .addInterceptor(unauthorizedInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .writeTimeout(45, TimeUnit.SECONDS)
             .build()
     }
 
+    private val gson by lazy {
+        GsonBuilder()
+            .registerTypeAdapter(
+                object : TypeToken<List<String>>() {}.type,
+                StringToListAdapter()
+            )
+            .create()
+    }
+
     private val retrofit: Retrofit by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(okHttp)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
     }
 
