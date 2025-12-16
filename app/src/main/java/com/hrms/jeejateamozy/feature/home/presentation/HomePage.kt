@@ -5,11 +5,8 @@ import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -79,35 +76,17 @@ fun HomePage(
     LaunchedEffect(ui.currentState) {
         if (ui.currentState == "CHECK_OUT_NEEDED") {
             if (!isTimerRunning) {
-                val lastCheckInTime = try {
-                    ui::class.java.getDeclaredField("lastCheckInTime").let { field ->
-                        field.isAccessible = true
-                        field.get(ui) as? String
-                    }
-                } catch (e: Exception) {
-                    null
-                }
-
-                val elapsed = calculateElapsedSeconds(lastCheckInTime)
-                elapsedSeconds = elapsed
+                val lastCheckInTime = ui.lastCheckInTime
+                elapsedSeconds = calculateElapsedSeconds(lastCheckInTime)
                 isTimerRunning = true
-
-                if (lastCheckInTime != null) {
-                    Log.d(TAG, "✅ Continuing timer from last_check_in_time: $lastCheckInTime")
-                    Log.d(TAG, "⏱️ Elapsed time: ${elapsed}s (${elapsed/3600}h ${(elapsed%3600)/60}m)")
-                } else {
-                    Log.d(TAG, "✅ Timer started (lastCheckInTime not available yet)")
-                }
             }
         } else {
-            if (isTimerRunning) {
-                isTimerRunning = false
-                elapsedSeconds = 0
-                Log.d(TAG, "⏹️ Timer stopped")
-            }
+            isTimerRunning = false
+            elapsedSeconds = 0
         }
     }
 
+    // Timer tick
     LaunchedEffect(isTimerRunning) {
         while (isTimerRunning) {
             delay(1000)
@@ -115,28 +94,20 @@ fun HomePage(
         }
     }
 
-    // Initial status refresh
+    // Initial refresh
     LaunchedEffect(Unit) {
         vm.refreshStatus()
     }
 
-    // Listen to ViewModel events
+    // Handle events
     LaunchedEffect(Unit) {
         vm.events.collect { event ->
             when (event) {
                 is AttendanceEvent.ShowError -> {
-                    Log.d(TAG, "🔴 Event received: ${event.message}")
-                    snack.showSnackbar(
-                        message = event.message,
-                        duration = SnackbarDuration.Long
-                    )
+                    snack.showSnackbar(event.message, duration = SnackbarDuration.Short)
                 }
                 is AttendanceEvent.ShowSuccess -> {
-                    Log.d(TAG, "🟢 Event received: ${event.message}")
-                    snack.showSnackbar(
-                        message = event.message,
-                        duration = SnackbarDuration.Short
-                    )
+                    snack.showSnackbar(event.message, duration = SnackbarDuration.Short)
                 }
             }
         }
@@ -150,31 +121,19 @@ fun HomePage(
             )
         },
         topBar = {
-            // ✅ Simple TopAppBar instead of HomeTopBar
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = prefs.companyName ?: "Teamozy",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = prefs.userName ?: "User",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+            HomeTopBar(
+                context = context,
+                companyName = prefs.companyName,
+                userName = prefs.userName,
+                profileUrl = prefs.profileUrl,
+                isRefreshing = ui.isRefreshing,
+                onRefreshClick = { vm.refreshStatus(force = true) },
+                onNotificationClick = {
+                    Log.d(TAG, "Notification icon clicked")
+                    // TODO: Navigate to notifications screen
                 },
-                actions = {
-                    IconButton(
-                        onClick = { vm.refreshStatus(force = true) },
-                        enabled = !ui.isRefreshing
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Refresh"
-                        )
-                    }
-                },
+                notificationCount = 0, // TODO: Get from ViewModel
+                onProfileClick = onNavigateToProfile,
                 modifier = Modifier.statusBarsPadding()
             )
         }
@@ -264,13 +223,13 @@ fun HomePage(
                         if (embedding == null) {
                             faceVerifyError = "No face detected or face is unclear. Please try again."
                             faceVerifyBusy = false
-                            return@launch  // ✅ Stop after error
+                            return@launch
                         }
 
                         if (faceVector == null) {
                             faceVerifyError = "No registered face vector. Please contact admin."
                             faceVerifyBusy = false
-                            return@launch  // ✅ Stop after error
+                            return@launch
                         }
 
                         val similarity = EmbeddingExtractor.cosineSimilarity(faceVector, embedding)
@@ -284,7 +243,7 @@ fun HomePage(
                                 verified = true,
                                 context = context
                             )
-                            return@launch  // ✅ CRITICAL: Stop processing after success!
+                            return@launch
                         } else {
                             Log.e(TAG, "❌ Face NOT verified! Similarity: $similarity < $minimumThreshold")
                             faceVerifyError = "Face does not match (${String.format("%.2f", similarity * 100)}% match). Please try again."
@@ -294,7 +253,7 @@ fun HomePage(
                         Log.e(TAG, "Face capture error: ${e.message}", e)
                         faceVerifyError = "Face capture failed: ${e.message}"
                         faceVerifyBusy = false
-                        return@launch  // ✅ Stop after exception
+                        return@launch
                     }
                 }
             },
@@ -337,7 +296,7 @@ fun HomePage(
         )
     }
 
-    // ✅ FIXED: Pending Message Dialog - Only pass acknowledgmentNote
+    // Pending Message Dialog
     ui.pendingMessage?.let { message ->
         if (ui.showPendingMessageDialog) {
             PendingMessageDialog(
@@ -346,7 +305,6 @@ fun HomePage(
                     vm.onPendingMessageDismissed()
                 },
                 onAcknowledge = { acknowledgmentNote ->
-                    // ✅ FIXED: Only pass acknowledgmentNote, NOT context
                     vm.onPendingMessageAcknowledged(acknowledgmentNote)
                 }
             )

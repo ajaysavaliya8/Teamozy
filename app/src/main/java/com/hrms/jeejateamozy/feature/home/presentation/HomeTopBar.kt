@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
@@ -17,13 +18,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.hrms.jeejateamozy.core.image.CoilImageLoader
 
 /**
  * Home screen top bar component
- * Displays company name, user name, refresh button, and profile picture
+ * Displays company name, user name, refresh button, notification icon, and profile picture
  */
 @Composable
 fun HomeTopBar(
@@ -33,6 +35,8 @@ fun HomeTopBar(
     profileUrl: String?,
     isRefreshing: Boolean,
     onRefreshClick: () -> Unit,
+    onNotificationClick: () -> Unit = {},
+    notificationCount: Int = 0,
     onProfileClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -66,9 +70,9 @@ fun HomeTopBar(
                 )
             }
 
-            // Right side - Refresh button and profile picture
+            // Right side - Refresh button, Notification icon, and profile picture
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Refresh button
@@ -91,10 +95,36 @@ fun HomeTopBar(
                     }
                 }
 
-                // Profile Picture - ✅ BIGGER & ROUNDER
+                // Notification Icon with Badge
+                BadgedBox(
+                    badge = {
+                        if (notificationCount > 0) {
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            ) {
+                                Text(
+                                    text = if (notificationCount > 99) "99+" else notificationCount.toString(),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                ) {
+                    IconButton(onClick = onNotificationClick) {
+                        Icon(
+                            Icons.Filled.Notifications,
+                            contentDescription = "Notifications",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+
+                // Profile Picture
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
                         .border(
                             width = 2.dp,
@@ -105,7 +135,6 @@ fun HomeTopBar(
                         .clickable { onProfileClick() }
                 ) {
                     if (!profileUrl.isNullOrBlank()) {
-
                         AsyncImage(
                             model = ImageRequest.Builder(context)
                                 .data(profileUrl)
@@ -126,7 +155,7 @@ fun HomeTopBar(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .align(Alignment.Center)
-                                .size(28.dp)
+                                .size(24.dp)
                         )
                     }
                 }
