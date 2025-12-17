@@ -77,6 +77,15 @@ fun LeaveHistoryScreen(
                     }
                 },
                 actions = {
+                    // ✅ NEW: Quick apply button
+                    IconButton(onClick = onNavigateToApplyLeave) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Apply for Leave",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    // Existing refresh button
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Default.Refresh, "Refresh")
                     }

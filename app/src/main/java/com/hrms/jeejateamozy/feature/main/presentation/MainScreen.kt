@@ -409,7 +409,7 @@ fun MainScreen(
                                 showCircularList = true
                             },
                             onNavigateToApplyLeaves = {
-                                showApplyLeave = true
+                                showLeaveHistory = true  // ✅ FIXED: Show overview first instead of form
                             },
                             // ⭐ NEW: Navigate to notifications
                             onNavigateToNotifications = {
