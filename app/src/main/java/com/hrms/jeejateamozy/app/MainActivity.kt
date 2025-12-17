@@ -1,6 +1,7 @@
 package com.hrms.jeejateamozy.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -35,7 +36,7 @@ import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.presentation.LoginScreen
-import com.hrms.jeejateamozy.feature.auth.presentation.dialogs.AppVersionUpdateDialog  // ⚡ NEW IMPORT
+import com.hrms.jeejateamozy.feature.auth.presentation.dialogs.AppVersionUpdateDialog
 import com.hrms.jeejateamozy.feature.main.presentation.MainScreen
 import com.hrms.jeejateamozy.feature.permissions.presentation.PermissionDialog
 import com.hrms.jeejateamozy.feature.permissions.presentation.arePermissionsGranted
@@ -47,19 +48,33 @@ import com.hrms.jeejateamozy.di.permissionsModule
 import com.hrms.jeejateamozy.di.homeModule
 import com.hrms.jeejateamozy.di.leaveModule
 import com.hrms.jeejateamozy.di.attendanceHistoryModule
+import com.hrms.jeejateamozy.di.locationModule
+import com.hrms.jeejateamozy.di.notificationModule
+import com.hrms.jeejateamozy.feature.notification.utils.NotificationHelper
+import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository
 
 // Firebase imports
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
-import com.hrms.jeejateamozy.di.locationModule
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 
 private enum class AppScreen {
     SPLASH,
     LOGIN,
-    HOME  // Permission popup shows here automatically if needed
+    HOME
 }
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        private const val TAG = "MainActivity"
+    }
+
+    // Deep link circular ID from notification
+    private var deepLinkCircularId by mutableStateOf<Int?>(null)
 
     // Permission launcher for notification permission (Android 13+)
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -67,7 +82,6 @@ class MainActivity : ComponentActivity() {
     ) { isGranted ->
         if (isGranted) {
             Log.d("FCM", "✅ Notification permission granted")
-            // Get FCM token after permission is granted
             lifecycleScope.launch {
                 getFCMToken()
             }
@@ -83,9 +97,13 @@ class MainActivity : ComponentActivity() {
         NetworkModule.initialize(applicationContext)
 
         // ============================================
-        // INITIALIZE FIREBASE
+        // INITIALIZE FIREBASE & NOTIFICATION CHANNELS
         // ============================================
         initializeFirebase()
+        NotificationHelper.createNotificationChannels(this)
+
+        // Handle notification deep link
+        handleNotificationIntent(intent)
 
         // Start Koin here (since there's no Application class now)
         if (GlobalContext.getOrNull() == null) {
@@ -98,8 +116,9 @@ class MainActivity : ComponentActivity() {
                     homeModule,
                     circularModule,
                     leaveModule,
-                    attendanceHistoryModule ,
-                    locationModule
+                    attendanceHistoryModule,
+                    locationModule,
+                    notificationModule
                 )
             }
         }
@@ -107,20 +126,127 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
-                // ✅ GLOBAL STATUS BAR CONFIGURATION - APPLIES TO ALL SCREENS
                 ConfigureSystemBars()
 
                 Surface {
-                    AppRoot()
+                    AppRoot(
+                        initialCircularId = deepLinkCircularId,
+                        onCircularIdConsumed = { deepLinkCircularId = null }
+                    )
                 }
             }
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
     /**
-     * ✅ Configure System Bars (Status Bar) Globally for All Screens
-     * This ensures consistent status bar color across the entire app
+     * Handle notification deep link intent
+     * ✅ FIXED: Extract ALL FCM data from intent extras
+     * When app is in background, Android passes FCM data payload as intent extras
      */
+    private fun handleNotificationIntent(intent: Intent?) {
+        intent?.let { it ->
+            try {
+                // ✅ DEBUG: Log ALL intent extras to see what FCM passes
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "📨 INTENT RECEIVED")
+                Log.d(TAG, "   Action: ${it.action}")
+                Log.d(TAG, "   Data: ${it.data}")
+                it.extras?.let { bundle ->
+                    Log.d(TAG, "   Extras:")
+                    for (key in bundle.keySet()) {
+                        Log.d(TAG, "      - $key: ${bundle.get(key)}")
+                    }
+                }
+                Log.d(TAG, "========================================")
+
+                // ✅ Read from multiple possible key names
+                // FCM uses original keys, our code uses different keys
+                val notificationType = it.getStringExtra(NotificationHelper.EXTRA_NOTIFICATION_TYPE)
+                    ?: it.getStringExtra("type")
+                    ?: "circular_new"  // Default to circular_new
+
+                val notificationId = it.getStringExtra(NotificationHelper.EXTRA_NOTIFICATION_ID)
+                    ?: it.getStringExtra("notification_id")
+                    ?: "notif_${UUID.randomUUID().toString().take(12)}"
+
+                // Read circular_id from multiple sources
+                val circularIdString = it.getStringExtra(NotificationHelper.EXTRA_CIRCULAR_ID)
+                    ?: it.getStringExtra("circular_id")
+                val circularId = circularIdString?.toIntOrNull() ?: 0
+
+                // Read other FCM data
+                val title = it.getStringExtra("title") ?: ""
+                val message = it.getStringExtra("message")
+                    ?: it.getStringExtra("body")  // FCM notification body
+                    ?: ""
+                val priority = it.getStringExtra("priority") ?: "normal"
+                val circularType = it.getStringExtra("circular_type") ?: "general"
+                val createdAt = it.getStringExtra("created_at") ?: getCurrentIsoTime()
+
+                Log.d(TAG, "📋 Parsed notification data:")
+                Log.d(TAG, "   - type: $notificationType")
+                Log.d(TAG, "   - circularId: $circularId")
+                Log.d(TAG, "   - notificationId: $notificationId")
+                Log.d(TAG, "   - title: $title")
+                Log.d(TAG, "   - message: $message")
+
+                if (circularId > 0) {
+                    deepLinkCircularId = circularId
+
+                    // ✅ ALWAYS save notification to database when clicking from system notification
+                    // This handles the case when app was in background and onMessageReceived wasn't called
+                    lifecycleScope.launch {
+                        try {
+                            val repo = NotificationRepository.getInstance(applicationContext)
+
+                            // Check if notification already exists
+                            val exists = repo.exists(notificationId)
+
+                            if (!exists) {
+                                // Save to database with whatever data we have
+                                val saved = repo.saveFromFcmData(
+                                    notificationId = notificationId,
+                                    type = notificationType,
+                                    circularId = circularId,
+                                    title = title.ifEmpty { "Circular #$circularId" },
+                                    message = message.ifEmpty { "New notification" },
+                                    priority = priority,
+                                    circularType = circularType,
+                                    createdAt = createdAt
+                                )
+
+                                if (saved) {
+                                    Log.d(TAG, "✅ Notification SAVED from deep link: $notificationId")
+                                }
+                            } else {
+                                Log.d(TAG, "📋 Notification already exists: $notificationId")
+                            }
+
+                            // Mark as read
+                            repo.markAsReadByNotificationId(notificationId)
+                            Log.d(TAG, "✅ Notification marked as read: $notificationId")
+
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Error handling notification", e)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error handling notification intent", e)
+            }
+        }
+    }
+
+    private fun getCurrentIsoTime(): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())
+        return sdf.format(Date())
+    }
+
     @Composable
     private fun ConfigureSystemBars() {
         val view = LocalView.current
@@ -128,31 +254,19 @@ class MainActivity : ComponentActivity() {
 
         DisposableEffect(primaryColor) {
             val window = window
-
-            // Set status bar color to match TopAppBar (primary color)
             window.statusBarColor = primaryColor.toArgb()
-
-            // Set status bar icons to light (white) for visibility on dark background
             WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = false  // false = light/white icons
+                isAppearanceLightStatusBars = false
             }
-
-            onDispose {
-                // No cleanup needed - status bar stays consistent
-            }
+            onDispose { }
         }
     }
 
-    /**
-     * Initialize Firebase and get FCM token
-     */
     private fun initializeFirebase() {
         try {
-            // Initialize Firebase
             FirebaseApp.initializeApp(this)
             Log.d("FCM", "✅ Firebase initialized successfully")
 
-            // Request notification permission (Android 13+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 when {
                     ContextCompat.checkSelfPermission(
@@ -160,19 +274,16 @@ class MainActivity : ComponentActivity() {
                         Manifest.permission.POST_NOTIFICATIONS
                     ) == PackageManager.PERMISSION_GRANTED -> {
                         Log.d("FCM", "✅ Notification permission already granted")
-                        // Get FCM token
                         lifecycleScope.launch {
                             getFCMToken()
                         }
                     }
                     else -> {
-                        // Request permission
                         Log.d("FCM", "📋 Requesting notification permission")
                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }
             } else {
-                // For Android < 13, notification permission is granted by default
                 Log.d("FCM", "✅ Notification permission not required for this Android version")
                 lifecycleScope.launch {
                     getFCMToken()
@@ -184,9 +295,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Get FCM Token and save to PreferencesManager
-     */
     private suspend fun getFCMToken() {
         try {
             val token = FirebaseMessaging.getInstance().token.await()
@@ -194,7 +302,6 @@ class MainActivity : ComponentActivity() {
             if (token.isNotBlank()) {
                 Log.d("FCM", "✅ FCM Token retrieved: ${token.take(30)}...")
 
-                // Save token to PreferencesManager
                 val prefsManager = PreferencesManager.getInstance(applicationContext)
                 prefsManager.fcmToken = token
 
@@ -209,52 +316,60 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AppRoot() {
+private fun AppRoot(
+    initialCircularId: Int? = null,
+    onCircularIdConsumed: () -> Unit = {}
+) {
     val context = LocalContext.current
     val prefs = remember { PreferencesManager.getInstance(context) }
     val authRepo: AuthRepository = koinInject()
     var current by remember { mutableStateOf(AppScreen.SPLASH) }
+    var circularIdForDeepLink by remember { mutableStateOf(initialCircularId) }
+
+    LaunchedEffect(initialCircularId) {
+        if (initialCircularId != null) {
+            circularIdForDeepLink = initialCircularId
+        }
+    }
 
     when (current) {
         AppScreen.SPLASH -> InlineSplash(
             authRepository = authRepo,
             preferencesManager = prefs,
             onComplete = { isAuthorized ->
-                current = if (isAuthorized) {
-                    // User is logged in - go directly to home
-                    // Permission popup will check and show automatically if needed
-                    AppScreen.HOME
-                } else {
-                    // Not logged in, go to login
-                    AppScreen.LOGIN
-                }
+                current = if (isAuthorized) AppScreen.HOME else AppScreen.LOGIN
             }
         )
 
         AppScreen.LOGIN -> LoginScreen(
             onLoginSuccess = {
                 Log.d("MainActivity", "Login success")
-                // After successful login, go directly to home
-                // Permission popup will check and show automatically if needed
                 current = AppScreen.HOME
             }
         )
 
         AppScreen.HOME -> {
-            // Show home screen with automatic permission dialog if needed
             HomeWithPermissions(
                 preferencesManager = prefs,
+                initialCircularId = circularIdForDeepLink,
                 onLogout = {
                     Log.d("MainActivity", "Logout, clearing preferences")
                     prefs.clearAll()
                     current = AppScreen.LOGIN
                 }
             )
+
+            LaunchedEffect(circularIdForDeepLink) {
+                if (circularIdForDeepLink != null) {
+                    delay(500)
+                    circularIdForDeepLink = null
+                    onCircularIdConsumed()
+                }
+            }
         }
     }
 }
 
-// ⚡ UPDATED: Added 426 handling
 @Composable
 private fun InlineSplash(
     authRepository: AuthRepository,
@@ -262,18 +377,14 @@ private fun InlineSplash(
     onComplete: (isAuthorized: Boolean) -> Unit
 ) {
     var status by remember { mutableStateOf("Initializing...") }
-
-    // ⚡ NEW: State for update dialog
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
 
-    // ⚡ NEW: Show update dialog if needed - blocks entire UI
     if (showUpdateDialog) {
         AppVersionUpdateDialog(
             message = updateMessage,
-            onDismiss = null // Cannot be dismissed - user must update
+            onDismiss = null
         )
-        // Don't render the rest of the splash screen when update is required
         return
     }
 
@@ -282,18 +393,15 @@ private fun InlineSplash(
         status = "Verifying session..."
         delay(500)
 
-        // ⚡ UPDATED: Handle all auth outcomes including UpdateRequired
         when (val outcome = authRepository.verifyToken()) {
             is AuthOutcome.Success -> {
                 Log.d("SplashScreen", "Token valid - navigating to home")
                 onComplete(true)
             }
             is AuthOutcome.UpdateRequired -> {
-                // ⚡ NEW: Show update dialog and block navigation
                 Log.d("SplashScreen", "⚠️ Update required: ${outcome.message}")
                 updateMessage = outcome.message
                 showUpdateDialog = true
-                // Don't call onComplete - stay on splash with update dialog
             }
             else -> {
                 Log.d("SplashScreen", "Token invalid or missing - navigating to login")
@@ -330,6 +438,7 @@ private fun InlineSplash(
 @Composable
 private fun HomeWithPermissions(
     preferencesManager: PreferencesManager,
+    initialCircularId: Int? = null,
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -337,17 +446,13 @@ private fun HomeWithPermissions(
     val repo: AuthRepository = koinInject()
     var showPermissionDialog by remember { mutableStateOf(false) }
 
-    // Check if we should show permission dialog
     LaunchedEffect(Unit) {
         delay(300)
-        // Only check on first time or if permissions not granted
         if (!preferencesManager.hasShownPermissions) {
-            // Check if permissions are already granted
             val permissionsGranted = arePermissionsGranted(context)
             if (!permissionsGranted) {
                 showPermissionDialog = true
             } else {
-                // If permissions are already granted, mark as shown
                 preferencesManager.hasShownPermissions = true
             }
         }
@@ -367,8 +472,8 @@ private fun HomeWithPermissions(
     }
 
     MainScreen(
+        initialCircularId = initialCircularId,
         onLogout = {
-            // Call logout API
             scope.launch {
                 Log.d("MainActivity", "Logout requested")
 
@@ -379,7 +484,6 @@ private fun HomeWithPermissions(
                     }
                     is AuthOutcome.Error -> {
                         Log.e("MainActivity", "❌ Logout error: ${outcome.message}")
-                        // Clear local data even if API fails
                         onLogout()
                     }
                     else -> {

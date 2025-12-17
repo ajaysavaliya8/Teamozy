@@ -2,7 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <!-- Internet permission -->
-    <uses-permission android:name="android.permission.INTERNET" /> <!-- Camera permission for attendance verification -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Camera permission for attendance verification -->
     <uses-permission android:name="android.permission.CAMERA" />
 
     <uses-feature
@@ -37,6 +38,20 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Teamozy">
 
+        <!-- ============================================ -->
+        <!-- FCM DEFAULT NOTIFICATION SETTINGS           -->
+        <!-- ============================================ -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="teamozy_notifications" />
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_launcher_foreground" />
+
+        <!-- ============================================ -->
+        <!-- MAIN ACTIVITY                               -->
+        <!-- ============================================ -->
         <activity
             android:name=".app.MainActivity"
             android:exported="true"
@@ -44,11 +59,13 @@
             android:theme="@style/Theme.Teamozy">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <!-- ============================================ -->
+        <!-- FILE PROVIDER                               -->
+        <!-- ============================================ -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
@@ -59,13 +76,30 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- ============================================ -->
+        <!-- FIREBASE CLOUD MESSAGING SERVICE            -->
+        <!-- ✅ THIS WAS MISSING - REQUIRED FOR FCM!     -->
+        <!-- ============================================ -->
+        <service
+            android:name=".core.fcm.TeamozyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- ============================================ -->
+        <!-- LOCATION TRACKING SERVICE                   -->
+        <!-- ============================================ -->
         <service
             android:name=".feature.location.service.LocationTrackingService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location" />
 
-        <!-- Keep-Alive Receivers -->
+        <!-- ============================================ -->
+        <!-- KEEP-ALIVE RECEIVERS                        -->
+        <!-- ============================================ -->
         <receiver
             android:name=".feature.location.keepalive.TrackingAlarmReceiver"
             android:enabled="true"

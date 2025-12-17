@@ -22,6 +22,7 @@ import com.hrms.jeejateamozy.feature.home.presentation.dialogs.WorkReportBottomS
 import com.hrms.jeejateamozy.feature.home.presentation.utils.calculateElapsedSeconds
 import com.hrms.jeejateamozy.feature.home.presentation.utils.rememberPermissionChecker
 import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.PendingMessageDialog
+import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository  // ⭐ NEW IMPORT
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,6 +38,7 @@ fun HomePage(
     onNavigateToWorkReport: () -> Unit = {},
     onNavigateToCircular: () -> Unit = {},
     onNavigateToApplyLeaves: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {},  // ⭐ NEW: Notification navigation
     paddingValues: PaddingValues,
     vm: AttendanceViewModel = koinViewModel()
 ) {
@@ -45,6 +47,10 @@ fun HomePage(
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
     val prefs = remember { PreferencesManager.getInstance(context) }
+
+    // ⭐ NEW: Notification count from repository
+    val notificationRepo = remember { NotificationRepository.getInstance(context) }
+    val notificationCount by notificationRepo.getUnreadCountFlow().collectAsState(initial = 0)
 
     // Face verification state
     var faceVerifyBusy by remember { mutableStateOf(false) }
@@ -130,9 +136,9 @@ fun HomePage(
                 onRefreshClick = { vm.refreshStatus(force = true) },
                 onNotificationClick = {
                     Log.d(TAG, "Notification icon clicked")
-                    // TODO: Navigate to notifications screen
+                    onNavigateToNotifications()  // ⭐ NEW: Navigate to notifications
                 },
-                notificationCount = 0, // TODO: Get from ViewModel
+                notificationCount = notificationCount,  // ⭐ NEW: Real notification count
                 onProfileClick = onNavigateToProfile,
                 modifier = Modifier.statusBarsPadding()
             )

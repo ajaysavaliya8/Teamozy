@@ -20,14 +20,20 @@ import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryViewModel
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryScreen
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceDayDetailScreen
+import com.hrms.jeejateamozy.feature.notification.presentation.NotificationListScreen  // ⭐ NEW IMPORT
+import com.hrms.jeejateamozy.feature.notification.presentation.NotificationViewModel  // ⭐ NEW IMPORT
+import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository  // ⭐ NEW IMPORT
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun MainScreen(
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    initialCircularId: Int? = null  // ⭐ NEW: For deep linking from notification
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // ============================================
     // DOUBLE-BACK TO EXIT STATE
@@ -65,6 +71,25 @@ fun MainScreen(
     var showAttendanceHistory by remember { mutableStateOf(false) }
     var selectedAttendanceDate by remember { mutableStateOf<String?>(null) }
 
+    // ⭐ NEW: Notification List State
+    var showNotificationList by remember { mutableStateOf(false) }
+
+    // ⭐ NEW: Handle deep link to circular detail
+    LaunchedEffect(initialCircularId) {
+        if (initialCircularId != null && initialCircularId > 0) {
+            showCircularDetail = initialCircularId
+            // Mark related notifications as read
+            scope.launch {
+                try {
+                    val repo = NotificationRepository.getInstance(context)
+                    repo.markAsReadByCircularId(initialCircularId)
+                } catch (e: Exception) {
+                    // Ignore errors
+                }
+            }
+        }
+    }
+
     // ============================================
     // Helper function to check if any child screen is open
     // ============================================
@@ -73,7 +98,7 @@ fun MainScreen(
         showLeaveHistory, showApplyLeave, showWorkReport,
         showEditSocialMedia, showEditContactDetail, showEditPersonalInfo,
         showViewEmploymentDetail, showEditBankingInfo, showViewEmploymentIdentity,
-        showViewShiftDetails
+        showViewShiftDetails, showNotificationList  // ⭐ Added showNotificationList
     ) {
         selectedAttendanceDate != null ||
                 showCircularDetail != null ||
@@ -87,18 +112,20 @@ fun MainScreen(
                 showViewEmploymentDetail ||
                 showEditBankingInfo ||
                 showViewEmploymentIdentity ||
-                showViewShiftDetails
+                showViewShiftDetails ||
+                showNotificationList  // ⭐ Added
     }
 
     // ============================================
     // BACK HANDLER - ALWAYS ENABLED
-    // Priority Order:
-    // 1. Close child screens
-    // 2. Switch to HOME tab
-    // 3. Double-back to exit
     // ============================================
     BackHandler(enabled = true) {
         when {
+            // ⭐ NEW: Close notification list
+            showNotificationList -> {
+                showNotificationList = false
+            }
+
             // Priority 1: Close any open child screen (step-by-step back)
             selectedAttendanceDate != null -> {
                 selectedAttendanceDate = null
@@ -150,7 +177,6 @@ fun MainScreen(
             // Priority 3: Double-back to exit (only when on HOME with no child screens)
             else -> {
                 if (backPressedOnce) {
-                    // Exit the app
                     (context as? Activity)?.finish()
                 } else {
                     backPressedOnce = true
@@ -182,6 +208,7 @@ fun MainScreen(
                     showLeaveHistory = false
                     showAttendanceHistory = false
                     selectedAttendanceDate = null
+                    showNotificationList = false  // ⭐ Reset notification list
                 }
             )
         },
@@ -189,6 +216,22 @@ fun MainScreen(
     ) { paddingValues ->
         // Handle child screens (full screen overlays)
         when {
+            // ⭐ NEW: Notification List Screen
+            showNotificationList -> {
+                val notificationViewModel: NotificationViewModel = koinViewModel()
+
+                NotificationListScreen(
+                    viewModel = notificationViewModel,
+                    onNavigateBack = {
+                        showNotificationList = false
+                    },
+                    onNavigateToCircular = { circularId ->
+                        showNotificationList = false
+                        showCircularDetail = circularId
+                    }
+                )
+            }
+
             // ATTENDANCE DAY DETAIL SCREEN
             selectedAttendanceDate != null -> {
                 val attendanceHistoryViewModel: AttendanceHistoryViewModel = koinViewModel()
@@ -247,7 +290,12 @@ fun MainScreen(
                     circularId = showCircularDetail!!,
                     onNavigateBack = {
                         showCircularDetail = null
-                        showCircularList = true  // Step-by-step: go back to list
+                        // If came from circular list, go back to list
+                        // If came from notification, go to home
+                        if (showCircularList) {
+                            // Stay on circular list logic already handled
+                        }
+                        showCircularList = true
                     }
                 )
             }
@@ -362,6 +410,10 @@ fun MainScreen(
                             },
                             onNavigateToApplyLeaves = {
                                 showApplyLeave = true
+                            },
+                            // ⭐ NEW: Navigate to notifications
+                            onNavigateToNotifications = {
+                                showNotificationList = true
                             },
                             paddingValues = paddingValues
                         )

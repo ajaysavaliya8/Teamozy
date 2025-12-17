@@ -23,8 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.core.network.Circular
 import com.hrms.jeejateamozy.core.network.CircularStats
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 /**
  * Circular List Screen
@@ -146,6 +146,11 @@ fun CircularListScreen(
                             onNextPage = { viewModel.loadNextPage() }
                         )
                     }
+                }
+
+                // ✅ ADDED: Bottom spacing
+                item {
+                    Spacer(modifier = Modifier.height(70.dp))
                 }
             }
 
@@ -672,10 +677,20 @@ private fun FilterDropdown(
  */
 private fun formatDate(dateString: String): String {
     return try {
-        val formatter = DateTimeFormatter.ISO_DATE_TIME
-        val date = LocalDateTime.parse(dateString, formatter)
-        date.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))
+        // Parse ISO date-time format
+        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+        val outputFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+        val date = inputFormat.parse(dateString)
+        date?.let { outputFormat.format(it) } ?: dateString
     } catch (e: Exception) {
-        dateString
+        // Try parsing date only format
+        try {
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val outputFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+            val date = inputFormat.parse(dateString)
+            date?.let { outputFormat.format(it) } ?: dateString
+        } catch (e2: Exception) {
+            dateString
+        }
     }
 }

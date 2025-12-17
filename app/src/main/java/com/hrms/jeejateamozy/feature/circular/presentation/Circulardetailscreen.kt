@@ -1,5 +1,4 @@
 package com.hrms.jeejateamozy.feature.circular.presentation
-
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -19,8 +18,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.core.network.CircularDetail
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 /**
  * Circular Detail Screen
@@ -133,11 +132,16 @@ private fun CircularDetailContent(circular: CircularDetail) {
             MetadataSection(circular = circular)
         }
 
-        // Approval Section
-        circular.approvedBy?.let {
-            item {
-                ApprovalSection(circular = circular)
-            }
+        // ✅ REMOVED: Approval Section
+        // circular.approvedBy?.let {
+        //     item {
+        //         ApprovalSection(circular = circular)
+        //     }
+        // }
+
+        // ✅ ADDED: Bottom spacing
+        item {
+            Spacer(modifier = Modifier.height(70.dp))
         }
     }
 }
@@ -496,106 +500,6 @@ private fun MetadataRow(
 }
 
 /**
- * Approval Section Component
- */
-@Composable
-private fun ApprovalSection(circular: CircularDetail) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.tertiary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Approval Details",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Approved By
-            circular.approvedBy?.let {
-                Column {
-                    Text(
-                        text = "Approved By",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = it.name ?: "Unknown",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                    it.email?.let { email ->
-                        Text(
-                            text = email,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-            }
-
-            // Approved At
-            circular.approvedAt?.let {
-                Spacer(modifier = Modifier.height(8.dp))
-                Column {
-                    Text(
-                        text = "Approved On",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = formatDetailDate(it),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
-            }
-
-            // Approval Comments
-            circular.approvalComments?.let {
-                Spacer(modifier = Modifier.height(8.dp))
-                Column {
-                    Text(
-                        text = "Comments",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = it,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.9f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
  * Type Badge Component
  */
 @Composable
@@ -688,10 +592,20 @@ private fun ErrorState(
  */
 private fun formatDetailDate(dateString: String): String {
     return try {
-        val formatter = DateTimeFormatter.ISO_DATE_TIME
-        val date = LocalDateTime.parse(dateString, formatter)
-        date.format(DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a"))
+        // Parse ISO date-time format
+        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+        val outputFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
+        val date = inputFormat.parse(dateString)
+        date?.let { outputFormat.format(it) } ?: dateString
     } catch (e: Exception) {
-        dateString
+        // Try parsing date only format
+        try {
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val outputFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+            val date = inputFormat.parse(dateString)
+            date?.let { outputFormat.format(it) } ?: dateString
+        } catch (e2: Exception) {
+            dateString
+        }
     }
 }

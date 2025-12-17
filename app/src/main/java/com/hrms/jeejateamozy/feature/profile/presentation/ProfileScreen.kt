@@ -305,7 +305,8 @@ fun ProfileScreen(
                     )
                 }
 
-                Spacer(Modifier.height(16.dp))
+                // ✅ ADDED: Bottom spacing
+                Spacer(Modifier.height(100.dp))
             }
 
             // Success/Error Messages
