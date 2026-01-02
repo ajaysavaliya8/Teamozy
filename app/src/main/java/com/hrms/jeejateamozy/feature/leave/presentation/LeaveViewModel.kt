@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
 
+// =============================================================================
+// UI STATES
+// =============================================================================
+
 /**
  * UI State for Apply Leave Screen
  */
@@ -32,11 +36,29 @@ data class LeaveHistoryUiState(
     val summary: LeaveSummary? = null
 )
 
+/**
+ * UI State for Leave Calendar Screen
+ */
+data class LeaveCalendarUiState(
+    val isLoading: Boolean = false,
+    val calendarData: LeaveCalendarData? = null,
+    val errorMessage: String? = null
+)
+
+// =============================================================================
+// EVENTS
+// =============================================================================
+
 sealed class LeaveEvent {
     data class ShowError(val message: String) : LeaveEvent()
     data class ShowSuccess(val message: String) : LeaveEvent()
     data class NavigateToHistory(val applicationId: Int) : LeaveEvent()
+    data class DraftSaved(val draftId: Int, val message: String) : LeaveEvent()
 }
+
+// =============================================================================
+// VIEWMODEL
+// =============================================================================
 
 class LeaveViewModel(
     private val repo: LeaveRepository
@@ -48,6 +70,9 @@ class LeaveViewModel(
     private val _historyUiState = MutableStateFlow(LeaveHistoryUiState())
     val historyUiState: StateFlow<LeaveHistoryUiState> = _historyUiState.asStateFlow()
 
+    private val _calendarUiState = MutableStateFlow(LeaveCalendarUiState())
+    val calendarUiState: StateFlow<LeaveCalendarUiState> = _calendarUiState.asStateFlow()
+
     private val _events = MutableSharedFlow<LeaveEvent>()
     val events: SharedFlow<LeaveEvent> = _events.asSharedFlow()
 
@@ -57,9 +82,10 @@ class LeaveViewModel(
         loadLeaveSummary()
     }
 
-    /**
-     * Load available leave types
-     */
+    // =========================================================================
+    // LOAD LEAVE TYPES
+    // =========================================================================
+
     fun loadLeaveTypes() {
         viewModelScope.launch {
             try {
@@ -101,25 +127,32 @@ class LeaveViewModel(
         }
     }
 
-    /**
-     * Select leave type
-     */
+    // =========================================================================
+    // SELECT LEAVE TYPE
+    // =========================================================================
+
     fun selectLeaveType(leaveType: LeaveType) {
         _applyLeaveUiState.update { it.copy(selectedLeaveType = leaveType) }
     }
 
-    /**
-     * Apply for leave
-     */
+    // =========================================================================
+    // APPLY LEAVE - UPDATED WITH HALF-DAY SUPPORT
+    // =========================================================================
+
     fun applyLeave(
         leaveTypeId: Int,
         startDate: String,
         endDate: String,
         leaveReason: String,
-        alternateContact: String?,
-        taskDependedOnYou: Boolean,
-        dependencyHandledBy: String?,
-        supportingDocumentFile: File?
+        isHalfDayStart: Boolean = false,
+        isHalfDayEnd: Boolean = false,
+        halfDayType: String? = null,
+        alternateContact: String? = null,
+        emergencyContact: String? = null,
+        taskDependedOnYou: Boolean = false,
+        dependencyHandledBy: String? = null,
+        handoverNotes: String? = null,
+        supportingDocumentFile: File? = null
     ) {
         viewModelScope.launch {
             try {
@@ -130,9 +163,14 @@ class LeaveViewModel(
                     startDate = startDate,
                     endDate = endDate,
                     leaveReason = leaveReason,
+                    isHalfDayStart = isHalfDayStart,
+                    isHalfDayEnd = isHalfDayEnd,
+                    halfDayType = halfDayType,
                     alternateContact = alternateContact,
+                    emergencyContact = emergencyContact,
                     taskDependedOnYou = taskDependedOnYou,
                     dependencyHandledBy = dependencyHandledBy,
+                    handoverNotes = handoverNotes,
                     supportingDocumentFile = supportingDocumentFile
                 )) {
                     is ApplyLeaveOutcome.Success -> {
@@ -151,6 +189,7 @@ class LeaveViewModel(
                         loadLeaveSummary()
 
                         Log.d("LeaveViewModel", "Leave applied successfully: ID=${outcome.applicationId}")
+                        Log.d("LeaveViewModel", "Total days: ${outcome.totalDays}, Effective days: ${outcome.effectiveDays}")
                     }
 
                     is ApplyLeaveOutcome.Error -> {
@@ -177,9 +216,10 @@ class LeaveViewModel(
         }
     }
 
-    /**
-     * Load leave history
-     */
+    // =========================================================================
+    // LOAD LEAVE HISTORY
+    // =========================================================================
+
     fun loadLeaveHistory(
         status: String? = null,
         startDate: String? = null,
@@ -234,9 +274,10 @@ class LeaveViewModel(
         }
     }
 
-    /**
-     * Load leave summary
-     */
+    // =========================================================================
+    // LOAD LEAVE SUMMARY
+    // =========================================================================
+
     fun loadLeaveSummary(year: Int? = null) {
         viewModelScope.launch {
             try {
@@ -257,16 +298,18 @@ class LeaveViewModel(
         }
     }
 
-    /**
-     * Filter by status
-     */
+    // =========================================================================
+    // FILTER BY STATUS
+    // =========================================================================
+
     fun filterByStatus(status: String?) {
         loadLeaveHistory(status = status)
     }
 
-    /**
-     * Load next page
-     */
+    // =========================================================================
+    // PAGINATION
+    // =========================================================================
+
     fun loadNextPage() {
         val currentPagination = _historyUiState.value.pagination
         if (currentPagination != null && currentPagination.currentPage < currentPagination.totalPages) {
@@ -277,9 +320,6 @@ class LeaveViewModel(
         }
     }
 
-    /**
-     * Load previous page
-     */
     fun loadPreviousPage() {
         val currentPagination = _historyUiState.value.pagination
         if (currentPagination != null && currentPagination.currentPage > 1) {
@@ -290,18 +330,20 @@ class LeaveViewModel(
         }
     }
 
-    /**
-     * Refresh data
-     */
+    // =========================================================================
+    // REFRESH
+    // =========================================================================
+
     fun refresh() {
         loadLeaveTypes()
         loadLeaveHistory(status = _historyUiState.value.selectedStatus, page = 1)
         loadLeaveSummary()
     }
 
-    /**
-     * Withdraw leave
-     */
+    // =========================================================================
+    // WITHDRAW LEAVE
+    // =========================================================================
+
     fun withdrawLeave(applicationId: Int, withdrawalReason: String) {
         viewModelScope.launch {
             try {
@@ -339,6 +381,220 @@ class LeaveViewModel(
                 }
                 _events.emit(LeaveEvent.ShowError(e.message ?: "Unknown error"))
                 Log.e("LeaveViewModel", "Exception withdrawing leave", e)
+            }
+        }
+    }
+
+    // =========================================================================
+    // CANCEL LEAVE
+    // =========================================================================
+
+    fun cancelLeave(applicationId: Int, cancellationReason: String) {
+        viewModelScope.launch {
+            try {
+                _historyUiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+                when (val outcome = repo.cancelLeave(applicationId, cancellationReason)) {
+                    is CancelLeaveOutcome.Success -> {
+                        _historyUiState.update { it.copy(isLoading = false) }
+                        _events.emit(LeaveEvent.ShowSuccess(outcome.message))
+
+                        // Refresh leave history
+                        loadLeaveHistory(status = _historyUiState.value.selectedStatus)
+                        loadLeaveSummary()
+
+                        Log.d("LeaveViewModel", "Leave cancelled successfully")
+                    }
+
+                    is CancelLeaveOutcome.Error -> {
+                        _historyUiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = outcome.message
+                            )
+                        }
+                        _events.emit(LeaveEvent.ShowError(outcome.message))
+                        Log.e("LeaveViewModel", "Error cancelling leave: ${outcome.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                _historyUiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Unknown error"
+                    )
+                }
+                _events.emit(LeaveEvent.ShowError(e.message ?: "Unknown error"))
+                Log.e("LeaveViewModel", "Exception cancelling leave", e)
+            }
+        }
+    }
+
+    // =========================================================================
+    // LOAD LEAVE CALENDAR
+    // =========================================================================
+
+    fun loadLeaveCalendar(month: Int, year: Int) {
+        viewModelScope.launch {
+            try {
+                _calendarUiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+                when (val outcome = repo.getLeaveCalendar(month, year)) {
+                    is LeaveCalendarOutcome.Success -> {
+                        _calendarUiState.update {
+                            it.copy(
+                                isLoading = false,
+                                calendarData = outcome.data,
+                                errorMessage = null
+                            )
+                        }
+                        Log.d("LeaveViewModel", "Loaded leave calendar for $month/$year")
+                    }
+
+                    is LeaveCalendarOutcome.Error -> {
+                        _calendarUiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = outcome.message
+                            )
+                        }
+                        _events.emit(LeaveEvent.ShowError(outcome.message))
+                        Log.e("LeaveViewModel", "Error loading leave calendar: ${outcome.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                _calendarUiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Unknown error"
+                    )
+                }
+                _events.emit(LeaveEvent.ShowError(e.message ?: "Unknown error"))
+                Log.e("LeaveViewModel", "Exception loading leave calendar", e)
+            }
+        }
+    }
+
+    // =========================================================================
+    // SAVE DRAFT
+    // =========================================================================
+
+    fun saveDraftLeave(
+        leaveTypeId: Int,
+        startDate: String,
+        endDate: String,
+        leaveReason: String?,
+        isHalfDayStart: Boolean = false,
+        isHalfDayEnd: Boolean = false,
+        halfDayType: String? = null,
+        alternateContact: String? = null,
+        emergencyContact: String? = null,
+        taskDependedOnYou: Boolean = false,
+        dependencyHandledBy: String? = null,
+        handoverNotes: String? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                _applyLeaveUiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+                when (val outcome = repo.saveDraftLeave(
+                    leaveTypeId = leaveTypeId,
+                    startDate = startDate,
+                    endDate = endDate,
+                    leaveReason = leaveReason,
+                    isHalfDayStart = isHalfDayStart,
+                    isHalfDayEnd = isHalfDayEnd,
+                    halfDayType = halfDayType,
+                    alternateContact = alternateContact,
+                    emergencyContact = emergencyContact,
+                    taskDependedOnYou = taskDependedOnYou,
+                    dependencyHandledBy = dependencyHandledBy,
+                    handoverNotes = handoverNotes
+                )) {
+                    is SaveDraftOutcome.Success -> {
+                        _applyLeaveUiState.update {
+                            it.copy(
+                                isLoading = false,
+                                successMessage = outcome.message,
+                                errorMessage = null
+                            )
+                        }
+                        _events.emit(LeaveEvent.DraftSaved(outcome.draftId, outcome.message))
+                        Log.d("LeaveViewModel", "Draft saved: ID=${outcome.draftId}")
+                    }
+
+                    is SaveDraftOutcome.Error -> {
+                        _applyLeaveUiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = outcome.message
+                            )
+                        }
+                        _events.emit(LeaveEvent.ShowError(outcome.message))
+                        Log.e("LeaveViewModel", "Error saving draft: ${outcome.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                _applyLeaveUiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Unknown error"
+                    )
+                }
+                _events.emit(LeaveEvent.ShowError(e.message ?: "Unknown error"))
+                Log.e("LeaveViewModel", "Exception saving draft", e)
+            }
+        }
+    }
+
+    // =========================================================================
+    // SUBMIT DRAFT
+    // =========================================================================
+
+    fun submitDraftLeave(applicationId: Int) {
+        viewModelScope.launch {
+            try {
+                _applyLeaveUiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+                when (val outcome = repo.submitDraftLeave(applicationId)) {
+                    is SubmitDraftOutcome.Success -> {
+                        _applyLeaveUiState.update {
+                            it.copy(
+                                isLoading = false,
+                                successMessage = outcome.message,
+                                errorMessage = null
+                            )
+                        }
+                        _events.emit(LeaveEvent.ShowSuccess(outcome.message))
+                        _events.emit(LeaveEvent.NavigateToHistory(applicationId))
+
+                        // Refresh leave history
+                        loadLeaveHistory()
+                        loadLeaveSummary()
+
+                        Log.d("LeaveViewModel", "Draft submitted: ID=$applicationId")
+                    }
+
+                    is SubmitDraftOutcome.Error -> {
+                        _applyLeaveUiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = outcome.message
+                            )
+                        }
+                        _events.emit(LeaveEvent.ShowError(outcome.message))
+                        Log.e("LeaveViewModel", "Error submitting draft: ${outcome.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                _applyLeaveUiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Unknown error"
+                    )
+                }
+                _events.emit(LeaveEvent.ShowError(e.message ?: "Unknown error"))
+                Log.e("LeaveViewModel", "Exception submitting draft", e)
             }
         }
     }

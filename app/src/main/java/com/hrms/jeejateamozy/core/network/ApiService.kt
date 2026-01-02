@@ -1,4 +1,5 @@
 package com.hrms.jeejateamozy.core.network
+
 import com.hrms.jeejateamozy.feature.profile.data.BankingInfoResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -9,11 +10,8 @@ import com.hrms.jeejateamozy.feature.profile.data.PersonalInfoResponse
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentDetailResponse
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityResponse
 import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsResponse
-import com.hrms.jeejateamozy.feature.location.model.LocationData
-import okhttp3.ResponseBody
-import retrofit2.http.Body
-import retrofit2.http.POST
 import com.hrms.jeejateamozy.feature.location.data.remote.LocationSyncRequest
+import okhttp3.ResponseBody
 
 
 data class DeviceChangeResponse(
@@ -22,7 +20,10 @@ data class DeviceChangeResponse(
 
 interface ApiService {
 
-    // ---------- AUTH ----------
+    // ========================================
+    // AUTH ENDPOINTS
+    // ========================================
+
     @POST("send-login")
     suspend fun sendLogin(
         @Query("mobile_number") mobileNumber: Long,
@@ -66,7 +67,10 @@ interface ApiService {
         @Field("reason") reason: String? = null
     ): Response<DeviceChangeResponse>
 
-    // ---------- ATTENDANCE ----------
+    // ========================================
+    // ATTENDANCE ENDPOINTS
+    // ========================================
+
     @GET("check-status")
     suspend fun checkStatus(
         @Query("device_id") deviceId: String,
@@ -90,7 +94,7 @@ interface ApiService {
         @Field("late_reason") lateReason: String? = null,
         @Field("out_of_range_reason") outOfRangeReason: String? = null,
         @Field("acknowledgment_note") acknowledgmentNote: String? = null,
-        // NEW: First location tracking data
+        // Location tracking data
         @Field("first_location_recorded_at") firstLocationRecordedAt: String? = null,
         @Field("first_location_latitude") firstLocationLatitude: Double? = null,
         @Field("first_location_longitude") firstLocationLongitude: Double? = null,
@@ -125,7 +129,7 @@ interface ApiService {
         @Part("out_of_range_reason") outOfRangeReason: RequestBody? = null,
         @Part("work_description") workReport: RequestBody? = null,
         @Part work_report_file: MultipartBody.Part? = null,
-        // NEW: Last location tracking data
+        // Location tracking data
         @Part("last_location_recorded_at") lastLocationRecordedAt: RequestBody? = null,
         @Part("last_location_latitude") lastLocationLatitude: RequestBody? = null,
         @Part("last_location_longitude") lastLocationLongitude: RequestBody? = null,
@@ -142,7 +146,10 @@ interface ApiService {
         @Query("token") token: String
     ): Response<CheckOutSignatureResponse>
 
-    // ---------- FACE RECOGNITION ----------
+    // ========================================
+    // FACE RECOGNITION ENDPOINTS
+    // ========================================
+
     @GET("employees/face-recognition")
     suspend fun getFaceRecognitionData(): Response<FaceRecognitionDataResponse>
 
@@ -155,8 +162,9 @@ interface ApiService {
         @Part("reason_for_change") reasonForChange: RequestBody? = null
     ): Response<BasicResponse>
 
-    // ---------- PROFILE ----------
-// ---------- PROFILE ----------
+    // ========================================
+    // PROFILE ENDPOINTS
+    // ========================================
 
     @FormUrlEncoded
     @PUT("profile/update-social-media")
@@ -204,7 +212,6 @@ interface ApiService {
         @Field("languages") languages: List<String>? = null
     ): Response<PersonalInfoResponse>
 
-    // ---------- PROFILE - EMPLOYMENT DETAIL ----------
     @GET("employment-details")
     suspend fun getEmploymentDetails(): Response<EmploymentDetailResponse>
 
@@ -227,6 +234,10 @@ interface ApiService {
     @GET("employee-shift")
     suspend fun getEmploymentShift(): Response<ShiftDetailsResponse>
 
+    // ========================================
+    // WORK REPORT ENDPOINTS
+    // ========================================
+
     @GET("work-report")
     suspend fun getWorkReports(
         @Query("month") month: Int,
@@ -240,7 +251,10 @@ interface ApiService {
         @Part attachments: List<MultipartBody.Part>? = null
     ): Response<CreateWorkReportResponse>
 
-    // ---------- CIRCULARS ----------
+    // ========================================
+    // CIRCULAR ENDPOINTS
+    // ========================================
+
     @GET("circulars")
     suspend fun getCirculars(
         @Query("status") status: String? = null,
@@ -258,25 +272,35 @@ interface ApiService {
     @GET("circulars/stats/summary")
     suspend fun getCircularStats(): Response<CircularStatsResponse>
 
+    // ========================================
+    // LEAVE ENDPOINTS - UPDATED
+    // ========================================
+
     /**
-     * Get all available leave types
+     * Get all available leave types for the employee
+     * Filters based on gender and marital status
      */
     @GET("leave-types")
     suspend fun getLeaveTypes(): Response<LeaveTypesResponse>
 
     /**
-     * Apply for leave
+     * Apply for leave with half-day support
      */
     @Multipart
     @POST("apply-leave")
     suspend fun applyLeave(
-        @Part("leave_type_id") leaveTypeId: Int,
+        @Part("leave_type_id") leaveTypeId: RequestBody,
         @Part("start_date") startDate: RequestBody,
         @Part("end_date") endDate: RequestBody,
         @Part("leave_reason") leaveReason: RequestBody,
+        @Part("is_half_day_start") isHalfDayStart: RequestBody,
+        @Part("is_half_day_end") isHalfDayEnd: RequestBody,
+        @Part("half_day_type") halfDayType: RequestBody?,
         @Part("alternate_contact") alternateContact: RequestBody?,
-        @Part("task_depended_on_you") taskDependedOnYou: Boolean,
+        @Part("emergency_contact") emergencyContact: RequestBody?,
+        @Part("task_depended_on_you") taskDependedOnYou: RequestBody,
         @Part("dependency_handled_by") dependencyHandledBy: RequestBody?,
+        @Part("handover_notes") handoverNotes: RequestBody?,
         @Part supportingDocument: MultipartBody.Part?
     ): Response<ApplyLeaveResponse>
 
@@ -298,10 +322,10 @@ interface ApiService {
     @GET("leave-applications/{application_id}")
     suspend fun getLeaveApplicationDetail(
         @Path("application_id") applicationId: Int
-    ): Response<BasicResponse>  // Uses same structure as LeaveApplicationDto
+    ): Response<LeaveApplicationDetailResponse>
 
     /**
-     * Withdraw leave application
+     * Withdraw a pending or approved leave application
      */
     @FormUrlEncoded
     @POST("withdraw-leave/{application_id}")
@@ -311,12 +335,63 @@ interface ApiService {
     ): Response<WithdrawLeaveResponse>
 
     /**
-     * Get leave summary
+     * Cancel an approved leave application before it starts
+     */
+    @FormUrlEncoded
+    @POST("cancel-leave/{application_id}")
+    suspend fun cancelLeave(
+        @Path("application_id") applicationId: Int,
+        @Field("cancellation_reason") cancellationReason: String
+    ): Response<CancelLeaveResponse>
+
+    /**
+     * Get leave summary and statistics
      */
     @GET("leave-summary")
     suspend fun getLeaveSummary(
         @Query("year") year: Int? = null
     ): Response<LeaveSummaryResponse>
+
+    /**
+     * Get leave calendar for a specific month
+     */
+    @GET("leave-calendar")
+    suspend fun getLeaveCalendar(
+        @Query("month") month: Int,
+        @Query("year") year: Int
+    ): Response<LeaveCalendarResponse>
+
+    /**
+     * Save a leave application as draft
+     */
+    @FormUrlEncoded
+    @POST("save-draft-leave")
+    suspend fun saveDraftLeave(
+        @Field("leave_type_id") leaveTypeId: Int,
+        @Field("start_date") startDate: String,
+        @Field("end_date") endDate: String,
+        @Field("leave_reason") leaveReason: String?,
+        @Field("is_half_day_start") isHalfDayStart: Boolean = false,
+        @Field("is_half_day_end") isHalfDayEnd: Boolean = false,
+        @Field("half_day_type") halfDayType: String? = null,
+        @Field("alternate_contact") alternateContact: String? = null,
+        @Field("emergency_contact") emergencyContact: String? = null,
+        @Field("task_depended_on_you") taskDependedOnYou: Boolean = false,
+        @Field("dependency_handled_by") dependencyHandledBy: String? = null,
+        @Field("handover_notes") handoverNotes: String? = null
+    ): Response<SaveDraftLeaveResponse>
+
+    /**
+     * Submit a draft leave application for approval
+     */
+    @POST("submit-draft/{application_id}")
+    suspend fun submitDraftLeave(
+        @Path("application_id") applicationId: Int
+    ): Response<SubmitDraftResponse>
+
+    // ========================================
+    // TIMESHEET ENDPOINTS
+    // ========================================
 
     @GET("timesheet/monthly")
     suspend fun getMonthlyTimesheet(
@@ -329,13 +404,9 @@ interface ApiService {
         @Path("attendance_date") attendanceDate: String
     ): Response<DayTimesheetResponse>
 
-
-    @FormUrlEncoded
-    @POST("logout")
-    suspend fun logout(
-        @Field("device_id") deviceId: String,
-        @Field("clear_push_token") clearPushToken: Boolean = true
-    ): Response<LogoutResponse>
+    // ========================================
+    // CORRECTION REQUEST ENDPOINTS
+    // ========================================
 
     @GET("timesheet/correction-request/options")
     suspend fun getCorrectionRequestOptions(): Response<CorrectionRequestOptionsResponse>
@@ -373,8 +444,23 @@ interface ApiService {
         @Path("settled_id") settledId: Int
     ): Response<ResponseBody>
 
+    // ========================================
+    // LOCATION SYNC ENDPOINT
+    // ========================================
+
     @POST("location/sync")
     suspend fun syncLocationTracking(
         @Body locations: List<LocationSyncRequest>
     ): Response<Any>
+
+    // ========================================
+    // LOGOUT ENDPOINT
+    // ========================================
+
+    @FormUrlEncoded
+    @POST("logout")
+    suspend fun logout(
+        @Field("device_id") deviceId: String,
+        @Field("clear_push_token") clearPushToken: Boolean = true
+    ): Response<LogoutResponse>
 }

@@ -10,8 +10,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+
+// =============================================================================
+// OUTCOME CLASSES
+// =============================================================================
 
 sealed class LeaveTypesOutcome {
     data class Success(val leaveTypes: List<LeaveType>) : LeaveTypesOutcome()
@@ -23,7 +28,9 @@ sealed class ApplyLeaveOutcome {
         val message: String,
         val applicationId: Int,
         val appliedAt: String,
-        val numDays: Int
+        val totalDays: Double,
+        val effectiveDays: Double,
+        val requiresApproval: Boolean
     ) : ApplyLeaveOutcome()
     data class Error(val message: String) : ApplyLeaveOutcome()
 }
@@ -36,6 +43,11 @@ sealed class LeaveApplicationsOutcome {
     data class Error(val message: String) : LeaveApplicationsOutcome()
 }
 
+sealed class LeaveApplicationDetailOutcome {
+    data class Success(val application: LeaveApplicationDetailDto) : LeaveApplicationDetailOutcome()
+    data class Error(val message: String) : LeaveApplicationDetailOutcome()
+}
+
 sealed class LeaveSummaryOutcome {
     data class Success(val summary: LeaveSummary) : LeaveSummaryOutcome()
     data class Error(val message: String) : LeaveSummaryOutcome()
@@ -46,32 +58,59 @@ sealed class WithdrawLeaveOutcome {
     data class Error(val message: String) : WithdrawLeaveOutcome()
 }
 
-/**
- * ✅ UPDATED: Now using NetworkErrorHandler
- */
+sealed class CancelLeaveOutcome {
+    data class Success(val message: String) : CancelLeaveOutcome()
+    data class Error(val message: String) : CancelLeaveOutcome()
+}
+
+sealed class LeaveCalendarOutcome {
+    data class Success(val data: LeaveCalendarData) : LeaveCalendarOutcome()
+    data class Error(val message: String) : LeaveCalendarOutcome()
+}
+
+sealed class SaveDraftOutcome {
+    data class Success(
+        val message: String,
+        val draftId: Int,
+        val totalDays: Double
+    ) : SaveDraftOutcome()
+    data class Error(val message: String) : SaveDraftOutcome()
+}
+
+sealed class SubmitDraftOutcome {
+    data class Success(val message: String) : SubmitDraftOutcome()
+    data class Error(val message: String) : SubmitDraftOutcome()
+}
+
+// =============================================================================
+// REPOSITORY
+// =============================================================================
+
 class LeaveRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
 
-    /**
-     * Get all available leave types
-     */
+    companion object {
+        private const val TAG = "LeaveRepository"
+    }
+
+    // =========================================================================
+    // GET LEAVE TYPES
+    // =========================================================================
+
     suspend fun getLeaveTypes(): LeaveTypesOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d("LEAVE", "Fetching leave types")
+            Log.d(TAG, "Fetching leave types")
 
             val response = api.getLeaveTypes()
-
-            Log.d("LEAVE", "Get leave types response code: ${response.code()}")
+            Log.d(TAG, "Get leave types response code: ${response.code()}")
 
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
                     if (responseBody?.status == "success") {
-                        Log.d("LEAVE", "Successfully fetched ${responseBody.data.size} leave types")
-
                         val leaveTypes = responseBody.data.map { it.toDomain() }
-
+                        Log.d(TAG, "Successfully fetched ${leaveTypes.size} leave types")
                         LeaveTypesOutcome.Success(leaveTypes = leaveTypes)
                     } else {
                         LeaveTypesOutcome.Error("Failed to fetch leave types")
@@ -83,73 +122,98 @@ class LeaveRepository(private val context: Context) {
                     LeaveTypesOutcome.Error("Unauthorized. Please login again.")
                 }
 
+                response.code() == 404 -> {
+                    LeaveTypesOutcome.Error("Employee not found")
+                }
+
                 else -> {
                     val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave types")
                     LeaveTypesOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
-            Log.e("LEAVE", "Error fetching leave types", e)
+            Log.e(TAG, "Error fetching leave types", e)
             LeaveTypesOutcome.Error(e.message ?: "Network error occurred")
         }
     }
 
-    /**
-     * Apply for leave
-     */
+    // =========================================================================
+    // APPLY LEAVE
+    // =========================================================================
+
     suspend fun applyLeave(
         leaveTypeId: Int,
         startDate: String,
         endDate: String,
         leaveReason: String,
+        isHalfDayStart: Boolean,
+        isHalfDayEnd: Boolean,
+        halfDayType: String?,
         alternateContact: String?,
+        emergencyContact: String?,
         taskDependedOnYou: Boolean,
         dependencyHandledBy: String?,
+        handoverNotes: String?,
         supportingDocumentFile: File?
     ): ApplyLeaveOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d("LEAVE", "Applying for leave: type=$leaveTypeId, dates=$startDate to $endDate")
+            Log.d(TAG, "Applying for leave: type=$leaveTypeId, dates=$startDate to $endDate")
+            Log.d(TAG, "Half day: start=$isHalfDayStart, end=$isHalfDayEnd, type=$halfDayType")
 
             // Create request bodies
+            val leaveTypeIdBody = leaveTypeId.toString().toRequestBody("text/plain".toMediaTypeOrNull())
             val startDateBody = startDate.toRequestBody("text/plain".toMediaTypeOrNull())
             val endDateBody = endDate.toRequestBody("text/plain".toMediaTypeOrNull())
             val leaveReasonBody = leaveReason.toRequestBody("text/plain".toMediaTypeOrNull())
+            val isHalfDayStartBody = isHalfDayStart.toString().toRequestBody("text/plain".toMediaTypeOrNull())
+            val isHalfDayEndBody = isHalfDayEnd.toString().toRequestBody("text/plain".toMediaTypeOrNull())
+            val halfDayTypeBody = halfDayType?.toRequestBody("text/plain".toMediaTypeOrNull())
             val alternateContactBody = alternateContact?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val emergencyContactBody = emergencyContact?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val taskDependedOnYouBody = taskDependedOnYou.toString().toRequestBody("text/plain".toMediaTypeOrNull())
             val dependencyHandledByBody = dependencyHandledBy?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val handoverNotesBody = handoverNotes?.toRequestBody("text/plain".toMediaTypeOrNull())
 
             // Create multipart file if provided
             val filePart = supportingDocumentFile?.let {
-                val requestFile = it.readBytes().toRequestBody("application/octet-stream".toMediaTypeOrNull())
+                val requestFile = it.asRequestBody("application/octet-stream".toMediaTypeOrNull())
                 MultipartBody.Part.createFormData("supporting_document", it.name, requestFile)
             }
 
             val response = api.applyLeave(
-                leaveTypeId = leaveTypeId,
+                leaveTypeId = leaveTypeIdBody,
                 startDate = startDateBody,
                 endDate = endDateBody,
                 leaveReason = leaveReasonBody,
+                isHalfDayStart = isHalfDayStartBody,
+                isHalfDayEnd = isHalfDayEndBody,
+                halfDayType = halfDayTypeBody,
                 alternateContact = alternateContactBody,
-                taskDependedOnYou = taskDependedOnYou,
+                emergencyContact = emergencyContactBody,
+                taskDependedOnYou = taskDependedOnYouBody,
                 dependencyHandledBy = dependencyHandledByBody,
+                handoverNotes = handoverNotesBody,
                 supportingDocument = filePart
             )
 
-            Log.d("LEAVE", "Apply leave response code: ${response.code()}")
+            Log.d(TAG, "Apply leave response code: ${response.code()}")
 
             when {
                 response.isSuccessful && response.code() == 201 -> {
                     val responseBody = response.body()
                     if (responseBody?.status == "success" && responseBody.data != null) {
-                        Log.d("LEAVE", "Leave applied successfully: ID=${responseBody.data.application_id}")
+                        Log.d(TAG, "Leave applied successfully: ID=${responseBody.data.application_id}")
 
                         ApplyLeaveOutcome.Success(
                             message = responseBody.message,
                             applicationId = responseBody.data.application_id,
                             appliedAt = responseBody.data.applied_at,
-                            numDays = responseBody.data.num_days
+                            totalDays = responseBody.data.total_days,
+                            effectiveDays = responseBody.data.effective_days,
+                            requiresApproval = responseBody.data.requires_approval
                         )
                     } else {
-                        ApplyLeaveOutcome.Error("Failed to apply leave")
+                        ApplyLeaveOutcome.Error(responseBody?.message ?: "Failed to apply leave")
                     }
                 }
 
@@ -164,7 +228,8 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 404 -> {
-                    ApplyLeaveOutcome.Error("Leave type not found")
+                    val errorMsg = NetworkErrorHandler.extract(response, "Leave type not found")
+                    ApplyLeaveOutcome.Error(errorMsg)
                 }
 
                 else -> {
@@ -173,14 +238,15 @@ class LeaveRepository(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Log.e("LEAVE", "Error applying leave", e)
+            Log.e(TAG, "Error applying leave", e)
             ApplyLeaveOutcome.Error(e.message ?: "Network error occurred")
         }
     }
 
-    /**
-     * Get leave applications history
-     */
+    // =========================================================================
+    // GET LEAVE APPLICATIONS (History)
+    // =========================================================================
+
     suspend fun getLeaveApplications(
         status: String? = null,
         startDate: String? = null,
@@ -189,7 +255,7 @@ class LeaveRepository(private val context: Context) {
         pageSize: Int = 10
     ): LeaveApplicationsOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d("LEAVE", "Fetching leave applications: status=$status, page=$page")
+            Log.d(TAG, "Fetching leave applications: status=$status, page=$page")
 
             val response = api.getLeaveApplications(
                 status = status,
@@ -199,13 +265,13 @@ class LeaveRepository(private val context: Context) {
                 pageSize = pageSize
             )
 
-            Log.d("LEAVE", "Get leave applications response code: ${response.code()}")
+            Log.d(TAG, "Get leave applications response code: ${response.code()}")
 
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
                     if (responseBody?.status == "success") {
-                        Log.d("LEAVE", "Successfully fetched ${responseBody.data.applications.size} applications")
+                        Log.d(TAG, "Successfully fetched ${responseBody.data.applications.size} applications")
 
                         val applications = responseBody.data.applications.map { it.toDomain() }
                         val pagination = responseBody.data.pagination.toDomain()
@@ -224,84 +290,92 @@ class LeaveRepository(private val context: Context) {
                     LeaveApplicationsOutcome.Error("Unauthorized. Please login again.")
                 }
 
+                response.code() == 404 -> {
+                    LeaveApplicationsOutcome.Error("Employee record not found")
+                }
+
                 else -> {
                     val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave applications")
                     LeaveApplicationsOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
-            Log.e("LEAVE", "Error fetching leave applications", e)
+            Log.e(TAG, "Error fetching leave applications", e)
             LeaveApplicationsOutcome.Error(e.message ?: "Network error occurred")
         }
     }
 
-    /**
-     * Get leave summary
-     */
-    suspend fun getLeaveSummary(year: Int? = null): LeaveSummaryOutcome = withContext(Dispatchers.IO) {
+    // =========================================================================
+    // GET LEAVE APPLICATION DETAIL
+    // =========================================================================
+
+    suspend fun getLeaveApplicationDetail(
+        applicationId: Int
+    ): LeaveApplicationDetailOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d("LEAVE", "Fetching leave summary for year: $year")
+            Log.d(TAG, "Fetching leave application detail: ID=$applicationId")
 
-            val response = api.getLeaveSummary(year = year)
+            val response = api.getLeaveApplicationDetail(applicationId)
 
-            Log.d("LEAVE", "Get leave summary response code: ${response.code()}")
+            Log.d(TAG, "Get leave detail response code: ${response.code()}")
 
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
                     if (responseBody?.status == "success") {
-                        Log.d("LEAVE", "Successfully fetched leave summary")
-
-                        val summary = responseBody.data.toDomain()
-
-                        LeaveSummaryOutcome.Success(summary = summary)
+                        Log.d(TAG, "Successfully fetched leave application detail")
+                        LeaveApplicationDetailOutcome.Success(application = responseBody.data)
                     } else {
-                        LeaveSummaryOutcome.Error("Failed to fetch leave summary")
+                        LeaveApplicationDetailOutcome.Error("Failed to fetch leave application detail")
                     }
                 }
 
                 response.code() == 401 -> {
                     AppStateManager.emitUnauthorized()
-                    LeaveSummaryOutcome.Error("Unauthorized. Please login again.")
+                    LeaveApplicationDetailOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    LeaveApplicationDetailOutcome.Error("Leave application not found")
                 }
 
                 else -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave summary")
-                    LeaveSummaryOutcome.Error(errorMsg)
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave application detail")
+                    LeaveApplicationDetailOutcome.Error(errorMsg)
                 }
             }
         } catch (e: Exception) {
-            Log.e("LEAVE", "Error fetching leave summary", e)
-            LeaveSummaryOutcome.Error(e.message ?: "Network error occurred")
+            Log.e(TAG, "Error fetching leave application detail", e)
+            LeaveApplicationDetailOutcome.Error(e.message ?: "Network error occurred")
         }
     }
 
-    /**
-     * Withdraw leave application
-     */
+    // =========================================================================
+    // WITHDRAW LEAVE
+    // =========================================================================
+
     suspend fun withdrawLeave(
         applicationId: Int,
         withdrawalReason: String
     ): WithdrawLeaveOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d("LEAVE", "Withdrawing leave application: ID=$applicationId")
+            Log.d(TAG, "Withdrawing leave application: ID=$applicationId")
 
             val response = api.withdrawLeave(
                 applicationId = applicationId,
                 withdrawalReason = withdrawalReason
             )
 
-            Log.d("LEAVE", "Withdraw leave response code: ${response.code()}")
+            Log.d(TAG, "Withdraw leave response code: ${response.code()}")
 
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
                     if (responseBody?.status == "success") {
-                        Log.d("LEAVE", "Leave withdrawn successfully")
-
+                        Log.d(TAG, "Leave withdrawn successfully")
                         WithdrawLeaveOutcome.Success(message = responseBody.message)
                     } else {
-                        WithdrawLeaveOutcome.Error("Failed to withdraw leave")
+                        WithdrawLeaveOutcome.Error(responseBody?.message ?: "Failed to withdraw leave")
                     }
                 }
 
@@ -325,8 +399,276 @@ class LeaveRepository(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            Log.e("LEAVE", "Error withdrawing leave", e)
+            Log.e(TAG, "Error withdrawing leave", e)
             WithdrawLeaveOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    // =========================================================================
+    // CANCEL LEAVE
+    // =========================================================================
+
+    suspend fun cancelLeave(
+        applicationId: Int,
+        cancellationReason: String
+    ): CancelLeaveOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d(TAG, "Cancelling leave application: ID=$applicationId")
+
+            val response = api.cancelLeave(
+                applicationId = applicationId,
+                cancellationReason = cancellationReason
+            )
+
+            Log.d(TAG, "Cancel leave response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d(TAG, "Leave cancelled successfully")
+                        CancelLeaveOutcome.Success(message = responseBody.message)
+                    } else {
+                        CancelLeaveOutcome.Error(responseBody?.message ?: "Failed to cancel leave")
+                    }
+                }
+
+                response.code() == 400 -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Cannot cancel this leave application")
+                    CancelLeaveOutcome.Error(errorMsg)
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    CancelLeaveOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    CancelLeaveOutcome.Error("Leave application not found")
+                }
+
+                else -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to cancel leave")
+                    CancelLeaveOutcome.Error(errorMsg)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cancelling leave", e)
+            CancelLeaveOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    // =========================================================================
+    // GET LEAVE SUMMARY
+    // =========================================================================
+
+    suspend fun getLeaveSummary(year: Int? = null): LeaveSummaryOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d(TAG, "Fetching leave summary for year: $year")
+
+            val response = api.getLeaveSummary(year = year)
+
+            Log.d(TAG, "Get leave summary response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d(TAG, "Successfully fetched leave summary")
+                        val summary = responseBody.data.toDomain()
+                        LeaveSummaryOutcome.Success(summary = summary)
+                    } else {
+                        LeaveSummaryOutcome.Error("Failed to fetch leave summary")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    LeaveSummaryOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    LeaveSummaryOutcome.Error("Employee record not found")
+                }
+
+                else -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave summary")
+                    LeaveSummaryOutcome.Error(errorMsg)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching leave summary", e)
+            LeaveSummaryOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    // =========================================================================
+    // GET LEAVE CALENDAR
+    // =========================================================================
+
+    suspend fun getLeaveCalendar(
+        month: Int,
+        year: Int
+    ): LeaveCalendarOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d(TAG, "Fetching leave calendar for $month/$year")
+
+            val response = api.getLeaveCalendar(month = month, year = year)
+
+            Log.d(TAG, "Get leave calendar response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d(TAG, "Successfully fetched leave calendar with ${responseBody.data.leaves.size} leaves")
+                        LeaveCalendarOutcome.Success(data = responseBody.data)
+                    } else {
+                        LeaveCalendarOutcome.Error("Failed to fetch leave calendar")
+                    }
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    LeaveCalendarOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    LeaveCalendarOutcome.Error("Employee record not found")
+                }
+
+                else -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave calendar")
+                    LeaveCalendarOutcome.Error(errorMsg)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching leave calendar", e)
+            LeaveCalendarOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    // =========================================================================
+    // SAVE DRAFT LEAVE
+    // =========================================================================
+
+    suspend fun saveDraftLeave(
+        leaveTypeId: Int,
+        startDate: String,
+        endDate: String,
+        leaveReason: String?,
+        isHalfDayStart: Boolean,
+        isHalfDayEnd: Boolean,
+        halfDayType: String?,
+        alternateContact: String?,
+        emergencyContact: String?,
+        taskDependedOnYou: Boolean,
+        dependencyHandledBy: String?,
+        handoverNotes: String?
+    ): SaveDraftOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d(TAG, "Saving leave draft: type=$leaveTypeId, dates=$startDate to $endDate")
+
+            val response = api.saveDraftLeave(
+                leaveTypeId = leaveTypeId,
+                startDate = startDate,
+                endDate = endDate,
+                leaveReason = leaveReason,
+                isHalfDayStart = isHalfDayStart,
+                isHalfDayEnd = isHalfDayEnd,
+                halfDayType = halfDayType,
+                alternateContact = alternateContact,
+                emergencyContact = emergencyContact,
+                taskDependedOnYou = taskDependedOnYou,
+                dependencyHandledBy = dependencyHandledBy,
+                handoverNotes = handoverNotes
+            )
+
+            Log.d(TAG, "Save draft response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 201 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success" && responseBody.data != null) {
+                        Log.d(TAG, "Draft saved successfully: ID=${responseBody.data.draft_id}")
+                        SaveDraftOutcome.Success(
+                            message = responseBody.message,
+                            draftId = responseBody.data.draft_id,
+                            totalDays = responseBody.data.total_days
+                        )
+                    } else {
+                        SaveDraftOutcome.Error(responseBody?.message ?: "Failed to save draft")
+                    }
+                }
+
+                response.code() == 400 -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid draft data")
+                    SaveDraftOutcome.Error(errorMsg)
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    SaveDraftOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                else -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to save draft")
+                    SaveDraftOutcome.Error(errorMsg)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving draft", e)
+            SaveDraftOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    // =========================================================================
+    // SUBMIT DRAFT LEAVE
+    // =========================================================================
+
+    suspend fun submitDraftLeave(
+        applicationId: Int
+    ): SubmitDraftOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d(TAG, "Submitting draft leave: ID=$applicationId")
+
+            val response = api.submitDraftLeave(applicationId = applicationId)
+
+            Log.d(TAG, "Submit draft response code: ${response.code()}")
+
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        Log.d(TAG, "Draft submitted successfully")
+                        SubmitDraftOutcome.Success(message = responseBody.message)
+                    } else {
+                        SubmitDraftOutcome.Error(responseBody?.message ?: "Failed to submit draft")
+                    }
+                }
+
+                response.code() == 400 -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Cannot submit this draft")
+                    SubmitDraftOutcome.Error(errorMsg)
+                }
+
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    SubmitDraftOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                response.code() == 404 -> {
+                    SubmitDraftOutcome.Error("Draft not found")
+                }
+
+                else -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to submit draft")
+                    SubmitDraftOutcome.Error(errorMsg)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error submitting draft", e)
+            SubmitDraftOutcome.Error(e.message ?: "Network error occurred")
         }
     }
 }

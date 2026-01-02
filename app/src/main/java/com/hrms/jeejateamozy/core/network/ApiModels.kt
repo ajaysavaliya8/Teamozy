@@ -4,7 +4,10 @@ import com.google.gson.annotations.SerializedName
 import okhttp3.ResponseBody
 
 
-// -------- Auth --------
+// ========================================
+// AUTH MODELS
+// ========================================
+
 data class BasicResponse(
     val status: String,           // "success" | "error" | "reject"
     val message: String? = null,
@@ -37,9 +40,6 @@ data class BasicResponse(
     val hr_email: String? = null,
     val technical_support_number: String? = null,
     val technical_support_email: String? = null
-
-    // Note: Push notification status removed - no longer returned by API
-    // Firebase FCM token is registered silently in the backend
 )
 
 data class PushNotificationStatus(
@@ -53,22 +53,24 @@ data class PushNotificationStatus(
     val failure_count: Int
 )
 
-// -------- Check Status Response --------
+// ========================================
+// CHECK STATUS / ATTENDANCE MODELS
+// ========================================
+
 data class CheckStatusResponse(
-    val status: String,           // "success" | "error"
+    val status: String,
     val message: String? = null,
     val data: CheckStatusData? = null
 )
 
 data class CheckStatusData(
-    val current_state: String,    // "CHECK_IN_NEEDED" | "CHECK_OUT_NEEDED" | "COMPLETED"
+    val current_state: String,
     val last_check_in_time: String? = null,
     val message: String,
     val attendance_status: String? = null,
     val is_complete: Boolean? = null
 )
 
-// -------- Check-In Response --------
 data class CheckInResponse(
     val status: String,
     val message: String? = null,
@@ -83,17 +85,15 @@ data class CheckInResponse(
     val pending_message: PendingMessage? = null
 )
 
-// -------- Check-In Signature Response --------
 data class CheckInSignatureResponse(
-    val status: String,           // "success" | "error"
+    val status: String,
     val message: String,
     val attendance_record_id: Int? = null,
     val check_in_time: String? = null
 )
 
-// -------- Check-Out Response --------
 data class CheckOutResponse(
-    val status: String,           // "success" | "error"
+    val status: String,
     val message: String? = null,
     val face_verification_required: Boolean? = null,
     val minimum_quality_score: Float? = null,
@@ -107,9 +107,8 @@ data class CheckOutResponse(
     val work_report_require: Boolean? = null
 )
 
-// -------- Check-Out Signature Response --------
 data class CheckOutSignatureResponse(
-    val status: String,           // "success" | "error"
+    val status: String,
     val message: String,
     val check_out_time: String? = null,
     val work_hours: Float? = null,
@@ -123,9 +122,6 @@ data class CheckOutSignatureResponse(
 // ATTENDANCE HISTORY / TIMESHEET MODELS
 // ========================================
 
-/**
- * GET /timesheet/monthly Response
- */
 data class MonthlyTimesheetResponse(
     val status: String,
     val data: MonthlyTimesheetData
@@ -167,6 +163,44 @@ data class CalendarDayDto(
     )
 }
 
+data class CorrectionBadgeDto(
+    val type: String,
+    val text: String,
+    val color: String
+) {
+    fun toDomain() = CorrectionBadge(type = type, text = text, color = color)
+}
+
+data class CorrectionBadge(
+    val type: String,
+    val text: String,
+    val color: String
+)
+
+data class CorrectionRequestSummaryDto(
+    val total: Int,
+    val pending: Int,
+    val approved: Int,
+    val rejected: Int,
+    val info_needed: Int
+) {
+    fun toDomain() = CorrectionRequestSummary(
+        total = total,
+        pending = pending,
+        approved = approved,
+        rejected = rejected,
+        infoNeeded = info_needed
+    )
+}
+
+data class CorrectionRequestSummary(
+    val total: Int,
+    val pending: Int,
+    val approved: Int,
+    val rejected: Int,
+    val infoNeeded: Int
+)
+
 data class MonthSummaryDto(
     val total_time: String,
     val total_minutes: Int,
@@ -195,9 +229,6 @@ data class ChartDataDto(
     )
 }
 
-/**
- * GET /timesheet/day/{attendance_date} Response
- */
 data class DayTimesheetResponse(
     val status: String,
     val data: DayTimesheetData
@@ -221,18 +252,34 @@ data class DayTimesheetData(
     val available_actions: List<String>? = null,
     val can_request_new_attendance: Boolean? = null,
     val action_available: Map<String, Boolean>? = null
-)
+) {
+    fun toDomain() = DayTimesheet(
+        hasAttendance = has_attendance,
+        date = date,
+        dayName = day_name,
+        formattedDate = formatted_date,
+        message = message,
+        status = status?.toDomain(),
+        shift = shift?.toDomain(),
+        hours = hours?.toDomain(),
+        punches = punches?.map { it.toDomain() },
+        isComplete = is_complete,
+        attendanceRecordId = attendance_record_id,
+        correctionRequest = correction_request?.toDomain(),
+        canSubmitCorrection = can_submit_correction,
+        hasPendingRequest = has_pending_request,
+        availableActions = available_actions,
+        canRequestNewAttendance = can_request_new_attendance,
+        actionAvailable = action_available
+    )
+}
 
 data class DayStatusDto(
     val text: String,
     val color: String,
     val raw_status: String
 ) {
-    fun toDomain() = DayStatus(
-        text = text,
-        color = color,
-        rawStatus = raw_status
-    )
+    fun toDomain() = DayStatus(text = text, color = color, rawStatus = raw_status)
 }
 
 data class ShiftInfoDto(
@@ -281,53 +328,10 @@ data class PunchLocationDto(
     val latitude: Double?,
     val longitude: Double?
 ) {
-    fun toDomain() = PunchLocation(
-        latitude = latitude,
-        longitude = longitude
-    )
+    fun toDomain() = PunchLocation(latitude = latitude, longitude = longitude)
 }
 
-// ========================================
-// CORRECTION REQUEST DTOs
-// ========================================
-
-/**
- * Correction Badge DTO
- */
-data class CorrectionBadgeDto(
-    val type: String,
-    val text: String,
-    val color: String
-) {
-    fun toDomain() = CorrectionBadge(
-        type = type,
-        text = text,
-        color = color
-    )
-}
-
-/**
- * Correction Request Summary DTO
- */
-data class CorrectionRequestSummaryDto(
-    val total: Int,
-    val pending: Int,
-    val approved: Int,
-    val rejected: Int,
-    val info_needed: Int
-) {
-    fun toDomain() = CorrectionRequestSummary(
-        total = total,
-        pending = pending,
-        approved = approved,
-        rejected = rejected,
-        infoNeeded = info_needed
-    )
-}
-
-/**
- * Correction Request Container DTO
- */
+// Correction Request Container DTO
 data class CorrectionRequestContainerDto(
     val has_any: Boolean,
     val active: CorrectionRequestDto? = null,
@@ -340,9 +344,6 @@ data class CorrectionRequestContainerDto(
     )
 }
 
-/**
- * Active Correction Request DTO
- */
 data class CorrectionRequestDto(
     val id: Int,
     val request_type: String,
@@ -367,9 +368,6 @@ data class CorrectionRequestDto(
     )
 }
 
-/**
- * Settled Correction Request DTO
- */
 data class SettledCorrectionRequestDto(
     val id: Int,
     val request_type: String,
@@ -398,9 +396,6 @@ data class SettledCorrectionRequestDto(
     )
 }
 
-/**
- * Requested Changes DTO
- */
 data class RequestedChangesDto(
     val status: String? = null,
     val check_in: String? = null,
@@ -415,9 +410,6 @@ data class RequestedChangesDto(
     )
 }
 
-/**
- * Attachment Info DTO
- */
 data class AttachmentInfoDto(
     val has_attachment: Boolean,
     val file_name: String? = null,
@@ -430,9 +422,6 @@ data class AttachmentInfoDto(
     )
 }
 
-/**
- * Review Info DTO
- */
 data class ReviewInfoDto(
     val reviewer_name: String,
     val reviewed_at: String,
@@ -445,9 +434,7 @@ data class ReviewInfoDto(
     )
 }
 
-/**
- * Correction Request Options Response
- */
+// Correction Request Options
 data class CorrectionRequestOptionsResponse(
     val status: String,
     val data: CorrectionRequestOptionsDataDto
@@ -472,31 +459,21 @@ data class RequestTypeOptionDto(
     val label: String,
     val description: String
 ) {
-    fun toDomain() = RequestTypeOption(
-        value = value,
-        label = label,
-        description = description
-    )
+    fun toDomain() = RequestTypeOption(value = value, label = label, description = description)
 }
 
 data class StatusOptionDto(
     val value: String,
     val label: String
 ) {
-    fun toDomain() = StatusOption(
-        value = value,
-        label = label
-    )
+    fun toDomain() = StatusOption(value = value, label = label)
 }
 
 data class PriorityOptionDto(
     val value: String,
     val label: String
 ) {
-    fun toDomain() = PriorityOption(
-        value = value,
-        label = label
-    )
+    fun toDomain() = PriorityOption(value = value, label = label)
 }
 
 data class LeaveTypeOptionDto(
@@ -504,16 +481,10 @@ data class LeaveTypeOptionDto(
     val label: String,
     val description: String?
 ) {
-    fun toDomain() = LeaveTypeOption(
-        id = id,
-        label = label,
-        description = description
-    )
+    fun toDomain() = LeaveTypeOption(id = id, label = label, description = description)
 }
 
-/**
- * Submit Correction Request Response
- */
+// Submit/Withdraw Correction Request Responses
 data class SubmitCorrectionRequestResponse(
     val status: String,
     val message: String,
@@ -526,9 +497,6 @@ data class SubmittedCorrectionRequestDataDto(
     val submitted_at: String
 )
 
-/**
- * Withdraw Correction Request Response
- */
 data class WithdrawCorrectionRequestResponse(
     val status: String,
     val message: String,
@@ -634,42 +602,12 @@ data class DayTimesheet(
     val actionAvailable: Map<String, Boolean>? = null
 )
 
-// ========================================
-// CORRECTION REQUEST DOMAIN MODELS
-// ========================================
-
-/**
- * Correction Badge (mini indicator on calendar)
- */
-data class CorrectionBadge(
-    val type: String,
-    val text: String,
-    val color: String
-)
-
-/**
- * Correction Request Summary (monthly totals)
- */
-data class CorrectionRequestSummary(
-    val total: Int,
-    val pending: Int,
-    val approved: Int,
-    val rejected: Int,
-    val infoNeeded: Int
-)
-
-/**
- * Correction Request Container
- */
 data class CorrectionRequestContainer(
     val hasAny: Boolean,
     val active: CorrectionRequest? = null,
     val settled: SettledCorrectionRequest? = null
 )
 
-/**
- * Active Correction Request
- */
 data class CorrectionRequest(
     val id: Int,
     val requestType: String,
@@ -682,9 +620,6 @@ data class CorrectionRequest(
     val reviewInfo: ReviewInfo? = null
 )
 
-/**
- * Settled Correction Request
- */
 data class SettledCorrectionRequest(
     val id: Int,
     val requestType: String,
@@ -699,9 +634,6 @@ data class SettledCorrectionRequest(
     val reviewInfo: ReviewInfo
 )
 
-/**
- * Requested Changes
- */
 data class RequestedChanges(
     val status: String? = null,
     val checkIn: String? = null,
@@ -709,27 +641,18 @@ data class RequestedChanges(
     val leaveTypeName: String? = null
 )
 
-/**
- * Attachment Info
- */
 data class AttachmentInfo(
     val hasAttachment: Boolean,
     val fileName: String? = null,
     val downloadUrl: String? = null
 )
 
-/**
- * Review Info
- */
 data class ReviewInfo(
     val reviewerName: String,
     val reviewedAt: String,
     val comments: String?
 )
 
-/**
- * Correction Request Options Data
- */
 data class CorrectionRequestOptionsData(
     val requestTypes: List<RequestTypeOption>,
     val statusOptions: List<StatusOption>,
@@ -737,34 +660,22 @@ data class CorrectionRequestOptionsData(
     val leaveTypes: List<LeaveTypeOption>
 )
 
-/**
- * Request Type Option
- */
 data class RequestTypeOption(
     val value: String,
     val label: String,
     val description: String
 )
 
-/**
- * Status Option
- */
 data class StatusOption(
     val value: String,
     val label: String
 )
 
-/**
- * Priority Option
- */
 data class PriorityOption(
     val value: String,
     val label: String
 )
 
-/**
- * Leave Type Option
- */
 data class LeaveTypeOption(
     val id: Int,
     val label: String,
@@ -775,20 +686,17 @@ data class LeaveTypeOption(
 // OTHER API MODELS
 // ========================================
 
-// Verify token endpoint response
 data class VerifyTokenResponse(
     val status: String,
     val message: String
 )
 
-// Face verify upload response
 data class FaceVerifyResponse(
     val status: String? = null,
     val message: String? = null,
     val face_token: String? = null
 )
 
-// Face recognition GET endpoint response
 data class FaceRecognitionDataResponse(
     val status: String? = null,
     val message: String,
@@ -798,14 +706,12 @@ data class FaceRecognitionDataResponse(
     val require_face_break: Boolean? = null
 )
 
-// Pending face registration request response
 data class PendingFaceRegistrationResponse(
     val status: String,
     val pending: Boolean,
     val message: String
 )
 
-// -------- Social Media Update Response --------
 data class SocialMediaUpdateResponse(
     val status: String,
     val message: String,
@@ -820,7 +726,6 @@ data class SocialMediaData(
     val snapchat: String?
 )
 
-// -------- Profile Picture Update Response --------
 data class ProfilePictureUpdateResponse(
     val status: String,
     val message: String,
@@ -848,9 +753,6 @@ data class WorkReport(
     val updatedAt: String
 )
 
-/**
- * API Response for GET /work-report
- */
 data class WorkReportListResponse(
     val status: String,
     val message: String,
@@ -860,9 +762,6 @@ data class WorkReportListResponse(
     val reports: List<WorkReportDto>
 )
 
-/**
- * Work Report DTO from API
- */
 data class WorkReportDto(
     val id: Int,
     val report_date: String,
@@ -909,9 +808,6 @@ data class WorkReportDto(
     }
 }
 
-/**
- * API Response for POST /work-report
- */
 data class CreateWorkReportResponse(
     val status: String,
     val message: String,
@@ -1011,7 +907,7 @@ data class CircularDto(
     val description: String,
     val circular_type: String,
     val priority: String,
-    val attachments: String?,  // ✅ Changed from List<String> to String?
+    val attachments: String?,
     val effective_date: String?,
     val expiry_date: String?,
     val published_date: String?,
@@ -1028,7 +924,7 @@ data class CircularDto(
         description = description,
         circularType = circular_type,
         priority = priority,
-        attachments = parseAttachments(attachments),  // ✅ Parse string to list
+        attachments = parseAttachments(attachments),
         effectiveDate = effective_date,
         expiryDate = expiry_date,
         publishedDate = published_date,
@@ -1083,7 +979,7 @@ data class CircularDetailDto(
     val description: String,
     val circular_type: String,
     val priority: String,
-    val attachments: String?,  // ✅ Changed from List<String> to String?
+    val attachments: String?,
     val effective_date: String?,
     val expiry_date: String?,
     val published_date: String?,
@@ -1102,7 +998,7 @@ data class CircularDetailDto(
         description = description,
         circularType = circular_type,
         priority = priority,
-        attachments = parseAttachments(attachments),  // ✅ Parse string to list
+        attachments = parseAttachments(attachments),
         effectiveDate = effective_date,
         expiryDate = expiry_date,
         publishedDate = published_date,
@@ -1164,84 +1060,25 @@ data class CircularStatsDto(
 }
 
 // ========================================
-// LEAVE MODELS
+// LEAVE MODELS - UPDATED WITH HALF-DAY SUPPORT
 // ========================================
 
+// Domain model for LeaveType
 data class LeaveType(
     val id: Int,
+    val name: String?,
     val leaveTypeName: String,
     val code: String,
+    val description: String?,
     val requiresApproval: Boolean,
     val applyOnHolidays: Boolean,
     val isPaid: Boolean,
-    val applicableFor: String,
-    val description: String?
-)
-
-data class LeaveApplication(
-    val id: Int,
-    val leaveType: LeaveTypeInfo,
-    val startDate: String,
-    val endDate: String,
-    val numDays: Int,
-    val leaveReason: String,
-    val supportingDocumentUrl: String?,
-    val alternateContact: String?,
-    val taskDependedOnYou: Boolean,
-    val dependencyHandledBy: String?,
-    val status: String,
-    val appliedAt: String,
-    val approver: ApproverInfo?,
-    val rejectionReason: String?,
-    val cancelledAt: String?,
-    val cancellationReason: String?,
-    val withdrawnAt: String?,
-    val withdrawalReason: String?,
-    val createdAt: String,
-    val updatedAt: String
-)
-
-data class LeaveTypeInfo(
-    val id: Int,
-    val name: String,
-    val code: String,
-    val isPaid: Boolean
-)
-
-data class ApproverInfo(
-    val name: String?,
-    val status: String?,
-    val remarks: String?,
-    val approvedAt: String?
-)
-
-data class LeaveSummary(
-    val year: Int,
-    val totalDaysTaken: Int,
-    val byStatus: Map<String, StatusCount>,
-    val byType: List<TypeCount>,
-    val upcomingLeaves: List<UpcomingLeave>
-)
-
-data class StatusCount(
-    val count: Int,
-    val totalDays: Int
-)
-
-data class TypeCount(
-    val leaveType: String,
-    val isPaid: Boolean,
-    val count: Int,
-    val totalDays: Int
-)
-
-data class UpcomingLeave(
-    val id: Int,
-    val leaveType: String,
-    val startDate: String,
-    val endDate: String,
-    val numDays: Int,
-    val status: String
+    val applicableFor: String?,
+    val requiresDocument: Boolean,
+    val maxConsecutiveDays: Int?,
+    val minNoticeDays: Int?,
+    val isCarryForward: Boolean,
+    val maxCarryForwardDays: Int?
 )
 
 data class LeaveTypesResponse(
@@ -1251,23 +1088,35 @@ data class LeaveTypesResponse(
 
 data class LeaveTypeDto(
     val id: Int,
+    val name: String? = null,
     val leave_type_name: String,
     val code: String,
+    val description: String? = null,
     val requires_approval: Boolean,
     val apply_on_holidays: Boolean,
     val is_paid: Boolean,
-    val applicable_for: String,
-    val description: String?
+    val applicable_for: String? = null,
+    val requires_document: Boolean = false,
+    val max_consecutive_days: Int? = null,
+    val min_notice_days: Int? = null,
+    val is_carry_forward: Boolean = false,
+    val max_carry_forward_days: Int? = null
 ) {
     fun toDomain() = LeaveType(
         id = id,
+        name = name,
         leaveTypeName = leave_type_name,
         code = code,
+        description = description,
         requiresApproval = requires_approval,
         applyOnHolidays = apply_on_holidays,
         isPaid = is_paid,
         applicableFor = applicable_for,
-        description = description
+        requiresDocument = requires_document,
+        maxConsecutiveDays = max_consecutive_days,
+        minNoticeDays = min_notice_days,
+        isCarryForward = is_carry_forward,
+        maxCarryForwardDays = max_carry_forward_days
     )
 }
 
@@ -1280,7 +1129,8 @@ data class ApplyLeaveResponse(
 data class ApplyLeaveData(
     val application_id: Int,
     val applied_at: String,
-    val num_days: Int,
+    val total_days: Double,
+    val effective_days: Double,
     val status: String,
     val requires_approval: Boolean
 )
@@ -1300,45 +1150,108 @@ data class LeaveApplicationDto(
     val leave_type: LeaveTypeInfoDto,
     val start_date: String,
     val end_date: String,
-    val num_days: Int,
+    val total_days: Double,
+    val effective_days: Double,
+    val is_half_day_start: Boolean = false,
+    val is_half_day_end: Boolean = false,
+    val half_day_type: String? = null,
     val leave_reason: String,
-    val supporting_document_url: String?,
-    val alternate_contact: String?,
+    val supporting_document_url: String? = null,
+    val alternate_contact: String? = null,
+    val emergency_contact: String? = null,
     val task_depended_on_you: Boolean,
-    val dependency_handled_by: String?,
+    val dependency_handled_by: String? = null,
+    val handover_notes: String? = null,
     val status: String,
-    val applied_at: String,
-    val approver: ApproverInfoDto?,
-    val rejection_reason: String?,
-    val cancelled_at: String?,
-    val cancellation_reason: String?,
-    val withdrawn_at: String?,
-    val withdrawal_reason: String?,
-    val created_at: String,
-    val updated_at: String
+    val current_status: String,
+    val workflow_status: String? = null,
+    val is_paid: Boolean? = null,
+    val paid_percentage: Double? = null,
+    val applied_at: String? = null,
+    val approver: ApproverInfoDto? = null,
+    val rejection_reason: String? = null,
+    val cancelled_by: String? = null,
+    val cancelled_at: String? = null,
+    val cancellation_reason: String? = null,
+    val withdrawn_by: String? = null,
+    val withdrawn_at: String? = null,
+    val withdrawal_reason: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
 ) {
     fun toDomain() = LeaveApplication(
         id = id,
         leaveType = leave_type.toDomain(),
         startDate = start_date,
         endDate = end_date,
-        numDays = num_days,
+        totalDays = total_days,
+        effectiveDays = effective_days,
+        isHalfDayStart = is_half_day_start,
+        isHalfDayEnd = is_half_day_end,
+        halfDayType = half_day_type,
         leaveReason = leave_reason,
         supportingDocumentUrl = supporting_document_url,
         alternateContact = alternate_contact,
+        emergencyContact = emergency_contact,
         taskDependedOnYou = task_depended_on_you,
         dependencyHandledBy = dependency_handled_by,
+        handoverNotes = handover_notes,
         status = status,
-        appliedAt = applied_at,
+        currentStatus = current_status,
+        workflowStatus = workflow_status,
+        isPaid = is_paid,
+        paidPercentage = paid_percentage,
+        appliedAt = applied_at ?: "",
         approver = approver?.toDomain(),
         rejectionReason = rejection_reason,
+        cancelledBy = cancelled_by,
         cancelledAt = cancelled_at,
         cancellationReason = cancellation_reason,
+        withdrawnBy = withdrawn_by,
         withdrawnAt = withdrawn_at,
         withdrawalReason = withdrawal_reason,
-        createdAt = created_at,
-        updatedAt = updated_at
+        createdAt = created_at ?: "",
+        updatedAt = updated_at ?: ""
     )
+}
+
+// Domain model for LeaveApplication
+data class LeaveApplication(
+    val id: Int,
+    val leaveType: LeaveTypeInfo,
+    val startDate: String,
+    val endDate: String,
+    val totalDays: Double,
+    val effectiveDays: Double,
+    val isHalfDayStart: Boolean,
+    val isHalfDayEnd: Boolean,
+    val halfDayType: String?,
+    val leaveReason: String,
+    val supportingDocumentUrl: String?,
+    val alternateContact: String?,
+    val emergencyContact: String?,
+    val taskDependedOnYou: Boolean,
+    val dependencyHandledBy: String?,
+    val handoverNotes: String?,
+    val status: String,
+    val currentStatus: String,
+    val workflowStatus: String?,
+    val isPaid: Boolean?,
+    val paidPercentage: Double?,
+    val appliedAt: String,
+    val approver: ApproverInfo?,
+    val rejectionReason: String?,
+    val cancelledBy: String?,
+    val cancelledAt: String?,
+    val cancellationReason: String?,
+    val withdrawnBy: String?,
+    val withdrawnAt: String?,
+    val withdrawalReason: String?,
+    val createdAt: String,
+    val updatedAt: String
+) {
+    // Backward compatibility - returns totalDays as Int
+    val numDays: Int get() = totalDays.toInt()
 }
 
 data class LeaveTypeInfoDto(
@@ -1355,11 +1268,20 @@ data class LeaveTypeInfoDto(
     )
 }
 
+data class LeaveTypeInfo(
+    val id: Int,
+    val name: String,
+    val code: String,
+    val isPaid: Boolean
+)
+
 data class ApproverInfoDto(
-    val name: String?,
-    val status: String?,
-    val remarks: String?,
-    val approved_at: String?
+    val id: Int? = null,
+    val name: String? = null,
+    val email: String? = null,
+    val remarks: String? = null,
+    val status: String? = null,
+    val approved_at: String? = null
 ) {
     fun toDomain() = ApproverInfo(
         name = name,
@@ -1369,6 +1291,66 @@ data class ApproverInfoDto(
     )
 }
 
+data class ApproverInfo(
+    val name: String?,
+    val status: String?,
+    val remarks: String?,
+    val approvedAt: String?
+)
+
+// Leave Application Detail Response
+data class LeaveApplicationDetailResponse(
+    val status: String,
+    val data: LeaveApplicationDetailDto
+)
+
+data class LeaveApplicationDetailDto(
+    val id: Int,
+    val leave_type: LeaveTypeDetailInfoDto,
+    val start_date: String,
+    val end_date: String,
+    val total_days: Double,
+    val effective_days: Double,
+    val is_half_day_start: Boolean,
+    val is_half_day_end: Boolean,
+    val half_day_type: String?,
+    val leave_reason: String,
+    val supporting_document_url: String?,
+    val alternate_contact: String?,
+    val emergency_contact: String?,
+    val task_depended_on_you: Boolean,
+    val dependency_handled_by: String?,
+    val handover_notes: String?,
+    val status: String,
+    val current_status: String,
+    val workflow_status: String?,
+    val is_paid: Boolean?,
+    val paid_percentage: Double?,
+    val applied_at: String?,
+    val approver: ApproverInfoDto?,
+    val rejection_reason: String?,
+    val cancelled_by: String?,
+    val cancelled_at: String?,
+    val cancellation_reason: String?,
+    val withdrawn_by: String?,
+    val withdrawn_at: String?,
+    val withdrawal_reason: String?,
+    val approval_instance_id: Int?,
+    val current_approval_step: Int?,
+    val created_at: String?,
+    val updated_at: String?
+)
+
+data class LeaveTypeDetailInfoDto(
+    val id: Int,
+    val name: String,
+    val code: String,
+    val is_paid: Boolean,
+    val requires_approval: Boolean,
+    val requires_document: Boolean
+)
+
+// Leave Summary
 data class LeaveSummaryResponse(
     val status: String,
     val data: LeaveSummaryDto
@@ -1376,66 +1358,225 @@ data class LeaveSummaryResponse(
 
 data class LeaveSummaryDto(
     val year: Int,
-    val total_days_taken: Int,
+    val total_days_taken: Double,
     val by_status: Map<String, StatusCountDto>,
     val by_type: List<TypeCountDto>,
     val upcoming_leaves: List<UpcomingLeaveDto>
 ) {
     fun toDomain() = LeaveSummary(
         year = year,
-        totalDaysTaken = total_days_taken,
+        totalDaysTaken = total_days_taken.toInt(),
+        totalDaysTakenDouble = total_days_taken,
         byStatus = by_status.mapValues { it.value.toDomain() },
         byType = by_type.map { it.toDomain() },
         upcomingLeaves = upcoming_leaves.map { it.toDomain() }
     )
 }
 
+data class LeaveSummary(
+    val year: Int,
+    val totalDaysTaken: Int,
+    val totalDaysTakenDouble: Double = 0.0,
+    val byStatus: Map<String, StatusCount>,
+    val byType: List<TypeCount>,
+    val upcomingLeaves: List<UpcomingLeave>
+)
+
 data class StatusCountDto(
     val count: Int,
-    val total_days: Int
+    val total_days: Double
 ) {
-    fun toDomain() = StatusCount(
-        count = count,
-        totalDays = total_days
-    )
+    fun toDomain() = StatusCount(count = count, totalDays = total_days.toInt(), totalDaysDouble = total_days)
 }
+
+data class StatusCount(
+    val count: Int,
+    val totalDays: Int,
+    val totalDaysDouble: Double = 0.0
+)
 
 data class TypeCountDto(
     val leave_type: String,
     val is_paid: Boolean,
     val count: Int,
-    val total_days: Int
+    val total_days: Double
 ) {
     fun toDomain() = TypeCount(
         leaveType = leave_type,
         isPaid = is_paid,
         count = count,
-        totalDays = total_days
+        totalDays = total_days.toInt(),
+        totalDaysDouble = total_days
     )
 }
+
+data class TypeCount(
+    val leaveType: String,
+    val isPaid: Boolean,
+    val count: Int,
+    val totalDays: Int,
+    val totalDaysDouble: Double = 0.0
+)
 
 data class UpcomingLeaveDto(
     val id: Int,
     val leave_type: String,
     val start_date: String,
     val end_date: String,
-    val num_days: Int,
-    val status: String
+    val total_days: Double,
+    val effective_days: Double,
+    val status: String,
+    val current_status: String
 ) {
     fun toDomain() = UpcomingLeave(
         id = id,
         leaveType = leave_type,
         startDate = start_date,
         endDate = end_date,
-        numDays = num_days,
-        status = status
+        totalDays = total_days,
+        effectiveDays = effective_days,
+        status = status,
+        currentStatus = current_status
     )
 }
 
+data class UpcomingLeave(
+    val id: Int,
+    val leaveType: String,
+    val startDate: String,
+    val endDate: String,
+    val totalDays: Double,
+    val effectiveDays: Double,
+    val status: String,
+    val currentStatus: String
+) {
+    // Backward compatibility - returns totalDays as Int
+    val numDays: Int get() = totalDays.toInt()
+}
+
+// Withdraw / Cancel Leave
 data class WithdrawLeaveResponse(
     val status: String,
     val message: String
 )
+
+data class CancelLeaveResponse(
+    val status: String,
+    val message: String
+)
+
+// Save Draft
+data class SaveDraftLeaveResponse(
+    val status: String,
+    val message: String,
+    val data: SaveDraftData?
+)
+
+data class SaveDraftData(
+    val draft_id: Int,
+    val total_days: Double,
+    val status: String,
+    val created_at: String
+)
+
+// Submit Draft
+data class SubmitDraftResponse(
+    val status: String,
+    val message: String
+)
+
+// Leave Calendar
+data class LeaveCalendarResponse(
+    val status: String,
+    val data: LeaveCalendarData
+)
+
+data class LeaveCalendarData(
+    val month: Int,
+    val year: Int,
+    val first_day: String,
+    val last_day: String,
+    val leaves: List<LeaveCalendarItemDto>
+)
+
+data class LeaveCalendarItemDto(
+    val id: Int,
+    val leave_type: String,
+    val leave_type_code: String,
+    val is_paid: Boolean,
+    val start_date: String,
+    val end_date: String,
+    val display_start_date: String,
+    val display_end_date: String,
+    val total_days: Double,
+    val effective_days: Double,
+    val num_days_in_month: Int,
+    val is_half_day_start: Boolean,
+    val is_half_day_end: Boolean,
+    val half_day_type: String?,
+    val status: String,
+    val current_status: String,
+    val leave_reason: String?
+) {
+    fun toDomain() = LeaveCalendarItem(
+        id = id,
+        leaveType = leave_type,
+        leaveTypeCode = leave_type_code,
+        isPaid = is_paid,
+        startDate = start_date,
+        endDate = end_date,
+        displayStartDate = display_start_date,
+        displayEndDate = display_end_date,
+        totalDays = total_days,
+        effectiveDays = effective_days,
+        numDaysInMonth = num_days_in_month,
+        isHalfDayStart = is_half_day_start,
+        isHalfDayEnd = is_half_day_end,
+        halfDayType = half_day_type,
+        status = status,
+        currentStatus = current_status,
+        leaveReason = leave_reason
+    )
+}
+
+data class LeaveCalendarItem(
+    val id: Int,
+    val leaveType: String,
+    val leaveTypeCode: String,
+    val isPaid: Boolean,
+    val startDate: String,
+    val endDate: String,
+    val displayStartDate: String,
+    val displayEndDate: String,
+    val totalDays: Double,
+    val effectiveDays: Double,
+    val numDaysInMonth: Int,
+    val isHalfDayStart: Boolean,
+    val isHalfDayEnd: Boolean,
+    val halfDayType: String?,
+    val status: String,
+    val currentStatus: String,
+    val leaveReason: String?
+)
+
+// Half Day Type Enum
+enum class HalfDayType(val value: String) {
+    FIRST_HALF("FIRST_HALF"),
+    SECOND_HALF("SECOND_HALF")
+}
+
+// Leave Status Enum
+enum class LeaveStatus(val value: String) {
+    DRAFT("DRAFT"),
+    PENDING("PENDING"),
+    APPROVED("APPROVED"),
+    REJECTED("REJECTED"),
+    CANCELLED("CANCELLED"),
+    WITHDRAWN("WITHDRAWN"),
+    ON_LEAVE("ON_LEAVE"),
+    COMPLETED("COMPLETED"),
+    UPCOMING("UPCOMING")
+}
 
 // ========================================
 // LOGOUT & MISC MODELS
