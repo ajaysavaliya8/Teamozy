@@ -1132,7 +1132,18 @@ data class ApplyLeaveData(
     val total_days: Double,
     val effective_days: Double,
     val status: String,
-    val requires_approval: Boolean
+    val requires_approval: Boolean,
+    // New workflow fields
+    val reference_number: String? = null,
+    val workflow_status: String? = null,
+    val approval_instance_id: Int? = null,
+    val workflow_name: String? = null,
+    val current_step: Int? = null,
+    val current_step_name: String? = null,
+    val total_steps: Int? = null,
+    val pending_with: List<String>? = null,
+    val auto_approved: Boolean? = null,
+    val workflow_error: String? = null
 )
 
 data class LeaveApplicationsResponse(
@@ -1147,6 +1158,7 @@ data class LeaveApplicationsData(
 
 data class LeaveApplicationDto(
     val id: Int,
+    val reference_number: String? = null,
     val leave_type: LeaveTypeInfoDto,
     val start_date: String,
     val end_date: String,
@@ -1177,10 +1189,13 @@ data class LeaveApplicationDto(
     val withdrawn_at: String? = null,
     val withdrawal_reason: String? = null,
     val created_at: String? = null,
-    val updated_at: String? = null
+    val updated_at: String? = null,
+    // New workflow info
+    val workflow: LeaveWorkflowInfoDto? = null
 ) {
     fun toDomain() = LeaveApplication(
         id = id,
+        referenceNumber = reference_number,
         leaveType = leave_type.toDomain(),
         startDate = start_date,
         endDate = end_date,
@@ -1211,13 +1226,44 @@ data class LeaveApplicationDto(
         withdrawnAt = withdrawn_at,
         withdrawalReason = withdrawal_reason,
         createdAt = created_at ?: "",
-        updatedAt = updated_at ?: ""
+        updatedAt = updated_at ?: "",
+        workflow = workflow?.toDomain()
     )
 }
+
+// Workflow Info DTO (for list view)
+data class LeaveWorkflowInfoDto(
+    val approval_instance_id: Int? = null,
+    val current_step: Int? = null,
+    val total_steps: Int? = null,
+    val current_step_name: String? = null,
+    val approval_status: String? = null,
+    val pending_with: List<String>? = null
+) {
+    fun toDomain() = LeaveWorkflowInfo(
+        approvalInstanceId = approval_instance_id,
+        currentStep = current_step,
+        totalSteps = total_steps,
+        currentStepName = current_step_name,
+        approvalStatus = approval_status,
+        pendingWith = pending_with ?: emptyList()
+    )
+}
+
+// Workflow Info Domain Model
+data class LeaveWorkflowInfo(
+    val approvalInstanceId: Int?,
+    val currentStep: Int?,
+    val totalSteps: Int?,
+    val currentStepName: String?,
+    val approvalStatus: String?,
+    val pendingWith: List<String>
+)
 
 // Domain model for LeaveApplication
 data class LeaveApplication(
     val id: Int,
+    val referenceNumber: String?,
     val leaveType: LeaveTypeInfo,
     val startDate: String,
     val endDate: String,
@@ -1248,7 +1294,8 @@ data class LeaveApplication(
     val withdrawnAt: String?,
     val withdrawalReason: String?,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val workflow: LeaveWorkflowInfo? = null
 ) {
     // Backward compatibility - returns totalDays as Int
     val numDays: Int get() = totalDays.toInt()
@@ -1258,13 +1305,15 @@ data class LeaveTypeInfoDto(
     val id: Int,
     val name: String,
     val code: String,
-    val is_paid: Boolean
+    val is_paid: Boolean,
+    val color_code: String? = null
 ) {
     fun toDomain() = LeaveTypeInfo(
         id = id,
         name = name,
         code = code,
-        isPaid = is_paid
+        isPaid = is_paid,
+        colorCode = color_code
     )
 }
 
@@ -1272,7 +1321,8 @@ data class LeaveTypeInfo(
     val id: Int,
     val name: String,
     val code: String,
-    val isPaid: Boolean
+    val isPaid: Boolean,
+    val colorCode: String? = null
 )
 
 data class ApproverInfoDto(
@@ -1306,6 +1356,7 @@ data class LeaveApplicationDetailResponse(
 
 data class LeaveApplicationDetailDto(
     val id: Int,
+    val reference_number: String? = null,
     val leave_type: LeaveTypeDetailInfoDto,
     val start_date: String,
     val end_date: String,
@@ -1338,7 +1389,212 @@ data class LeaveApplicationDetailDto(
     val approval_instance_id: Int?,
     val current_approval_step: Int?,
     val created_at: String?,
-    val updated_at: String?
+    val updated_at: String?,
+    // New workflow fields
+    val workflow: LeaveWorkflowDetailDto? = null,
+    val workflow_steps: List<WorkflowStepDto>? = null,
+    val approval_history: List<ApprovalHistoryDto>? = null
+) {
+    fun toDomain() = LeaveApplicationDetail(
+        id = id,
+        referenceNumber = reference_number,
+        leaveType = LeaveTypeDetailInfo(
+            id = leave_type.id,
+            name = leave_type.name,
+            code = leave_type.code,
+            isPaid = leave_type.is_paid,
+            requiresApproval = leave_type.requires_approval,
+            requiresDocument = leave_type.requires_document,
+            colorCode = leave_type.color_code
+        ),
+        startDate = start_date,
+        endDate = end_date,
+        totalDays = total_days,
+        effectiveDays = effective_days,
+        isHalfDayStart = is_half_day_start,
+        isHalfDayEnd = is_half_day_end,
+        halfDayType = half_day_type,
+        leaveReason = leave_reason,
+        supportingDocumentUrl = supporting_document_url,
+        alternateContact = alternate_contact,
+        emergencyContact = emergency_contact,
+        taskDependedOnYou = task_depended_on_you,
+        dependencyHandledBy = dependency_handled_by,
+        handoverNotes = handover_notes,
+        status = status,
+        currentStatus = current_status,
+        workflowStatus = workflow_status,
+        isPaid = is_paid,
+        paidPercentage = paid_percentage,
+        appliedAt = applied_at,
+        approver = approver?.toDomain(),
+        rejectionReason = rejection_reason,
+        cancelledBy = cancelled_by,
+        cancelledAt = cancelled_at,
+        cancellationReason = cancellation_reason,
+        withdrawnBy = withdrawn_by,
+        withdrawnAt = withdrawn_at,
+        withdrawalReason = withdrawal_reason,
+        createdAt = created_at,
+        updatedAt = updated_at,
+        workflow = workflow?.toDomain(),
+        workflowSteps = workflow_steps?.map { it.toDomain() } ?: emptyList(),
+        approvalHistory = approval_history?.map { it.toDomain() } ?: emptyList()
+    )
+}
+
+// Workflow Detail DTO (for detail view - more fields than list view)
+data class LeaveWorkflowDetailDto(
+    val approval_instance_id: Int? = null,
+    val overall_status: String? = null,
+    val current_step: Int? = null,
+    val total_steps: Int? = null,
+    val completed_steps: Int? = null,
+    val submitted_at: String? = null,
+    val completed_at: String? = null,
+    val expires_at: String? = null
+) {
+    fun toDomain() = LeaveWorkflowDetail(
+        approvalInstanceId = approval_instance_id,
+        overallStatus = overall_status,
+        currentStep = current_step,
+        totalSteps = total_steps,
+        completedSteps = completed_steps,
+        submittedAt = submitted_at,
+        completedAt = completed_at,
+        expiresAt = expires_at
+    )
+}
+
+// Workflow Step DTO
+data class WorkflowStepDto(
+    val step_order: Int,
+    val step_name: String,
+    val approver_type: String? = null,
+    val status: String,
+    val acted_by: String? = null,
+    val acted_at: String? = null,
+    val comments: String? = null,
+    val rejection_reason: String? = null,
+    val deadline_at: String? = null,
+    val expected_approvers: List<String>? = null
+) {
+    fun toDomain() = WorkflowStep(
+        stepOrder = step_order,
+        stepName = step_name,
+        approverType = approver_type,
+        status = status,
+        actedBy = acted_by,
+        actedAt = acted_at,
+        comments = comments,
+        rejectionReason = rejection_reason,
+        deadlineAt = deadline_at,
+        expectedApprovers = expected_approvers ?: emptyList()
+    )
+}
+
+// Approval History DTO
+data class ApprovalHistoryDto(
+    val action: String,
+    val at: String? = null,
+    val by: String? = null,
+    val from_status: String? = null,
+    val to_status: String? = null,
+    val comments: String? = null
+) {
+    fun toDomain() = ApprovalHistory(
+        action = action,
+        at = at,
+        by = by,
+        fromStatus = from_status,
+        toStatus = to_status,
+        comments = comments
+    )
+}
+
+// Domain Models for Detail View
+data class LeaveApplicationDetail(
+    val id: Int,
+    val referenceNumber: String?,
+    val leaveType: LeaveTypeDetailInfo,
+    val startDate: String,
+    val endDate: String,
+    val totalDays: Double,
+    val effectiveDays: Double,
+    val isHalfDayStart: Boolean,
+    val isHalfDayEnd: Boolean,
+    val halfDayType: String?,
+    val leaveReason: String,
+    val supportingDocumentUrl: String?,
+    val alternateContact: String?,
+    val emergencyContact: String?,
+    val taskDependedOnYou: Boolean,
+    val dependencyHandledBy: String?,
+    val handoverNotes: String?,
+    val status: String,
+    val currentStatus: String,
+    val workflowStatus: String?,
+    val isPaid: Boolean?,
+    val paidPercentage: Double?,
+    val appliedAt: String?,
+    val approver: ApproverInfo?,
+    val rejectionReason: String?,
+    val cancelledBy: String?,
+    val cancelledAt: String?,
+    val cancellationReason: String?,
+    val withdrawnBy: String?,
+    val withdrawnAt: String?,
+    val withdrawalReason: String?,
+    val createdAt: String?,
+    val updatedAt: String?,
+    val workflow: LeaveWorkflowDetail?,
+    val workflowSteps: List<WorkflowStep>,
+    val approvalHistory: List<ApprovalHistory>
+) {
+    val numDays: Int get() = totalDays.toInt()
+}
+
+data class LeaveTypeDetailInfo(
+    val id: Int,
+    val name: String,
+    val code: String,
+    val isPaid: Boolean,
+    val requiresApproval: Boolean,
+    val requiresDocument: Boolean,
+    val colorCode: String? = null
+)
+
+data class LeaveWorkflowDetail(
+    val approvalInstanceId: Int?,
+    val overallStatus: String?,
+    val currentStep: Int?,
+    val totalSteps: Int?,
+    val completedSteps: Int?,
+    val submittedAt: String?,
+    val completedAt: String?,
+    val expiresAt: String?
+)
+
+data class WorkflowStep(
+    val stepOrder: Int,
+    val stepName: String,
+    val approverType: String?,
+    val status: String,
+    val actedBy: String?,
+    val actedAt: String?,
+    val comments: String?,
+    val rejectionReason: String?,
+    val deadlineAt: String?,
+    val expectedApprovers: List<String>
+)
+
+data class ApprovalHistory(
+    val action: String,
+    val at: String?,
+    val by: String?,
+    val fromStatus: String?,
+    val toStatus: String?,
+    val comments: String?
 )
 
 data class LeaveTypeDetailInfoDto(
@@ -1347,7 +1603,8 @@ data class LeaveTypeDetailInfoDto(
     val code: String,
     val is_paid: Boolean,
     val requires_approval: Boolean,
-    val requires_document: Boolean
+    val requires_document: Boolean,
+    val color_code: String? = null
 )
 
 // Leave Summary
@@ -1397,12 +1654,14 @@ data class StatusCount(
 
 data class TypeCountDto(
     val leave_type: String,
+    val color_code: String? = null,
     val is_paid: Boolean,
     val count: Int,
     val total_days: Double
 ) {
     fun toDomain() = TypeCount(
         leaveType = leave_type,
+        colorCode = color_code,
         isPaid = is_paid,
         count = count,
         totalDays = total_days.toInt(),
@@ -1412,6 +1671,7 @@ data class TypeCountDto(
 
 data class TypeCount(
     val leaveType: String,
+    val colorCode: String? = null,
     val isPaid: Boolean,
     val count: Int,
     val totalDays: Int,
@@ -1421,34 +1681,40 @@ data class TypeCount(
 data class UpcomingLeaveDto(
     val id: Int,
     val leave_type: String,
+    val color_code: String? = null,
     val start_date: String,
     val end_date: String,
     val total_days: Double,
     val effective_days: Double,
     val status: String,
-    val current_status: String
+    val current_status: String,
+    val workflow_status: String? = null
 ) {
     fun toDomain() = UpcomingLeave(
         id = id,
         leaveType = leave_type,
+        colorCode = color_code,
         startDate = start_date,
         endDate = end_date,
         totalDays = total_days,
         effectiveDays = effective_days,
         status = status,
-        currentStatus = current_status
+        currentStatus = current_status,
+        workflowStatus = workflow_status
     )
 }
 
 data class UpcomingLeave(
     val id: Int,
     val leaveType: String,
+    val colorCode: String?,
     val startDate: String,
     val endDate: String,
     val totalDays: Double,
     val effectiveDays: Double,
     val status: String,
-    val currentStatus: String
+    val currentStatus: String,
+    val workflowStatus: String?
 ) {
     // Backward compatibility - returns totalDays as Int
     val numDays: Int get() = totalDays.toInt()
@@ -1474,6 +1740,7 @@ data class SaveDraftLeaveResponse(
 
 data class SaveDraftData(
     val draft_id: Int,
+    val reference_number: String? = null,
     val total_days: Double,
     val status: String,
     val created_at: String
@@ -1482,7 +1749,19 @@ data class SaveDraftData(
 // Submit Draft
 data class SubmitDraftResponse(
     val status: String,
-    val message: String
+    val message: String,
+    val data: SubmitDraftData? = null
+)
+
+data class SubmitDraftData(
+    val application_id: Int,
+    val status: String,
+    val auto_approved: Boolean? = null,
+    val approval_instance_id: Int? = null,
+    val workflow_name: String? = null,
+    val current_step: Int? = null,
+    val total_steps: Int? = null,
+    val pending_with: List<String>? = null
 )
 
 // Leave Calendar
@@ -1501,8 +1780,10 @@ data class LeaveCalendarData(
 
 data class LeaveCalendarItemDto(
     val id: Int,
+    val reference_number: String? = null,
     val leave_type: String,
     val leave_type_code: String,
+    val color_code: String? = null,
     val is_paid: Boolean,
     val start_date: String,
     val end_date: String,
@@ -1516,12 +1797,15 @@ data class LeaveCalendarItemDto(
     val half_day_type: String?,
     val status: String,
     val current_status: String,
+    val workflow_status: String? = null,
     val leave_reason: String?
 ) {
     fun toDomain() = LeaveCalendarItem(
         id = id,
+        referenceNumber = reference_number,
         leaveType = leave_type,
         leaveTypeCode = leave_type_code,
+        colorCode = color_code,
         isPaid = is_paid,
         startDate = start_date,
         endDate = end_date,
@@ -1535,14 +1819,17 @@ data class LeaveCalendarItemDto(
         halfDayType = half_day_type,
         status = status,
         currentStatus = current_status,
+        workflowStatus = workflow_status,
         leaveReason = leave_reason
     )
 }
 
 data class LeaveCalendarItem(
     val id: Int,
+    val referenceNumber: String?,
     val leaveType: String,
     val leaveTypeCode: String,
+    val colorCode: String?,
     val isPaid: Boolean,
     val startDate: String,
     val endDate: String,
@@ -1556,6 +1843,7 @@ data class LeaveCalendarItem(
     val halfDayType: String?,
     val status: String,
     val currentStatus: String,
+    val workflowStatus: String?,
     val leaveReason: String?
 )
 
@@ -1569,6 +1857,7 @@ enum class HalfDayType(val value: String) {
 enum class LeaveStatus(val value: String) {
     DRAFT("DRAFT"),
     PENDING("PENDING"),
+    IN_PROGRESS("IN_PROGRESS"),
     APPROVED("APPROVED"),
     REJECTED("REJECTED"),
     CANCELLED("CANCELLED"),
@@ -1576,6 +1865,17 @@ enum class LeaveStatus(val value: String) {
     ON_LEAVE("ON_LEAVE"),
     COMPLETED("COMPLETED"),
     UPCOMING("UPCOMING")
+}
+
+// Workflow Status Enum
+enum class WorkflowStatus(val value: String) {
+    DRAFT("DRAFT"),
+    PENDING("PENDING"),
+    IN_PROGRESS("IN_PROGRESS"),
+    APPROVED("APPROVED"),
+    REJECTED("REJECTED"),
+    CANCELLED("CANCELLED"),
+    WITHDRAWN("WITHDRAWN")
 }
 
 // ========================================

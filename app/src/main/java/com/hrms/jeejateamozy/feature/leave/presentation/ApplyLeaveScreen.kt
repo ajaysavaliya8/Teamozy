@@ -20,6 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.outlined.Assignment
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -207,13 +211,26 @@ fun ApplyLeaveScreen(
                     )
                 }
                 is LeaveEvent.NavigateToHistory -> {
-                    // Show success and navigate back
+                    // Build success message based on workflow status
+                    val successMessage = buildString {
+                        append("✅ Leave submitted successfully!")
+                        event.referenceNumber?.let { append("\nRef: $it") }
+                        if (event.autoApproved) {
+                            append("\n🎉 Auto-approved!")
+                        } else if (event.pendingWith.isNotEmpty()) {
+                            append("\n⏳ Pending with: ${event.pendingWith.joinToString(", ")}")
+                        }
+                        if (event.currentStep != null && event.totalSteps != null) {
+                            append("\n📋 Step ${event.currentStep}/${event.totalSteps}")
+                        }
+                    }
+
                     snackbarHostState.showSnackbar(
-                        message = "✅ Leave application submitted successfully!",
-                        duration = SnackbarDuration.Short
+                        message = successMessage,
+                        duration = SnackbarDuration.Long
                     )
-                    // Small delay to let user see the success message
-                    kotlinx.coroutines.delay(800)
+                    // Delay to let user see the success message
+                    kotlinx.coroutines.delay(1500)
                     onNavigateBack()
                 }
                 is LeaveEvent.DraftSaved -> {
@@ -617,7 +634,7 @@ fun ApplyLeaveScreen(
                         }
 
                         Icon(
-                            imageVector = Icons.Default.ArrowForward,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
                             modifier = Modifier.align(Alignment.CenterVertically),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -942,7 +959,7 @@ private fun LeaveApplicationContent(
             item {
                 FormSection(
                     title = "Task Handover",
-                    icon = Icons.Outlined.Assignment,
+                    icon = Icons.AutoMirrored.Outlined.Assignment,
                     isRequired = false
                 ) {
                     Card(
@@ -1109,7 +1126,7 @@ private fun LeaveApplicationContent(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Outlined.InsertDriveFile,
+                                            imageVector = Icons.AutoMirrored.Outlined.InsertDriveFile,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(20.dp)
@@ -1169,7 +1186,7 @@ private fun LeaveApplicationContent(
                 )
             ) {
                 Icon(
-                    imageVector = Icons.Default.Send,
+                    imageVector = Icons.AutoMirrored.Filled.Send,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )
@@ -1412,7 +1429,7 @@ private fun DateRangeSelector(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ArrowForward,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.primary

@@ -52,7 +52,15 @@ data class LeaveCalendarUiState(
 sealed class LeaveEvent {
     data class ShowError(val message: String) : LeaveEvent()
     data class ShowSuccess(val message: String) : LeaveEvent()
-    data class NavigateToHistory(val applicationId: Int) : LeaveEvent()
+    data class NavigateToHistory(
+        val applicationId: Int,
+        val referenceNumber: String? = null,
+        val pendingWith: List<String> = emptyList(),
+        val autoApproved: Boolean = false,
+        val workflowName: String? = null,
+        val currentStep: Int? = null,
+        val totalSteps: Int? = null
+    ) : LeaveEvent()
     data class DraftSaved(val draftId: Int, val message: String) : LeaveEvent()
 }
 
@@ -182,14 +190,24 @@ class LeaveViewModel(
                             )
                         }
                         _events.emit(LeaveEvent.ShowSuccess(outcome.message))
-                        _events.emit(LeaveEvent.NavigateToHistory(outcome.applicationId))
+                        _events.emit(LeaveEvent.NavigateToHistory(
+                            applicationId = outcome.applicationId,
+                            referenceNumber = outcome.referenceNumber,
+                            pendingWith = outcome.pendingWith,
+                            autoApproved = outcome.autoApproved,
+                            workflowName = outcome.workflowName,
+                            currentStep = outcome.currentStep,
+                            totalSteps = outcome.totalSteps
+                        ))
 
                         // Refresh leave history
                         loadLeaveHistory()
                         loadLeaveSummary()
 
                         Log.d("LeaveViewModel", "Leave applied successfully: ID=${outcome.applicationId}")
+                        Log.d("LeaveViewModel", "Reference: ${outcome.referenceNumber}, Workflow: ${outcome.workflowName}")
                         Log.d("LeaveViewModel", "Total days: ${outcome.totalDays}, Effective days: ${outcome.effectiveDays}")
+                        Log.d("LeaveViewModel", "Pending with: ${outcome.pendingWith.joinToString()}")
                     }
 
                     is ApplyLeaveOutcome.Error -> {

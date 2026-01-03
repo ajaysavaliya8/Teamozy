@@ -30,7 +30,17 @@ sealed class ApplyLeaveOutcome {
         val appliedAt: String,
         val totalDays: Double,
         val effectiveDays: Double,
-        val requiresApproval: Boolean
+        val requiresApproval: Boolean,
+        // New workflow fields
+        val referenceNumber: String? = null,
+        val workflowStatus: String? = null,
+        val approvalInstanceId: Int? = null,
+        val workflowName: String? = null,
+        val currentStep: Int? = null,
+        val currentStepName: String? = null,
+        val totalSteps: Int? = null,
+        val pendingWith: List<String> = emptyList(),
+        val autoApproved: Boolean = false
     ) : ApplyLeaveOutcome()
     data class Error(val message: String) : ApplyLeaveOutcome()
 }
@@ -199,10 +209,11 @@ class LeaveRepository(private val context: Context) {
             Log.d(TAG, "Apply leave response code: ${response.code()}")
 
             when {
-                response.isSuccessful && response.code() == 201 -> {
+                response.isSuccessful && (response.code() == 201 || response.code() == 200) -> {
                     val responseBody = response.body()
                     if (responseBody?.status == "success" && responseBody.data != null) {
                         Log.d(TAG, "Leave applied successfully: ID=${responseBody.data.application_id}")
+                        Log.d(TAG, "Reference: ${responseBody.data.reference_number}, Workflow: ${responseBody.data.workflow_status}")
 
                         ApplyLeaveOutcome.Success(
                             message = responseBody.message,
@@ -210,7 +221,17 @@ class LeaveRepository(private val context: Context) {
                             appliedAt = responseBody.data.applied_at,
                             totalDays = responseBody.data.total_days,
                             effectiveDays = responseBody.data.effective_days,
-                            requiresApproval = responseBody.data.requires_approval
+                            requiresApproval = responseBody.data.requires_approval,
+                            // New workflow fields
+                            referenceNumber = responseBody.data.reference_number,
+                            workflowStatus = responseBody.data.workflow_status,
+                            approvalInstanceId = responseBody.data.approval_instance_id,
+                            workflowName = responseBody.data.workflow_name,
+                            currentStep = responseBody.data.current_step,
+                            currentStepName = responseBody.data.current_step_name,
+                            totalSteps = responseBody.data.total_steps,
+                            pendingWith = responseBody.data.pending_with ?: emptyList(),
+                            autoApproved = responseBody.data.auto_approved ?: false
                         )
                     } else {
                         ApplyLeaveOutcome.Error(responseBody?.message ?: "Failed to apply leave")
