@@ -2,6 +2,7 @@ package com.hrms.jeejateamozy.feature.leave.presentation
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -56,16 +57,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
- * ✅ IMPROVED: Apply Leave Screen
- *
- * Enhancements:
- * - Bottom Sheet for leave type selection (faster than dropdown)
- * - Single Date Range Picker with highlighted range
- * - Animated form sections
- * - Leave days calculation with visual display
- * - Better error feedback with inline validation
- * - Smooth transitions and micro-interactions
- * - Material Design 3 with custom styling
+ * ✅ IMPROVED: Apply Leave Screen with Debug Logging
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +105,6 @@ fun ApplyLeaveScreen(
                 val date = Instant.ofEpochMilli(utcTimeMillis)
                     .atZone(ZoneId.systemDefault())
                     .toLocalDate()
-                // Allow today and future dates
                 return !date.isBefore(LocalDate.now())
             }
         }
@@ -152,7 +143,6 @@ fun ApplyLeaveScreen(
         } else 0
     }
 
-    // Effective days (accounting for half days)
     val effectiveDays = remember(numberOfDays, isHalfDayStart, isHalfDayEnd) {
         var days = numberOfDays.toDouble()
         if (isHalfDayStart) days -= 0.5
@@ -160,7 +150,6 @@ fun ApplyLeaveScreen(
         days
     }
 
-    // Check if half-day is applicable (same day selection)
     val isSingleDay = startDate != null && endDate != null && startDate == endDate
 
     // ==========================================
@@ -196,7 +185,6 @@ fun ApplyLeaveScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is LeaveEvent.ShowError -> {
-                    // Show error message prominently
                     snackbarHostState.showSnackbar(
                         message = "❌ ${event.message}",
                         duration = SnackbarDuration.Long,
@@ -204,14 +192,12 @@ fun ApplyLeaveScreen(
                     )
                 }
                 is LeaveEvent.ShowSuccess -> {
-                    // Show success message
                     snackbarHostState.showSnackbar(
                         message = "✅ ${event.message}",
                         duration = SnackbarDuration.Short
                     )
                 }
                 is LeaveEvent.NavigateToHistory -> {
-                    // Build success message based on workflow status
                     val successMessage = buildString {
                         append("✅ Leave submitted successfully!")
                         event.referenceNumber?.let { append("\nRef: $it") }
@@ -229,7 +215,6 @@ fun ApplyLeaveScreen(
                         message = successMessage,
                         duration = SnackbarDuration.Long
                     )
-                    // Delay to let user see the success message
                     kotlinx.coroutines.delay(1500)
                     onNavigateBack()
                 }
@@ -244,9 +229,10 @@ fun ApplyLeaveScreen(
     }
 
     // ==========================================
-    // Validation Function
+    // Validation Function (DEBUG VERSION)
     // ==========================================
     fun validateForm(): Boolean {
+        Log.d("LEAVE_SUBMIT", "========== VALIDATION STARTED ==========")
         var isValid = true
         val errorMessages = mutableListOf<String>()
 
@@ -259,68 +245,93 @@ fun ApplyLeaveScreen(
         dateErrorMessage = ""
 
         // Validate leave type
+        Log.d("LEAVE_SUBMIT", "Selected Leave Type: $selectedLeaveType")
         if (selectedLeaveType == null) {
             showLeaveTypeError = true
             errorMessages.add("Leave type is required")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Leave type validation FAILED")
+        } else {
+            Log.d("LEAVE_SUBMIT", "✅ Leave type validation PASSED")
         }
 
         // Validate dates
+        Log.d("LEAVE_SUBMIT", "Start Date: $startDate, End Date: $endDate")
         if (startDate == null || endDate == null) {
             showDateError = true
             dateErrorMessage = "Please select leave dates"
             errorMessages.add("Leave dates are required")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Date validation FAILED")
+        } else {
+            Log.d("LEAVE_SUBMIT", "✅ Date validation PASSED")
         }
 
         // Validate half-day type when half-day is selected
+        Log.d("LEAVE_SUBMIT", "Half Day Start: $isHalfDayStart, Half Day End: $isHalfDayEnd, Half Day Type: $halfDayType")
         if ((isHalfDayStart || isHalfDayEnd) && halfDayType == null) {
             showDateError = true
             dateErrorMessage = "Please select half day type (First Half or Second Half)"
             errorMessages.add("Half day type is required")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Half day type validation FAILED")
         }
 
         // Validate reason
+        Log.d("LEAVE_SUBMIT", "Leave Reason: '$leaveReason' (length: ${leaveReason.length})")
         if (leaveReason.isBlank()) {
             showReasonError = true
             reasonErrorMessage = "Please provide a reason for your leave"
             errorMessages.add("Leave reason is required")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Reason validation FAILED - blank")
         } else if (leaveReason.length < 10) {
             showReasonError = true
             reasonErrorMessage = "Reason must be at least 10 characters"
             errorMessages.add("Leave reason is too short (min 10 characters)")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Reason validation FAILED - too short")
+        } else {
+            Log.d("LEAVE_SUBMIT", "✅ Reason validation PASSED")
         }
 
         // Validate dependency handler if task is dependent
+        Log.d("LEAVE_SUBMIT", "Task Depended: $taskDependedOnYou, Handler: '$dependencyHandledBy'")
         if (taskDependedOnYou && dependencyHandledBy.isBlank()) {
             showDependencyError = true
             errorMessages.add("Please specify who will handle your tasks")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Dependency validation FAILED")
         }
 
         // Validate document if required
+        Log.d("LEAVE_SUBMIT", "Requires Document: ${selectedLeaveType?.requiresDocument}, Selected File: $selectedFileName")
         if (selectedLeaveType?.requiresDocument == true && selectedFileName == null) {
             errorMessages.add("This leave type requires a supporting document")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Document validation FAILED")
         }
 
         // Validate alternate contact format if provided
         if (alternateContact.isNotBlank() && alternateContact.length < 10) {
             errorMessages.add("Alternate contact must be at least 10 digits")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Alternate contact validation FAILED")
         }
 
         // Validate emergency contact format if provided
         if (emergencyContact.isNotBlank() && emergencyContact.length < 10) {
             errorMessages.add("Emergency contact must be at least 10 digits")
             isValid = false
+            Log.d("LEAVE_SUBMIT", "❌ Emergency contact validation FAILED")
         }
+
+        Log.d("LEAVE_SUBMIT", "========== VALIDATION RESULT: ${if (isValid) "PASSED ✅" else "FAILED ❌"} ==========")
+        Log.d("LEAVE_SUBMIT", "Error messages: $errorMessages")
 
         // Show error snackbar with all validation errors
         if (!isValid && errorMessages.isNotEmpty()) {
+            Log.d("LEAVE_SUBMIT", "Showing snackbar with error: ${errorMessages.first()}")
             scope.launch {
                 snackbarHostState.showSnackbar(
                     message = "❌ ${errorMessages.first()}",
@@ -334,18 +345,33 @@ fun ApplyLeaveScreen(
     }
 
     // ==========================================
-    // Submit Handler
+    // Submit Handler (DEBUG VERSION)
     // ==========================================
     fun handleSubmit() {
-        if (!validateForm()) return
+        Log.d("LEAVE_SUBMIT", "🚀 SUBMIT BUTTON CLICKED!")
+
+        if (!validateForm()) {
+            Log.d("LEAVE_SUBMIT", "⛔ Validation failed, not submitting")
+            return
+        }
+
+        Log.d("LEAVE_SUBMIT", "✅ Validation passed, proceeding with submission")
 
         val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
         // Prepare file if selected
         var supportingDocumentFile: File? = null
         selectedFileUri?.let { uri ->
+            Log.d("LEAVE_SUBMIT", "Creating temp file from URI: $uri")
             supportingDocumentFile = createTempFileFromUri(context, uri)
+            Log.d("LEAVE_SUBMIT", "Temp file created: ${supportingDocumentFile?.absolutePath}")
         }
+
+        Log.d("LEAVE_SUBMIT", "Calling viewModel.applyLeave()")
+        Log.d("LEAVE_SUBMIT", "  leaveTypeId: ${selectedLeaveType!!.id}")
+        Log.d("LEAVE_SUBMIT", "  startDate: ${startDate!!.format(dateFormatter)}")
+        Log.d("LEAVE_SUBMIT", "  endDate: ${endDate!!.format(dateFormatter)}")
+        Log.d("LEAVE_SUBMIT", "  leaveReason: ${leaveReason.trim()}")
 
         viewModel.applyLeave(
             leaveTypeId = selectedLeaveType!!.id,
@@ -362,6 +388,8 @@ fun ApplyLeaveScreen(
             handoverNotes = handoverNotes.ifBlank { null },
             supportingDocumentFile = supportingDocumentFile
         )
+
+        Log.d("LEAVE_SUBMIT", "✅ viewModel.applyLeave() called")
     }
 
     // ==========================================
@@ -369,7 +397,10 @@ fun ApplyLeaveScreen(
     // ==========================================
     Scaffold(
         snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(bottom = 100.dp) // ✅ FIX: Add padding to show above nav bar
+            ) { data ->
                 val isSuccess = data.visuals.message.contains("✅")
                 val isError = data.visuals.message.contains("❌")
                 val isDraft = data.visuals.message.contains("📝")
@@ -377,9 +408,9 @@ fun ApplyLeaveScreen(
                 Snackbar(
                     snackbarData = data,
                     containerColor = when {
-                        isSuccess -> Color(0xFF4CAF50)  // Green for success
-                        isError -> Color(0xFFF44336)    // Red for error
-                        isDraft -> Color(0xFF2196F3)    // Blue for draft
+                        isSuccess -> Color(0xFF4CAF50)
+                        isError -> Color(0xFFF44336)
+                        isDraft -> Color(0xFF2196F3)
                         else -> MaterialTheme.colorScheme.inverseSurface
                     },
                     contentColor = Color.White,
@@ -620,51 +651,88 @@ fun ApplyLeaveScreen(
                                 .format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
                         } ?: "End Date"
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "From",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = startDateText,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.align(Alignment.CenterVertically),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        Text(
+                            text = "$startDateText - $endDateText",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
                         )
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "To",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = endDateText,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
                     }
                 },
                 showModeToggle = false,
-                modifier = Modifier.height(500.dp),
-                colors = DatePickerDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    selectedDayContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedDayContentColor = MaterialTheme.colorScheme.onPrimary,
-                    todayDateBorderColor = MaterialTheme.colorScheme.primary,
-                    dayInSelectionRangeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    dayInSelectionRangeContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                modifier = Modifier.height(500.dp)
             )
+        }
+    }
+}
+
+// ==========================================
+// LOADING STATE
+// ==========================================
+@Composable
+private fun LoadingState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator()
+            Text(
+                text = "Loading leave types...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// ==========================================
+// NO LEAVE TYPES STATE
+// ==========================================
+@Composable
+private fun NoLeaveTypesState(onNavigateBack: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.EventBusy,
+                contentDescription = null,
+                modifier = Modifier.size(72.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+            )
+            Text(
+                text = "No Leave Types Available",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "You don't have any leave types assigned to you.\nThis could be due to your role, department, or employment status.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onNavigateBack,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Go Back")
+            }
         }
     }
 }
@@ -720,13 +788,11 @@ private fun LeaveApplicationContent(
                 start = 16.dp,
                 end = 16.dp,
                 top = 8.dp,
-                bottom = 160.dp  // Increased to account for submit button + bottom nav bar
+                bottom = 160.dp
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ==========================================
             // Leave Type Selection
-            // ==========================================
             item {
                 FormSection(
                     title = "Leave Type",
@@ -755,9 +821,7 @@ private fun LeaveApplicationContent(
                 }
             }
 
-            // ==========================================
             // Date Range Selection
-            // ==========================================
             item {
                 FormSection(
                     title = "Leave Period",
@@ -790,9 +854,7 @@ private fun LeaveApplicationContent(
                 }
             }
 
-            // ==========================================
             // Half Day Selection (visible when dates selected)
-            // ==========================================
             if (startDate != null && endDate != null) {
                 item {
                     FormSection(
@@ -813,13 +875,11 @@ private fun LeaveApplicationContent(
                 }
             }
 
-            // ==========================================
             // Leave Reason
-            // ==========================================
             item {
                 FormSection(
                     title = "Reason for Leave",
-                    icon = Icons.Outlined.Description,
+                    icon = Icons.AutoMirrored.Outlined.Assignment,
                     isRequired = true,
                     hasError = showReasonError
                 ) {
@@ -827,273 +887,147 @@ private fun LeaveApplicationContent(
                         value = leaveReason,
                         onValueChange = onReasonChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = {
-                            Text(
-                                text = "Describe the reason for your leave request...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            )
-                        },
+                        placeholder = { Text("Describe your reason for leave (min 10 characters)") },
                         minLines = 3,
                         maxLines = 5,
                         isError = showReasonError,
-                        supportingText = {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                AnimatedVisibility(visible = showReasonError) {
-                                    Text(
-                                        text = reasonErrorMessage,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                                Spacer(modifier = Modifier.weight(1f))
-                                Text(
-                                    text = "${leaveReason.length}/500",
-                                    color = if (leaveReason.length > 500)
-                                        MaterialTheme.colorScheme.error
-                                    else
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                        supportingText = if (showReasonError) {
+                            { Text(reasonErrorMessage) }
+                        } else {
+                            { Text("${leaveReason.length}/10 characters minimum") }
                         },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                        )
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
             }
 
-            // ==========================================
             // Contact Information
-            // ==========================================
             item {
                 FormSection(
                     title = "Contact Information",
-                    icon = Icons.Outlined.Phone,
+                    icon = Icons.Outlined.ContactPhone,
                     isRequired = false
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // Alternate Contact
                         OutlinedTextField(
                             value = alternateContact,
-                            onValueChange = { newValue ->
-                                // Only allow digits
-                                if (newValue.all { it.isDigit() }) {
-                                    onAlternateContactChange(newValue)
-                                }
-                            },
+                            onValueChange = onAlternateContactChange,
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Alternate Contact") },
-                            placeholder = {
-                                Text(
-                                    text = "Phone number during leave",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            },
-                            singleLine = true,
-                            leadingIcon = {
-                                Text(
-                                    text = "+91",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
-                            },
+                            label = { Text("Alternate Contact Number") },
+                            placeholder = { Text("Enter contact number") },
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Phone,
                                 imeAction = ImeAction.Next
                             ),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                            )
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
                         )
 
-                        // Emergency Contact
                         OutlinedTextField(
                             value = emergencyContact,
-                            onValueChange = { newValue ->
-                                // Only allow digits
-                                if (newValue.all { it.isDigit() }) {
-                                    onEmergencyContactChange(newValue)
-                                }
-                            },
+                            onValueChange = onEmergencyContactChange,
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Emergency Contact") },
-                            placeholder = {
-                                Text(
-                                    text = "Emergency phone number",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            },
-                            singleLine = true,
-                            leadingIcon = {
-                                Text(
-                                    text = "+91",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
-                            },
+                            label = { Text("Emergency Contact Number") },
+                            placeholder = { Text("Enter emergency contact") },
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Phone,
-                                imeAction = ImeAction.Next
+                                imeAction = ImeAction.Done
                             ),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                            )
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
                         )
                     }
                 }
             }
 
-            // ==========================================
-            // Task Dependency & Handover
-            // ==========================================
+            // Task Handover Section
             item {
                 FormSection(
                     title = "Task Handover",
-                    icon = Icons.AutoMirrored.Outlined.Assignment,
-                    isRequired = false
+                    icon = Icons.Outlined.SwapHoriz,
+                    isRequired = false,
+                    hasError = showDependencyError
                 ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Tasks depend on you?",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = "Enable if someone needs to handle your tasks",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = taskDependedOnYou,
-                                    onCheckedChange = onTaskDependencyChange,
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
-                                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Tasks depend on you?",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Switch(
+                                checked = taskDependedOnYou,
+                                onCheckedChange = onTaskDependencyChange
+                            )
+                        }
+
+                        AnimatedVisibility(
+                            visible = taskDependedOnYou,
+                            enter = fadeIn() + expandVertically(),
+                            exit = fadeOut() + shrinkVertically()
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                OutlinedTextField(
+                                    value = dependencyHandledBy,
+                                    onValueChange = onDependencyHandledByChange,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Who will handle your tasks? *") },
+                                    placeholder = { Text("Enter name of colleague") },
+                                    isError = showDependencyError,
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp)
                                 )
-                            }
 
-                            AnimatedVisibility(
-                                visible = taskDependedOnYou,
-                                enter = fadeIn() + expandVertically(),
-                                exit = fadeOut() + shrinkVertically()
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(top = 16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    OutlinedTextField(
-                                        value = dependencyHandledBy,
-                                        onValueChange = onDependencyHandledByChange,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = { Text("Who will handle your tasks? *") },
-                                        placeholder = { Text("Enter colleague's name") },
-                                        singleLine = true,
-                                        isError = showDependencyError,
-                                        supportingText = if (showDependencyError) {
-                                            { Text("Please specify who will handle your tasks") }
-                                        } else null,
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                                        )
-                                    )
-
-                                    OutlinedTextField(
-                                        value = handoverNotes,
-                                        onValueChange = onHandoverNotesChange,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = { Text("Handover Notes") },
-                                        placeholder = { Text("Any specific instructions for task handover...") },
-                                        minLines = 2,
-                                        maxLines = 4,
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                                        )
-                                    )
-                                }
+                                OutlinedTextField(
+                                    value = handoverNotes,
+                                    onValueChange = onHandoverNotesChange,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Handover Notes") },
+                                    placeholder = { Text("Any instructions for task handover") },
+                                    minLines = 2,
+                                    maxLines = 4,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // ==========================================
             // Supporting Document
-            // ==========================================
             item {
                 FormSection(
                     title = "Supporting Document",
-                    icon = Icons.Outlined.AttachFile,
-                    isRequired = false
+                    icon = Icons.AutoMirrored.Outlined.InsertDriveFile,
+                    isRequired = selectedLeaveType?.requiresDocument == true
                 ) {
                     if (selectedFileName == null) {
                         OutlinedCard(
                             onClick = onPickFile,
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            border = CardDefaults.outlinedCardBorder().copy(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.outlineVariant,
-                                        MaterialTheme.colorScheme.outlineVariant
-                                    )
-                                )
-                            )
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(20.dp),
+                                    .padding(16.dp),
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.CloudUpload,
+                                    imageVector = Icons.Default.CloudUpload,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(28.dp)
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = "Upload Document",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = "PDF, Image, or Document (Max 5MB)",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Upload Document",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium
+                                )
                             }
                         }
                     } else {
@@ -1107,31 +1041,20 @@ private fun LeaveApplicationContent(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .background(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                                CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Outlined.InsertDriveFile,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Description,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Text(
                                         text = selectedFileName!!,
                                         style = MaterialTheme.typography.bodyMedium,
@@ -1153,9 +1076,7 @@ private fun LeaveApplicationContent(
             }
         }
 
-        // ==========================================
         // Submit Button (Fixed at bottom)
-        // ==========================================
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -1169,7 +1090,7 @@ private fun LeaveApplicationContent(
                         )
                     )
                 )
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp)  // Added bottom padding for nav bar
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp)
         ) {
             Button(
                 onClick = onSubmit,
@@ -1212,37 +1133,53 @@ private fun FormSection(
     hasError: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hasError)
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+            else
+                MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = if (hasError) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (hasError) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurface
-            )
-            if (isRequired) {
-                Text(
-                    text = "*",
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.Bold
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (hasError)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
                 )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (hasError)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.onSurface
+                )
+                if (isRequired) {
+                    Text(
+                        text = "*",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
+            content()
         }
-        content()
     }
 }
 
@@ -1262,28 +1199,13 @@ private fun LeaveTypeSelector(
         border = CardDefaults.outlinedCardBorder().copy(
             brush = Brush.linearGradient(
                 colors = if (hasError) {
-                    listOf(
-                        MaterialTheme.colorScheme.error,
-                        MaterialTheme.colorScheme.error
-                    )
+                    listOf(MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.error)
                 } else if (selectedLeaveType != null) {
-                    listOf(
-                        MaterialTheme.colorScheme.primary,
-                        MaterialTheme.colorScheme.primary
-                    )
+                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
                 } else {
-                    listOf(
-                        MaterialTheme.colorScheme.outlineVariant,
-                        MaterialTheme.colorScheme.outlineVariant
-                    )
+                    listOf(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.outlineVariant)
                 }
             )
-        ),
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = if (selectedLeaveType != null)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-            else
-                MaterialTheme.colorScheme.surface
         )
     ) {
         Row(
@@ -1294,50 +1216,30 @@ private fun LeaveTypeSelector(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (selectedLeaveType != null) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                RoundedCornerShape(10.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = selectedLeaveType.code.take(2).uppercase(),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = selectedLeaveType.name ?: selectedLeaveType.leaveTypeName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LeaveTypeChip(
+                            text = selectedLeaveType.code,
                             color = MaterialTheme.colorScheme.primary
                         )
-                    }
-                    Column {
-                        Text(
-                            text = selectedLeaveType.leaveTypeName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
+                        LeaveTypeChip(
+                            text = if (selectedLeaveType.isPaid) "Paid" else "Unpaid",
+                            color = if (selectedLeaveType.isPaid)
+                                MaterialTheme.colorScheme.tertiary
+                            else
+                                MaterialTheme.colorScheme.secondary
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        if (selectedLeaveType.requiresApproval) {
                             LeaveTypeChip(
-                                text = if (selectedLeaveType.isPaid) "Paid" else "Unpaid",
-                                color = if (selectedLeaveType.isPaid)
-                                    MaterialTheme.colorScheme.tertiary
-                                else
-                                    MaterialTheme.colorScheme.secondary
+                                text = "Requires Approval",
+                                color = MaterialTheme.colorScheme.primary
                             )
-                            if (selectedLeaveType.requiresApproval) {
-                                LeaveTypeChip(
-                                    text = "Requires Approval",
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
                     }
                 }
@@ -1379,20 +1281,11 @@ private fun DateRangeSelector(
         border = CardDefaults.outlinedCardBorder().copy(
             brush = Brush.linearGradient(
                 colors = if (hasError) {
-                    listOf(
-                        MaterialTheme.colorScheme.error,
-                        MaterialTheme.colorScheme.error
-                    )
+                    listOf(MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.error)
                 } else if (startDate != null && endDate != null) {
-                    listOf(
-                        MaterialTheme.colorScheme.primary,
-                        MaterialTheme.colorScheme.primary
-                    )
+                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
                 } else {
-                    listOf(
-                        MaterialTheme.colorScheme.outlineVariant,
-                        MaterialTheme.colorScheme.outlineVariant
-                    )
+                    listOf(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.outlineVariant)
                 }
             )
         ),
@@ -1410,14 +1303,12 @@ private fun DateRangeSelector(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Start Date
                     DateDisplayBox(
                         label = "From",
                         date = startDate.format(dateFormatter),
                         modifier = Modifier.weight(1f)
                     )
 
-                    // Arrow
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 12.dp)
@@ -1436,7 +1327,6 @@ private fun DateRangeSelector(
                         )
                     }
 
-                    // End Date
                     DateDisplayBox(
                         label = "To",
                         date = endDate.format(dateFormatter),
@@ -1445,10 +1335,9 @@ private fun DateRangeSelector(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Days summary
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -1456,37 +1345,34 @@ private fun DateRangeSelector(
                     DaySummaryItem(
                         value = numberOfDays.toString(),
                         label = "Total Days",
-                        icon = Icons.Outlined.CalendarMonth
-                    )
-                    DaySummaryItem(
-                        value = if (effectiveDays == effectiveDays.toLong().toDouble())
-                            effectiveDays.toLong().toString()
-                        else
-                            String.format("%.1f", effectiveDays),
-                        label = "Effective",
-                        icon = Icons.Outlined.EventAvailable,
-                        highlight = true
+                        color = MaterialTheme.colorScheme.primary
                     )
                     DaySummaryItem(
                         value = workingDays.toString(),
-                        label = "Working",
-                        icon = Icons.Outlined.WorkOutline
+                        label = "Working Days",
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    DaySummaryItem(
+                        value = String.format("%.1f", effectiveDays),
+                        label = "Effective Days",
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.CalendarMonth,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
                         modifier = Modifier.size(24.dp)
                     )
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Tap to select leave dates",
+                        text = "Tap to select date range",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1496,6 +1382,9 @@ private fun DateRangeSelector(
     }
 }
 
+// ==========================================
+// DATE DISPLAY BOX
+// ==========================================
 @Composable
 private fun DateDisplayBox(
     label: String,
@@ -1511,44 +1400,33 @@ private fun DateDisplayBox(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = date,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
 
+// ==========================================
+// DAY SUMMARY ITEM
+// ==========================================
 @Composable
 private fun DaySummaryItem(
     value: String,
     label: String,
-    icon: ImageVector,
-    highlight: Boolean = false
+    color: Color
 ) {
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = if (highlight) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (highlight) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
-            )
-        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
@@ -1570,190 +1448,152 @@ private fun HalfDaySection(
     onHalfDayEndChange: (Boolean) -> Unit,
     onHalfDayTypeChange: (String?) -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Info text
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (isSingleDay) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Info,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.secondary
-                )
                 Text(
-                    text = if (isSingleDay)
-                        "Take half day leave for this date"
-                    else
-                        "You can take half day on start or end date",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    text = "Half day leave",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Switch(
+                    checked = isHalfDayStart,
+                    onCheckedChange = {
+                        onHalfDayStartChange(it)
+                        onHalfDayEndChange(false)
+                        if (!it) onHalfDayTypeChange(null)
+                    }
                 )
             }
 
-            if (isSingleDay) {
-                // Single day - just one half day option
+            AnimatedVisibility(
+                visible = isHalfDayStart,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Half Day Leave",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                    HalfDayOption(
+                        text = "First Half",
+                        subtext = "Morning",
+                        isSelected = halfDayType == "FIRST_HALF",
+                        onClick = { onHalfDayTypeChange("FIRST_HALF") },
+                        modifier = Modifier.weight(1f)
                     )
-                    Switch(
-                        checked = isHalfDayStart,
-                        onCheckedChange = {
-                            onHalfDayStartChange(it)
-                            if (!it) onHalfDayTypeChange(null)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.secondary,
-                            checkedTrackColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    )
-                }
-            } else {
-                // Multiple days - start and end half day options
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Half Day on Start Date",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Switch(
-                        checked = isHalfDayStart,
-                        onCheckedChange = {
-                            onHalfDayStartChange(it)
-                            if (!it && !isHalfDayEnd) onHalfDayTypeChange(null)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.secondary,
-                            checkedTrackColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Half Day on End Date",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Switch(
-                        checked = isHalfDayEnd,
-                        onCheckedChange = {
-                            onHalfDayEndChange(it)
-                            if (!it && !isHalfDayStart) onHalfDayTypeChange(null)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.secondary,
-                            checkedTrackColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
+                    HalfDayOption(
+                        text = "Second Half",
+                        subtext = "Afternoon",
+                        isSelected = halfDayType == "SECOND_HALF",
+                        onClick = { onHalfDayTypeChange("SECOND_HALF") },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Half day on start date",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Switch(
+                    checked = isHalfDayStart,
+                    onCheckedChange = onHalfDayStartChange
+                )
+            }
 
-            // Half day type selection (visible when any half day is selected)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Half day on end date",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Switch(
+                    checked = isHalfDayEnd,
+                    onCheckedChange = onHalfDayEndChange
+                )
+            }
+
             AnimatedVisibility(
                 visible = isHalfDayStart || isHalfDayEnd,
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically()
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    Text(
-                        text = "Select Half Day Type",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 4.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    HalfDayOption(
+                        text = "First Half",
+                        subtext = "Morning",
+                        isSelected = halfDayType == "FIRST_HALF",
+                        onClick = { onHalfDayTypeChange("FIRST_HALF") },
+                        modifier = Modifier.weight(1f)
                     )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // First Half
-                        HalfDayTypeChip(
-                            text = "First Half",
-                            subtext = "Morning",
-                            isSelected = halfDayType == "FIRST_HALF",
-                            onClick = { onHalfDayTypeChange("FIRST_HALF") },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        // Second Half
-                        HalfDayTypeChip(
-                            text = "Second Half",
-                            subtext = "Afternoon",
-                            isSelected = halfDayType == "SECOND_HALF",
-                            onClick = { onHalfDayTypeChange("SECOND_HALF") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    HalfDayOption(
+                        text = "Second Half",
+                        subtext = "Afternoon",
+                        isSelected = halfDayType == "SECOND_HALF",
+                        onClick = { onHalfDayTypeChange("SECOND_HALF") },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
     }
 }
 
+// ==========================================
+// HALF DAY OPTION
+// ==========================================
 @Composable
-private fun HalfDayTypeChip(
+private fun HalfDayOption(
     text: String,
     subtext: String,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor by animateColorAsState(
-        targetValue = if (isSelected)
-            MaterialTheme.colorScheme.secondary
-        else
-            MaterialTheme.colorScheme.surface,
-        label = "chipBackground"
-    )
+    val backgroundColor = if (isSelected)
+        MaterialTheme.colorScheme.primaryContainer
+    else
+        MaterialTheme.colorScheme.surface
 
-    val contentColor by animateColorAsState(
-        targetValue = if (isSelected)
-            MaterialTheme.colorScheme.onSecondary
-        else
-            MaterialTheme.colorScheme.onSurface,
-        label = "chipContent"
-    )
+    val contentColor = if (isSelected)
+        MaterialTheme.colorScheme.onPrimaryContainer
+    else
+        MaterialTheme.colorScheme.onSurface
 
-    Card(
+    OutlinedCard(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        border = if (!isSelected) CardDefaults.outlinedCardBorder() else null
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.outlinedCardColors(containerColor = backgroundColor),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.linearGradient(
+                colors = if (isSelected) {
+                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
+                } else {
+                    listOf(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.outlineVariant)
+                }
+            )
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -1810,7 +1650,6 @@ private fun LeaveTypeBottomSheet(
             .fillMaxWidth()
             .padding(bottom = 32.dp)
     ) {
-        // Header
         Text(
             text = "Select Leave Type",
             style = MaterialTheme.typography.titleLarge,
@@ -1828,7 +1667,6 @@ private fun LeaveTypeBottomSheet(
         Spacer(modifier = Modifier.height(16.dp))
         HorizontalDivider()
 
-        // Leave types list
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(16.dp),
@@ -1845,230 +1683,68 @@ private fun LeaveTypeBottomSheet(
     }
 }
 
+// ==========================================
+// LEAVE TYPE ITEM
+// ==========================================
 @Composable
 private fun LeaveTypeItem(
     leaveType: LeaveType,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val backgroundColor by animateColorAsState(
-        targetValue = if (isSelected)
-            MaterialTheme.colorScheme.primaryContainer
-        else
-            MaterialTheme.colorScheme.surface,
-        label = "background"
-    )
-
-    val borderColor by animateColorAsState(
-        targetValue = if (isSelected)
-            MaterialTheme.colorScheme.primary
-        else
-            MaterialTheme.colorScheme.outlineVariant,
-        label = "border"
-    )
-
     Card(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            ),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else
+                MaterialTheme.colorScheme.surface
+        ),
+        border = if (isSelected) {
+            CardDefaults.outlinedCardBorder().copy(
+                brush = Brush.linearGradient(
+                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
+                )
+            )
+        } else null
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon/Code box
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(
-                        if (isSelected)
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                        else
-                            MaterialTheme.colorScheme.surfaceVariant,
-                        RoundedCornerShape(12.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = leaveType.code.take(2).uppercase(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isSelected)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Details
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = leaveType.leaveTypeName,
-                    style = MaterialTheme.typography.titleMedium,
+                    text = leaveType.name ?: leaveType.leaveTypeName,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
-
                 Spacer(modifier = Modifier.height(4.dp))
-
-                // Tags row
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    item {
-                        LeaveTypeChip(
-                            text = if (leaveType.isPaid) "Paid" else "Unpaid",
-                            color = if (leaveType.isPaid)
-                                MaterialTheme.colorScheme.tertiary
-                            else
-                                MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                    if (leaveType.requiresApproval) {
-                        item {
-                            LeaveTypeChip(
-                                text = "Approval Required",
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    leaveType.applicableFor?.let { applicable ->
-                        item {
-                            LeaveTypeChip(
-                                text = applicable.replaceFirstChar { it.uppercase() },
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
-                }
-
-                // Description
-                leaveType.description?.let { desc ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = desc,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LeaveTypeChip(
+                        text = leaveType.code,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    LeaveTypeChip(
+                        text = if (leaveType.isPaid) "Paid" else "Unpaid",
+                        color = if (leaveType.isPaid)
+                            MaterialTheme.colorScheme.tertiary
+                        else
+                            MaterialTheme.colorScheme.secondary
                     )
                 }
             }
 
-            // Selection indicator
             if (isSelected) {
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = "Selected",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
+                    tint = MaterialTheme.colorScheme.primary
                 )
-            }
-        }
-    }
-}
-
-// ==========================================
-// LOADING STATE
-// ==========================================
-@Composable
-private fun LoadingState() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            CircularProgressIndicator()
-            Text(
-                text = "Loading leave types...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-// ==========================================
-// NO LEAVE TYPES STATE
-// ==========================================
-@Composable
-private fun NoLeaveTypesState(onNavigateBack: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .background(
-                            MaterialTheme.colorScheme.errorContainer,
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.EventBusy,
-                        contentDescription = null,
-                        modifier = Modifier.size(36.dp),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-
-                Text(
-                    text = "No Leave Types Available",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-
-                Text(
-                    text = "Leave types are configured by your organization. This could be due to your role, department, or employment status.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedButton(
-                    onClick = onNavigateBack,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Go Back")
-                }
             }
         }
     }
@@ -2099,6 +1775,7 @@ private fun createTempFileFromUri(context: Context, uri: Uri): File? {
         inputStream.close()
         tempFile
     } catch (e: Exception) {
+        Log.e("LEAVE_SUBMIT", "Error creating temp file: ${e.message}")
         null
     }
 }
