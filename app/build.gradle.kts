@@ -16,8 +16,8 @@ android {
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.1.4"
+        versionCode = 18
+        versionName = "1.1.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -61,9 +61,9 @@ dependencies {
     implementation("io.insert-koin:koin-android")
     implementation("io.insert-koin:koin-androidx-compose")
 
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
-    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
-    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
+    // TFLite via Play Services - no bundled .so files, avoids 16KB page size issue
+    implementation("com.google.android.gms:play-services-tflite-java:16.4.0")
+    implementation("com.google.android.gms:play-services-tflite-support:16.4.0")
 
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
@@ -86,11 +86,6 @@ dependencies {
 
 // --- Secure local storage for the 512-d embedding ---
     implementation("androidx.security:security-crypto:1.1.0")
-
-// --- ONNX Runtime (on-device inference) ---
-//    implementation("ai.onnxruntime:onnxruntime-android:1.19.2")
-//    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 
     // ML Kit Face Detection
     implementation("com.google.mlkit:face-detection:16.1.7")

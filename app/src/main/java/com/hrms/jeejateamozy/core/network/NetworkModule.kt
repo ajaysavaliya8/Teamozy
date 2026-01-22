@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 
 object NetworkModule {
 
-    const val BASE_URL: String = "https://teamozy.com/data/m/"
+    const val BASE_URL: String = "https://teamozy.com/data/jeejafashion/m/"
 
     // Must be initialized before use
     private lateinit var appContext: Context

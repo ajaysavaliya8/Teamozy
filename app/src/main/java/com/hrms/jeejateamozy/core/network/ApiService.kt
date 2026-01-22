@@ -454,6 +454,44 @@ interface ApiService {
     ): Response<Any>
 
     // ========================================
+    // NOTIFICATION ENDPOINTS
+    // ========================================
+
+    /**
+     * Get notifications list for the logged-in user
+     */
+    @GET("notifications")
+    suspend fun getNotifications(
+        @Query("token") token: String
+    ): Response<NotificationsResponse>
+
+    /**
+     * Mark a single notification as read
+     */
+    @PUT("notifications/{notification_id}/read")
+    suspend fun markNotificationRead(
+        @Path("notification_id") notificationId: Int,
+        @Query("token") token: String
+    ): Response<NotificationActionResponse>
+
+    /**
+     * Mark all notifications as read
+     */
+    @PUT("notifications/mark-all-read")
+    suspend fun markAllNotificationsRead(
+        @Query("token") token: String
+    ): Response<NotificationActionResponse>
+
+    /**
+     * Delete multiple notifications (soft delete)
+     */
+    @DELETE("notifications")
+    suspend fun deleteNotifications(
+        @Query("notification_ids") notificationIds: List<Int>,
+        @Query("token") token: String
+    ): Response<NotificationActionResponse>
+
+    // ========================================
     // LOGOUT ENDPOINT
     // ========================================
 

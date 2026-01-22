@@ -2,245 +2,190 @@ package com.hrms.jeejateamozy.feature.notification.data
 
 import android.content.Context
 import android.util.Log
-import com.hrms.jeejateamozy.feature.notification.database.NotificationDatabase
-import com.hrms.jeejateamozy.feature.notification.database.NotificationEntity
-import kotlinx.coroutines.flow.Flow
-import java.util.concurrent.TimeUnit
+import com.hrms.jeejateamozy.core.network.ApiService
+import com.hrms.jeejateamozy.core.network.NotificationsData
+import com.hrms.jeejateamozy.core.utils.PreferencesManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Repository for notification operations
+ * Result wrapper for server API calls
  */
-class NotificationRepository private constructor(context: Context) {
+sealed class NotificationResult<out T> {
+    data class Success<T>(val data: T) : NotificationResult<T>()
+    data class Error(val message: String, val code: Int = -1) : NotificationResult<Nothing>()
+}
+
+/**
+ * Repository for notification operations (Server API only)
+ */
+class NotificationRepository private constructor(
+    context: Context,
+    apiService: ApiService? = null
+) {
 
     companion object {
         private const val TAG = "NotificationRepo"
 
-        // Cleanup threshold: 30 days
-        private val CLEANUP_THRESHOLD_MS = TimeUnit.DAYS.toMillis(30)
-
         @Volatile
         private var INSTANCE: NotificationRepository? = null
 
-        fun getInstance(context: Context): NotificationRepository {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: NotificationRepository(context.applicationContext).also {
+        fun getInstance(context: Context, apiService: ApiService? = null): NotificationRepository {
+            val instance = INSTANCE
+
+            if (instance != null && apiService != null && instance.apiService == null) {
+                synchronized(this) {
+                    if (INSTANCE?.apiService == null) {
+                        INSTANCE?.setApiService(apiService)
+                    }
+                }
+                return INSTANCE!!
+            }
+
+            return instance ?: synchronized(this) {
+                INSTANCE ?: NotificationRepository(context.applicationContext, apiService).also {
                     INSTANCE = it
                 }
             }
         }
     }
 
-    private val dao = NotificationDatabase.getInstance(context).notificationDao()
+    private var apiService: ApiService? = apiService
+    private val preferencesManager = PreferencesManager.getInstance(context)
 
-    // ============================================
-    // SAVE OPERATIONS
-    // ============================================
+    // Server unread count (for badge on HomePage)
+    private val _serverUnreadCount = MutableStateFlow(0)
+    val serverUnreadCountFlow: StateFlow<Int> = _serverUnreadCount.asStateFlow()
+
+    internal fun setApiService(api: ApiService) {
+        this.apiService = api
+        Log.d(TAG, "✅ ApiService updated")
+    }
+
+    private fun getToken(): String? = preferencesManager.authToken
 
     /**
-     * Save notification to database
-     * Returns true if saved, false if duplicate
+     * Refresh unread count from server (for badge on HomePage)
      */
-    suspend fun saveNotification(notification: NotificationEntity): Boolean {
-        return try {
-            // Check for duplicate
-            if (dao.exists(notification.notificationId)) {
-                Log.d(TAG, "Notification already exists: ${notification.notificationId}")
-                return false
+    suspend fun refreshUnreadCount() {
+        try {
+            val api = apiService ?: return
+            val token = getToken() ?: return
+
+            val response = api.getNotifications(token)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val count = response.body()?.data?.unreadCount ?: 0
+                _serverUnreadCount.value = count
+                Log.d(TAG, "✅ Refreshed unread count: $count")
             }
-
-            dao.insert(notification)
-            Log.d(TAG, "✅ Notification saved: ${notification.notificationId}")
-            true
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error saving notification", e)
-            false
+            Log.e(TAG, "❌ Error refreshing unread count", e)
         }
     }
 
     /**
-     * Save notification from FCM data payload
+     * Fetch notifications from server
      */
-    suspend fun saveFromFcmData(
-        notificationId: String,
-        type: String,
-        circularId: Int,
-        title: String,
-        message: String,
-        priority: String,
-        circularType: String,
-        createdAt: String
-    ): Boolean {
-        val entity = NotificationEntity(
-            notificationId = notificationId,
-            type = type,
-            circularId = circularId,
-            title = title,
-            message = message,
-            priority = priority,
-            circularType = circularType,
-            isRead = false,
-            createdAt = createdAt,
-            receivedAt = System.currentTimeMillis(),
-            readAt = null
-        )
-        return saveNotification(entity)
-    }
+    suspend fun fetchNotificationsFromServer(): NotificationResult<NotificationsData> {
+        return try {
+            val api = apiService ?: return NotificationResult.Error("API service not initialized")
+            val token = getToken() ?: return NotificationResult.Error("Not authenticated")
 
-    // ============================================
-    // QUERY OPERATIONS
-    // ============================================
+            val response = api.getNotifications(token)
 
-    /**
-     * Get all notifications as Flow
-     */
-    fun getAllNotifications(): Flow<List<NotificationEntity>> {
-        return dao.getAllNotifications()
-    }
-
-    /**
-     * Get unread notifications as Flow
-     */
-    fun getUnreadNotifications(): Flow<List<NotificationEntity>> {
-        return dao.getUnreadNotifications()
-    }
-
-    /**
-     * Get read notifications as Flow
-     */
-    fun getReadNotifications(): Flow<List<NotificationEntity>> {
-        return dao.getReadNotifications()
-    }
-
-    /**
-     * Get notifications by type as Flow
-     */
-    fun getNotificationsByType(type: String): Flow<List<NotificationEntity>> {
-        return dao.getNotificationsByType(type)
-    }
-
-    /**
-     * Get unread count as Flow (for badge)
-     */
-    fun getUnreadCountFlow(): Flow<Int> {
-        return dao.getUnreadCountFlow()
-    }
-
-    /**
-     * Get unread count (one-time)
-     */
-    suspend fun getUnreadCount(): Int {
-        return dao.getUnreadCount()
-    }
-
-    /**
-     * Get notification by ID
-     */
-    suspend fun getById(id: Long): NotificationEntity? {
-        return dao.getById(id)
-    }
-
-    /**
-     * Check if notification exists
-     */
-    suspend fun exists(notificationId: String): Boolean {
-        return dao.exists(notificationId)
-    }
-
-    // ============================================
-    // UPDATE OPERATIONS
-    // ============================================
-
-    /**
-     * Mark notification as read by database ID
-     */
-    suspend fun markAsRead(id: Long) {
-        try {
-            dao.markAsRead(id)
-            Log.d(TAG, "✅ Marked as read: $id")
+            if (response.isSuccessful) {
+                val body = response.body()
+                if (body?.success == true && body.data != null) {
+                    _serverUnreadCount.value = body.data.unreadCount
+                    Log.d(TAG, "✅ Fetched ${body.data.notifications.size} notifications, unread: ${body.data.unreadCount}")
+                    NotificationResult.Success(body.data)
+                } else {
+                    NotificationResult.Error(body?.message ?: "Failed to fetch notifications")
+                }
+            } else {
+                Log.e(TAG, "❌ Server error: ${response.code()}")
+                NotificationResult.Error("Server error: ${response.code()}", response.code())
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error marking as read", e)
+            Log.e(TAG, "❌ Error fetching notifications", e)
+            NotificationResult.Error(e.message ?: "Network error")
         }
     }
 
     /**
-     * Mark notification as read by notification ID (from backend)
+     * Mark notification as read on server
      */
-    suspend fun markAsReadByNotificationId(notificationId: String) {
-        try {
-            dao.markAsReadByNotificationId(notificationId)
-            Log.d(TAG, "✅ Marked as read by notificationId: $notificationId")
+    suspend fun markAsReadOnServer(notificationId: Int): NotificationResult<Boolean> {
+        return try {
+            val api = apiService ?: return NotificationResult.Error("API service not initialized")
+            val token = getToken() ?: return NotificationResult.Error("Not authenticated")
+
+            val response = api.markNotificationRead(notificationId, token)
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                if (_serverUnreadCount.value > 0) {
+                    _serverUnreadCount.value = _serverUnreadCount.value - 1
+                }
+                Log.d(TAG, "✅ Marked notification $notificationId as read")
+                NotificationResult.Success(true)
+            } else {
+                val message = response.body()?.message ?: "Failed to mark as read"
+                Log.e(TAG, "❌ Failed to mark as read: $message")
+                NotificationResult.Error(message, response.code())
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error marking as read by notificationId", e)
+            Log.e(TAG, "❌ Error marking notification as read", e)
+            NotificationResult.Error(e.message ?: "Network error")
         }
     }
 
     /**
-     * Mark all notifications as read
+     * Mark all notifications as read on server
      */
-    suspend fun markAllAsRead() {
-        try {
-            dao.markAllAsRead()
-            Log.d(TAG, "✅ All notifications marked as read")
+    suspend fun markAllAsReadOnServer(): NotificationResult<Boolean> {
+        return try {
+            val api = apiService ?: return NotificationResult.Error("API service not initialized")
+            val token = getToken() ?: return NotificationResult.Error("Not authenticated")
+
+            val response = api.markAllNotificationsRead(token)
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                _serverUnreadCount.value = 0
+                Log.d(TAG, "✅ Marked all notifications as read")
+                NotificationResult.Success(true)
+            } else {
+                val message = response.body()?.message ?: "Failed to mark all as read"
+                Log.e(TAG, "❌ Failed to mark all as read: $message")
+                NotificationResult.Error(message, response.code())
+            }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error marking all as read", e)
+            NotificationResult.Error(e.message ?: "Network error")
         }
     }
 
     /**
-     * Mark notifications as read by circular ID
+     * Delete notifications on server
      */
-    suspend fun markAsReadByCircularId(circularId: Int) {
-        try {
-            dao.markAsReadByCircularId(circularId)
-            Log.d(TAG, "✅ Marked as read for circular: $circularId")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error marking as read by circularId", e)
-        }
-    }
-
-    // ============================================
-    // DELETE OPERATIONS
-    // ============================================
-
-    /**
-     * Delete notification by ID
-     */
-    suspend fun deleteById(id: Long) {
-        try {
-            dao.deleteById(id)
-            Log.d(TAG, "✅ Notification deleted: $id")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error deleting notification", e)
-        }
-    }
-
-    /**
-     * Delete all notifications
-     */
-    suspend fun deleteAll() {
-        try {
-            dao.deleteAll()
-            Log.d(TAG, "✅ All notifications deleted")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error deleting all notifications", e)
-        }
-    }
-
-    /**
-     * Cleanup old read notifications (older than 30 days)
-     * @return number of deleted notifications
-     */
-    suspend fun cleanupOldNotifications(): Int {
+    suspend fun deleteNotificationsOnServer(notificationIds: List<Int>): NotificationResult<Boolean> {
         return try {
-            val threshold = System.currentTimeMillis() - CLEANUP_THRESHOLD_MS
-            val deleted = dao.deleteOldReadNotifications(threshold)
-            if (deleted > 0) {
-                Log.d(TAG, "✅ Cleaned up $deleted old notifications")
+            val api = apiService ?: return NotificationResult.Error("API service not initialized")
+            val token = getToken() ?: return NotificationResult.Error("Not authenticated")
+
+            val response = api.deleteNotifications(notificationIds, token)
+
+            if (response.isSuccessful && response.body()?.success == true) {
+                Log.d(TAG, "✅ Deleted ${notificationIds.size} notifications")
+                NotificationResult.Success(true)
+            } else {
+                val message = response.body()?.message ?: "Failed to delete notifications"
+                Log.e(TAG, "❌ Failed to delete: $message")
+                NotificationResult.Error(message, response.code())
             }
-            deleted
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error cleaning up notifications", e)
-            0
+            Log.e(TAG, "❌ Error deleting notifications", e)
+            NotificationResult.Error(e.message ?: "Network error")
         }
     }
 }

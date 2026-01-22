@@ -2,7 +2,9 @@ package com.hrms.jeejateamozy.feature.location.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.google.gson.Gson
 import com.hrms.jeejateamozy.core.network.ApiService
+import com.hrms.jeejateamozy.core.network.LocationSyncErrorResponse
 import com.hrms.jeejateamozy.feature.location.data.local.LocationDatabase
 import com.hrms.jeejateamozy.feature.location.data.local.PendingLocationDao
 import com.hrms.jeejateamozy.feature.location.data.local.PendingLocationEntity
@@ -131,6 +133,33 @@ class LocationRepository(
                         SyncResult.SessionEnded
                     }
 
+                    response.code() == 400 -> {
+                        // Check if stop_tracking is true in response body
+                        val errorBody = response.errorBody()?.string()
+                        Log.w(TAG, "⚠️ 400 received - checking stop_tracking flag")
+
+                        val shouldStopTracking = try {
+                            errorBody?.let {
+                                val errorResponse = Gson().fromJson(it, LocationSyncErrorResponse::class.java)
+                                Log.d(TAG, "📍 Error response: code=${errorResponse.code}, stop_tracking=${errorResponse.stopTracking}")
+                                errorResponse.stopTracking
+                            } ?: false
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Failed to parse 400 error body", e)
+                            false
+                        }
+
+                        if (shouldStopTracking) {
+                            Log.w(TAG, "⚠️ stop_tracking=true - stopping location tracking")
+                            SyncResult.StopTracking(message = errorBody ?: "Session ended")
+                        } else {
+                            SyncResult.Error(
+                                code = 400,
+                                message = "Bad request: ${errorBody ?: "Unknown error"}"
+                            )
+                        }
+                    }
+
                     else -> {
                         Log.e(TAG, "❌ Sync failed - HTTP ${response.code()}")
                         SyncResult.Error(
@@ -187,6 +216,11 @@ class LocationRepository(
                         return@withContext ForceSyncResult.SessionEnded(totalSynced)
                     }
 
+                    is SyncResult.StopTracking -> {
+                        Log.w(TAG, "⚠️ Stop tracking received during force sync")
+                        return@withContext ForceSyncResult.StopTracking(totalSynced, result.message)
+                    }
+
                     is SyncResult.NetworkError -> {
                         Log.e(TAG, "🌐 Network error during force sync")
                         return@withContext ForceSyncResult.NetworkError(totalSynced, result.message)
@@ -217,6 +251,8 @@ class LocationRepository(
 sealed class SyncResult {
     data class Success(val synced: Int, val remaining: Int) : SyncResult()
     data object SessionEnded : SyncResult()
+    /** API returned 400 with stop_tracking=true - should stop tracking and refresh check-status */
+    data class StopTracking(val message: String) : SyncResult()
     data class NetworkError(val message: String) : SyncResult()
     data class Error(val code: Int, val message: String) : SyncResult()
 }
@@ -228,5 +264,7 @@ sealed class ForceSyncResult {
     data class Success(val totalSynced: Int) : ForceSyncResult()
     data class Partial(val synced: Int, val remaining: Int) : ForceSyncResult()
     data class SessionEnded(val syncedBeforeEnd: Int) : ForceSyncResult()
+    /** API returned 400 with stop_tracking=true - should stop tracking and refresh check-status */
+    data class StopTracking(val syncedBeforeStop: Int, val message: String) : ForceSyncResult()
     data class NetworkError(val synced: Int, val message: String) : ForceSyncResult()
 }

@@ -1,5 +1,6 @@
 package com.hrms.jeejateamozy.di
 
+import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository
 import com.hrms.jeejateamozy.feature.notification.presentation.NotificationViewModel
 import org.koin.android.ext.koin.androidContext
@@ -11,8 +12,8 @@ import org.koin.dsl.module
  */
 val notificationModule = module {
 
-    // Repository
-    single { NotificationRepository.getInstance(androidContext()) }
+    // Repository - with ApiService for server calls
+    single { NotificationRepository.getInstance(androidContext(), NetworkModule.apiService) }
 
     // ViewModel
     viewModel { NotificationViewModel(get()) }

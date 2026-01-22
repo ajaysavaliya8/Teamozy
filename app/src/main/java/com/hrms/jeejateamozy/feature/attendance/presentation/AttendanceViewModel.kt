@@ -702,6 +702,11 @@ class AttendanceViewModel(
                                 // Continue with check-out
                             }
 
+                            is ForceSyncResult.StopTracking -> {
+                                Log.w(TAG, "⚠️ Stop tracking received during sync: ${syncResult.syncedBeforeStop} synced")
+                                // Continue with check-out - the session has already ended server-side
+                            }
+
                             is ForceSyncResult.NetworkError -> {
                                 Log.e(TAG, "🌐 Network error during sync: ${syncResult.message}")
                                 _ui.value = _ui.value.copy(

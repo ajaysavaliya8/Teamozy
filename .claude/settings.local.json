@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew :app:compileDebugKotlin:*)",
+      "WebSearch",
+      "Bash(./gradlew:*)",
+      "Bash(cd:*)",
+      "Bash(.gradlew.bat assembleDebug)",
+      "Bash(gradlew.bat:*)",
+      "Bash(cmd.exe /c \"gradlew.bat assembleDebug\")",
+      "Bash(./gradlew.bat assembleDebug)"
+    ]
+  }
+}

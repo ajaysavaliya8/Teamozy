@@ -218,13 +218,13 @@ fun PendingMessageDialog(
                         } else {
                             OutlinedButton(
                                 onClick = {
-                                    if (message.type != "CRITICAL") {
+                                    if (message.type?.uppercase() != "CRITICAL") {
                                         onDismiss()
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp),
-                                enabled = message.type != "CRITICAL",
+                                enabled = message.type?.uppercase() != "CRITICAL",
                                 contentPadding = PaddingValues(vertical = 14.dp)
                             ) {
                                 Text(
@@ -259,10 +259,10 @@ fun PendingMessageDialog(
 }
 
 @Composable
-private fun getMessageTypeStyle(type: String): MessageTypeStyle {
+private fun getMessageTypeStyle(type: String?): MessageTypeStyle {
     val colorScheme = MaterialTheme.colorScheme
 
-    return when (type.uppercase()) {
+    return when (type?.uppercase()) {
         "REMINDER" -> MessageTypeStyle(
             label = "REMINDER",
             icon = Icons.Outlined.Notifications,

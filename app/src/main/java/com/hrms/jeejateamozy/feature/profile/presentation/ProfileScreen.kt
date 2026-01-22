@@ -80,6 +80,7 @@ fun ProfileScreen(
     // Face Registration States
     var showFaceRegistration by remember { mutableStateOf(false) }
     var registrationBusy by remember { mutableStateOf(false) }
+    var faceRegistrationResult by remember { mutableStateOf<FaceRegistrationResult?>(null) }
 
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -165,25 +166,26 @@ fun ProfileScreen(
 
                         registrationBusy = false
                         showFaceRegistration = false
+                        bitmap.recycle()
 
                         if (response.isSuccessful) {
-                            successMessage = "Face registered successfully!"
-                            bitmap.recycle()
+                            val responseBody = response.body()
+                            val message = responseBody?.message ?: "Face registered successfully!"
+                            faceRegistrationResult = FaceRegistrationResult.Success(message)
                         } else {
                             val message = try {
                                 response.errorBody()?.string() ?: response.message()
                             } catch (e: Exception) {
                                 "Failed to register face"
                             }
-                            errorMessage = message
-                            bitmap.recycle()
+                            faceRegistrationResult = FaceRegistrationResult.Error(message)
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Registration error", e)
                         registrationBusy = false
                         showFaceRegistration = false
                         bitmap.recycle()
-                        errorMessage = "Network error. Please try again."
+                        faceRegistrationResult = FaceRegistrationResult.Error("Network error. Please try again.")
                     }
                 }
             }
@@ -387,5 +389,70 @@ fun ProfileScreen(
                 }
             )
         }
+
+        // Face Registration Result Dialog
+        faceRegistrationResult?.let { result ->
+            FaceRegistrationResultDialog(
+                result = result,
+                onDismiss = { faceRegistrationResult = null }
+            )
+        }
     }
+}
+
+/**
+ * Sealed class to represent face registration result
+ */
+sealed class FaceRegistrationResult {
+    data class Success(val message: String) : FaceRegistrationResult()
+    data class Error(val message: String) : FaceRegistrationResult()
+}
+
+/**
+ * Dialog to show face registration result
+ */
+@Composable
+private fun FaceRegistrationResultDialog(
+    result: FaceRegistrationResult,
+    onDismiss: () -> Unit
+) {
+    val isSuccess = result is FaceRegistrationResult.Success
+    val message = when (result) {
+        is FaceRegistrationResult.Success -> result.message
+        is FaceRegistrationResult.Error -> result.message
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                contentDescription = null,
+                tint = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(48.dp)
+            )
+        },
+        title = {
+            Text(
+                text = if (isSuccess) "Success" else "Failed",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Text(
+                text = message,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("OK")
+            }
+        }
+    )
 }

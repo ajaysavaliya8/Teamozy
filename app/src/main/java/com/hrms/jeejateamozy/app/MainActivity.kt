@@ -51,15 +51,9 @@ import com.hrms.jeejateamozy.di.attendanceHistoryModule
 import com.hrms.jeejateamozy.di.locationModule
 import com.hrms.jeejateamozy.di.notificationModule
 import com.hrms.jeejateamozy.feature.notification.utils.NotificationHelper
-import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository
-
-// Firebase imports
+import com.hrms.jeejateamozy.navigation.DeepLink
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
 
 private enum class AppScreen {
     SPLASH,
@@ -73,8 +67,8 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "MainActivity"
     }
 
-    // Deep link circular ID from notification
-    private var deepLinkCircularId by mutableStateOf<Int?>(null)
+    // Deep link from notification - supports all screen types
+    private var pendingDeepLink by mutableStateOf<DeepLink?>(null)
 
     // Permission launcher for notification permission (Android 13+)
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -130,8 +124,8 @@ class MainActivity : ComponentActivity() {
 
                 Surface {
                     AppRoot(
-                        initialCircularId = deepLinkCircularId,
-                        onCircularIdConsumed = { deepLinkCircularId = null }
+                        initialDeepLink = pendingDeepLink,
+                        onDeepLinkConsumed = { pendingDeepLink = null }
                     )
                 }
             }
@@ -145,13 +139,12 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Handle notification deep link intent
-     * ✅ FIXED: Extract ALL FCM data from intent extras
-     * When app is in background, Android passes FCM data payload as intent extras
+     * Supports all screen types via DeepLink sealed class
      */
     private fun handleNotificationIntent(intent: Intent?) {
         intent?.let { it ->
             try {
-                // ✅ DEBUG: Log ALL intent extras to see what FCM passes
+                // DEBUG: Log ALL intent extras
                 Log.d(TAG, "========================================")
                 Log.d(TAG, "📨 INTENT RECEIVED")
                 Log.d(TAG, "   Action: ${it.action}")
@@ -164,87 +157,29 @@ class MainActivity : ComponentActivity() {
                 }
                 Log.d(TAG, "========================================")
 
-                // ✅ Read from multiple possible key names
-                // FCM uses original keys, our code uses different keys
+                // Read notification extras
+                val screen = it.getStringExtra(NotificationHelper.EXTRA_SCREEN)
+                    ?: it.getStringExtra("screen")
+
                 val notificationType = it.getStringExtra(NotificationHelper.EXTRA_NOTIFICATION_TYPE)
                     ?: it.getStringExtra("type")
-                    ?: "circular_new"  // Default to circular_new
+                    ?: "general"
 
-                val notificationId = it.getStringExtra(NotificationHelper.EXTRA_NOTIFICATION_ID)
-                    ?: it.getStringExtra("notification_id")
-                    ?: "notif_${UUID.randomUUID().toString().take(12)}"
+                // Check if this is from a notification click
+                val hasNotificationData = !screen.isNullOrEmpty() ||
+                    (notificationType != "general" && notificationType.isNotEmpty())
 
-                // Read circular_id from multiple sources
-                val circularIdString = it.getStringExtra(NotificationHelper.EXTRA_CIRCULAR_ID)
-                    ?: it.getStringExtra("circular_id")
-                val circularId = circularIdString?.toIntOrNull() ?: 0
+                Log.d(TAG, "📋 Notification: screen=$screen, type=$notificationType, hasData=$hasNotificationData")
 
-                // Read other FCM data
-                val title = it.getStringExtra("title") ?: ""
-                val message = it.getStringExtra("message")
-                    ?: it.getStringExtra("body")  // FCM notification body
-                    ?: ""
-                val priority = it.getStringExtra("priority") ?: "normal"
-                val circularType = it.getStringExtra("circular_type") ?: "general"
-                val createdAt = it.getStringExtra("created_at") ?: getCurrentIsoTime()
-
-                Log.d(TAG, "📋 Parsed notification data:")
-                Log.d(TAG, "   - type: $notificationType")
-                Log.d(TAG, "   - circularId: $circularId")
-                Log.d(TAG, "   - notificationId: $notificationId")
-                Log.d(TAG, "   - title: $title")
-                Log.d(TAG, "   - message: $message")
-
-                if (circularId > 0) {
-                    deepLinkCircularId = circularId
-
-                    // ✅ ALWAYS save notification to database when clicking from system notification
-                    // This handles the case when app was in background and onMessageReceived wasn't called
-                    lifecycleScope.launch {
-                        try {
-                            val repo = NotificationRepository.getInstance(applicationContext)
-
-                            // Check if notification already exists
-                            val exists = repo.exists(notificationId)
-
-                            if (!exists) {
-                                // Save to database with whatever data we have
-                                val saved = repo.saveFromFcmData(
-                                    notificationId = notificationId,
-                                    type = notificationType,
-                                    circularId = circularId,
-                                    title = title.ifEmpty { "Circular #$circularId" },
-                                    message = message.ifEmpty { "New notification" },
-                                    priority = priority,
-                                    circularType = circularType,
-                                    createdAt = createdAt
-                                )
-
-                                if (saved) {
-                                    Log.d(TAG, "✅ Notification SAVED from deep link: $notificationId")
-                                }
-                            } else {
-                                Log.d(TAG, "📋 Notification already exists: $notificationId")
-                            }
-
-                            // Mark as read
-                            repo.markAsReadByNotificationId(notificationId)
-                            Log.d(TAG, "✅ Notification marked as read: $notificationId")
-
-                        } catch (e: Exception) {
-                            Log.e(TAG, "❌ Error handling notification", e)
-                        }
-                    }
+                // Determine deep link target - open notification list for notification clicks
+                if (hasNotificationData) {
+                    pendingDeepLink = DeepLink.NotificationList
+                    Log.d(TAG, "✅ Deep link set: NotificationList")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error handling notification intent", e)
             }
         }
-    }
-
-    private fun getCurrentIsoTime(): String {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())
-        return sdf.format(Date())
     }
 
     @Composable
@@ -317,18 +252,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AppRoot(
-    initialCircularId: Int? = null,
-    onCircularIdConsumed: () -> Unit = {}
+    initialDeepLink: DeepLink? = null,
+    onDeepLinkConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = remember { PreferencesManager.getInstance(context) }
     val authRepo: AuthRepository = koinInject()
     var current by remember { mutableStateOf(AppScreen.SPLASH) }
-    var circularIdForDeepLink by remember { mutableStateOf(initialCircularId) }
+    var deepLinkForNavigation by remember { mutableStateOf(initialDeepLink) }
 
-    LaunchedEffect(initialCircularId) {
-        if (initialCircularId != null) {
-            circularIdForDeepLink = initialCircularId
+    LaunchedEffect(initialDeepLink) {
+        if (initialDeepLink != null) {
+            deepLinkForNavigation = initialDeepLink
         }
     }
 
@@ -351,7 +286,7 @@ private fun AppRoot(
         AppScreen.HOME -> {
             HomeWithPermissions(
                 preferencesManager = prefs,
-                initialCircularId = circularIdForDeepLink,
+                initialDeepLink = deepLinkForNavigation,
                 onLogout = {
                     Log.d("MainActivity", "Logout, clearing preferences")
                     prefs.clearAll()
@@ -359,11 +294,11 @@ private fun AppRoot(
                 }
             )
 
-            LaunchedEffect(circularIdForDeepLink) {
-                if (circularIdForDeepLink != null) {
+            LaunchedEffect(deepLinkForNavigation) {
+                if (deepLinkForNavigation != null) {
                     delay(500)
-                    circularIdForDeepLink = null
-                    onCircularIdConsumed()
+                    deepLinkForNavigation = null
+                    onDeepLinkConsumed()
                 }
             }
         }
@@ -438,7 +373,7 @@ private fun InlineSplash(
 @Composable
 private fun HomeWithPermissions(
     preferencesManager: PreferencesManager,
-    initialCircularId: Int? = null,
+    initialDeepLink: DeepLink? = null,
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -472,7 +407,7 @@ private fun HomeWithPermissions(
     }
 
     MainScreen(
-        initialCircularId = initialCircularId,
+        initialDeepLink = initialDeepLink,
         onLogout = {
             scope.launch {
                 Log.d("MainActivity", "Logout requested")

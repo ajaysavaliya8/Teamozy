@@ -376,14 +376,14 @@ private fun CalendarDayItem(
         return
     }
 
-    // Check if day has attendance
-    val hasAttendance = day.status.isNotEmpty()
+    // Check if day has meaningful attendance (not NO_DATA or empty)
+    val hasAttendance = day.status.isNotEmpty() && day.status != "NO_DATA"
 
     val backgroundColor = when (day.color) {
         "red" -> Color(0xFFE57373)
         "orange" -> Color(0xFFFFB74D)
         "gray" -> Color(0xFFBDBDBD)
-        "transparent", "" -> Color.Transparent
+        "transparent", "", "black" -> Color.Transparent
         else -> Color.Transparent
     }
 
@@ -407,7 +407,7 @@ private fun CalendarDayItem(
             .clip(CircleShape)
             .background(backgroundColor)
             .border(1.dp, borderColor, CircleShape)
-            .clickable(enabled = hasAttendance) { onClick() },
+            .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Column(

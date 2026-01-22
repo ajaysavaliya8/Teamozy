@@ -29,6 +29,8 @@ import com.hrms.jeejateamozy.BuildConfig
 import com.hrms.jeejateamozy.R
 import com.hrms.jeejateamozy.app.MainActivity
 import com.hrms.jeejateamozy.feature.location.data.local.PendingLocationEntity
+import com.hrms.jeejateamozy.core.network.ApiService
+import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.location.data.repository.LocationRepository
 import com.hrms.jeejateamozy.feature.location.data.repository.SyncResult
 import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
@@ -75,6 +77,9 @@ class LocationTrackingService : Service() {
         private const val EXTRA_COMMAND = "command"
         private const val COMMAND_START = "start"
         private const val COMMAND_STOP = "stop"
+
+        // Broadcast action for UI refresh (when stop_tracking is received)
+        const val ACTION_REFRESH_CHECK_STATUS = "com.hrms.jeejateamozy.ACTION_REFRESH_CHECK_STATUS"
 
         // Timing - TESTING VALUES (reduce for production)
         private const val LOCATION_INTERVAL_MS = 30_000L      // 30 seconds (testing)
@@ -130,6 +135,7 @@ class LocationTrackingService : Service() {
 
     // Dependencies
     private val locationRepository: LocationRepository by inject()
+    private val apiService: ApiService by inject()
 
     // Location
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -521,6 +527,11 @@ class LocationTrackingService : Service() {
                     handleSessionEnded()
                 }
 
+                is SyncResult.StopTracking -> {
+                    Log.w(TAG, "⚠️ stop_tracking=true received - stopping service and refreshing status")
+                    handleStopTracking()
+                }
+
                 is SyncResult.NetworkError -> {
                     Log.e(TAG, "🌐 Network error - will retry next cycle: ${result.message}")
                 }
@@ -559,6 +570,71 @@ class LocationTrackingService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error handling session ended", e)
             }
+        }
+    }
+
+    /**
+     * Handle stop_tracking=true response - API signals to stop tracking and refresh status
+     */
+    private fun handleStopTracking() {
+        Log.w(TAG, "⚠️ Handling stop_tracking (400 with stop_tracking=true)")
+
+        serviceScope.launch {
+            try {
+                // 1. Clear all pending locations
+                locationRepository.clearAllLocations()
+                Log.d(TAG, "🗑️ Pending locations cleared")
+
+                // 2. Call check-status API to refresh check-out status
+                refreshCheckStatus()
+
+                // 3. Clear tracking state
+                val stateManager = TrackingStateManager(this@LocationTrackingService)
+                stateManager.clearState()
+
+                // 4. Cancel keep-alive mechanisms
+                TrackingWorker.cancel(this@LocationTrackingService)
+                TrackingAlarmReceiver.cancel(this@LocationTrackingService)
+
+                // 5. Stop service
+                stopForegroundTracking()
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error handling stop tracking", e)
+                // Still stop the service even if check-status fails
+                stopForegroundTracking()
+            }
+        }
+    }
+
+    /**
+     * Call check-status API to refresh the current attendance status
+     */
+    private suspend fun refreshCheckStatus() {
+        try {
+            val preferencesManager = PreferencesManager.getInstance(this@LocationTrackingService)
+            val deviceId = preferencesManager.deviceId
+            val token = preferencesManager.authToken
+
+            if (deviceId.isBlank() || token.isNullOrBlank()) {
+                Log.w(TAG, "⚠️ Missing deviceId or token for check-status")
+                return
+            }
+
+            Log.d(TAG, "📡 Calling check-status API to refresh attendance status...")
+            val response = apiService.checkStatus(deviceId, token)
+
+            if (response.isSuccessful) {
+                val statusData = response.body()
+                Log.d(TAG, "✅ Check-status refreshed - state: ${statusData?.data?.current_state}")
+
+                // Broadcast to notify UI to refresh
+                val refreshIntent = Intent(ACTION_REFRESH_CHECK_STATUS)
+                sendBroadcast(refreshIntent)
+            } else {
+                Log.e(TAG, "❌ Check-status failed - HTTP ${response.code()}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error calling check-status", e)
         }
     }
 

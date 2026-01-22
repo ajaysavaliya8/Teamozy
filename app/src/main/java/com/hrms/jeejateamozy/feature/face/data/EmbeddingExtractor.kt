@@ -14,16 +14,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.tensorflow.lite.DataType
-import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.gpu.CompatibilityList
-import org.tensorflow.lite.gpu.GpuDelegate
-import org.tensorflow.lite.nnapi.NnApiDelegate
-import org.tensorflow.lite.support.common.FileUtil
+// Using Play Services TFLite - loads from Play Services, no bundled .so files
+import com.google.android.gms.tflite.java.TfLite
+import org.tensorflow.lite.InterpreterApi
+import org.tensorflow.lite.InterpreterApi.Options.TfLiteRuntime
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.MappedByteBuffer
 import kotlin.math.sqrt
 
 /**
@@ -33,9 +30,9 @@ import kotlin.math.sqrt
  * Features:
  * - Safe single-Interpreter usage guarded by a Mutex (thread-safe .run)
  * - Retry-aware extract() and low-latency extractNoRetry()
- * - Optional GPU (preferred) or NNAPI delegate; CPU with XNNPACK as fallback
+ * - CPU inference via Play Services TFLite
  * - Tiny ByteBuffer pool to reduce GC in camera loops
- * - Model I/O validation (shape + dtype)
+ * - Model I/O validation (shape)
  * - Production telemetry hooks
  * - Similarity helpers (cosine, L2) + extractOrNull()
  */
@@ -43,8 +40,6 @@ import kotlin.math.sqrt
 class EmbeddingExtractor private constructor(
     private val appContext: Context,
     private val numThreads: Int,
-    private val enableGpu: Boolean,
-    private val enableNnapi: Boolean,
     private val debugLogging: Boolean,
     private val telemetry: EmbeddingTelemetry?
 ) {
@@ -65,8 +60,6 @@ class EmbeddingExtractor private constructor(
          * Get singleton instance.
          *
          * @param numThreads number of CPU threads (>=1)
-         * @param enableGpu enable GPU delegate if supported
-         * @param enableNnapi enable NNAPI delegate (older devices; don't combine with GPU)
          * @param debugLogging verbose logs
          * @param telemetry optional hooks for metrics
          */
@@ -79,15 +72,11 @@ class EmbeddingExtractor private constructor(
             telemetry: EmbeddingTelemetry? = null
         ): EmbeddingExtractor {
             require(numThreads > 0) { "numThreads must be positive, got $numThreads" }
-            require(!(enableGpu && enableNnapi)) {
-                "Cannot enable both GPU and NNAPI delegates simultaneously"
-            }
+            // GPU and NNAPI not supported with Play Services TFLite
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: EmbeddingExtractor(
                     appContext = context.applicationContext,
                     numThreads = numThreads,
-                    enableGpu = enableGpu,
-                    enableNnapi = enableNnapi,
                     debugLogging = debugLogging,
                     telemetry = telemetry
                 ).also { INSTANCE = it }
@@ -130,11 +119,10 @@ class EmbeddingExtractor private constructor(
         }
     }
 
-    // ---- Interpreter & delegates (re-creatable; not lazy to allow recovery) ----
+    // ---- Interpreter (re-creatable; not lazy to allow recovery) ----
 
-    private var interpreter: Interpreter? = null
-    private var gpuDelegate: GpuDelegate? = null
-    private var nnapiDelegate: NnApiDelegate? = null
+    private var interpreter: InterpreterApi? = null
+    private var tfliteInitialized = false
 
     // Serialize .run() calls (TFLite interpreter isn't thread-safe for concurrent runs).
     private val inferLock = Mutex()
@@ -361,7 +349,7 @@ class EmbeddingExtractor private constructor(
         try {
             inferLock.withLock { getInterpreter().run(input, output) }
         } catch (e: IllegalStateException) {
-            // Rare: if native interpreter becomes invalid (e.g., after delegate issue), rebuild once.
+            // Rare: if native interpreter becomes invalid, rebuild once.
             logW("Interpreter invalid state: ${e.message}. Recreating and retrying once…")
             rebuildInterpreter()
             inferLock.withLock { getInterpreter().run(input, output) }
@@ -371,7 +359,7 @@ class EmbeddingExtractor private constructor(
     // --- Interpreter lifecycle ---
 
     @Synchronized
-    private fun getInterpreter(): Interpreter {
+    private fun getInterpreter(): InterpreterApi {
         if (interpreter == null) {
             interpreter = buildInterpreter()
         }
@@ -388,53 +376,49 @@ class EmbeddingExtractor private constructor(
     private fun releaseInterpreter() {
         try { interpreter?.close() } catch (_: Exception) {}
         interpreter = null
-        try { gpuDelegate?.close() } catch (_: Exception) {}
-        gpuDelegate = null
-        try { nnapiDelegate?.close() } catch (_: Exception) {}
-        nnapiDelegate = null
     }
 
-    private fun buildInterpreter(): Interpreter {
-        logD("Initializing TFLite (threads=$numThreads, gpu=$enableGpu, nnapi=$enableNnapi)")
+    private fun buildInterpreter(): InterpreterApi {
+        logD("Initializing TFLite via Play Services (threads=$numThreads)")
         requireModelPresent()
 
-        val mm: MappedByteBuffer = FileUtil.loadMappedFile(appContext, MODEL_FILE)
-        val opts = Interpreter.Options().apply {
-            setNumThreads(numThreads)
-
-            // Faster CPU backend; safe no-op if unsupported
-            @Suppress("DEPRECATION")
-            setUseXNNPACK(true)
-
-            if (enableGpu && isGpuCompatible()) {
-                try {
-                    gpuDelegate = GpuDelegate()
-                    addDelegate(gpuDelegate)
-                    logI("GPU delegate enabled")
-                } catch (e: Exception) {
-                    logW("GPU init failed, falling back to CPU: ${e.message}")
-                }
-            } else if (enableNnapi) {
-                try {
-                    nnapiDelegate = NnApiDelegate()
-                    addDelegate(nnapiDelegate)
-                    logI("NNAPI delegate enabled")
-                } catch (e: Exception) {
-                    logW("NNAPI init failed: ${e.message}")
-                }
+        // Initialize TFLite from Play Services
+        if (!tfliteInitialized) {
+            TfLite.initialize(appContext).addOnFailureListener { e ->
+                logE("TFLite initialization failed", e)
             }
+            tfliteInitialized = true
         }
 
-        val interp = Interpreter(mm, opts)
+        val modelBuffer = loadModelFile()
+        val opts = InterpreterApi.Options()
+            .setNumThreads(numThreads)
+            .setRuntime(TfLiteRuntime.FROM_SYSTEM_ONLY)
+
+        val interp = InterpreterApi.create(modelBuffer, opts)
         validateModelIO(interp)
 
         telemetry?.onModelInitialized(
-            gpu = (gpuDelegate != null),
+            gpu = false,
             xnnpack = true
         )
 
-        logI("TFLite interpreter initialized successfully")
+        logI("TFLite interpreter initialized successfully via Play Services")
         return interp
+    }
+
+    private fun loadModelFile(): ByteBuffer {
+        val assetFileDescriptor = appContext.assets.openFd(MODEL_FILE)
+        val inputStream = assetFileDescriptor.createInputStream()
+        val modelBytes = inputStream.readBytes()
+        inputStream.close()
+        assetFileDescriptor.close()
+
+        val buffer = ByteBuffer.allocateDirect(modelBytes.size)
+        buffer.order(ByteOrder.nativeOrder())
+        buffer.put(modelBytes)
+        buffer.rewind()
+        return buffer
     }
 
     private fun requireModelPresent() {
@@ -449,44 +433,29 @@ class EmbeddingExtractor private constructor(
         false
     }
 
-    private fun isGpuCompatible(): Boolean = try {
-        CompatibilityList().isDelegateSupportedOnThisDevice
-    } catch (e: Exception) {
-        logW("GPU compatibility check failed: ${e.message}")
-        false
-    }
-
     /**
-     * Validate model input/output shapes and data types at runtime.
+     * Validate model input/output shapes at runtime.
      * Fails fast if wrong model is bundled.
      */
-    private fun validateModelIO(interp: Interpreter) {
-        // Input: [1,112,112,3] float32
+    private fun validateModelIO(interp: InterpreterApi) {
+        // Input: [1,160,160,3] float32
         val inTensor = interp.getInputTensor(0)
         val inShape = inTensor.shape()
-        val inType = inTensor.dataType()
         require(inShape.size == 4 && inShape[0] == 1 &&
                 inShape[1] == INPUT_SIZE && inShape[2] == INPUT_SIZE &&
                 inShape[3] == INPUT_CHANNELS) {
             "Invalid input shape: ${inShape.contentToString()}, expected [1,$INPUT_SIZE,$INPUT_SIZE,$INPUT_CHANNELS]"
         }
-        require(inType == DataType.FLOAT32) {
-            "Invalid input type: $inType, expected FLOAT32"
-        }
 
         // Output: [1,512] float32
         val outTensor = interp.getOutputTensor(0)
         val outShape = outTensor.shape()
-        val outType = outTensor.dataType()
         require(outShape.size == 2 && outShape[0] == 1 &&
                 outShape[1] == EMBEDDING_SIZE) {
             "Invalid output shape: ${outShape.contentToString()}, expected [1,$EMBEDDING_SIZE]"
         }
-        require(outType == DataType.FLOAT32) {
-            "Invalid output type: $outType, expected FLOAT32"
-        }
 
-        logD("Model validation passed: input=${inShape.contentToString()}/$inType, output=${outShape.contentToString()}/$outType")
+        logD("Model validation passed: input=${inShape.contentToString()}, output=${outShape.contentToString()}")
     }
 
     // ---- Logging ----

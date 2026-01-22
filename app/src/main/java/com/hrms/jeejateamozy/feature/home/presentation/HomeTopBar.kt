@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
@@ -15,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -96,28 +98,30 @@ fun HomeTopBar(
                 }
 
                 // Notification Icon with Badge
-                BadgedBox(
-                    badge = {
-                        if (notificationCount > 0) {
-                            Badge(
-                                containerColor = MaterialTheme.colorScheme.error,
-                                contentColor = MaterialTheme.colorScheme.onError
-                            ) {
-                                Text(
-                                    text = if (notificationCount > 99) "99+" else notificationCount.toString(),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                ) {
-                    IconButton(onClick = onNotificationClick) {
+                IconButton(onClick = onNotificationClick) {
+                    Box {
                         Icon(
                             Icons.Filled.Notifications,
                             contentDescription = "Notifications",
                             tint = MaterialTheme.colorScheme.onPrimary
                         )
+                        // Red border badge
+                        if (notificationCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(12.dp)
+                                    .border(
+                                        width = 2.dp,
+                                        color = Color.Red,
+                                        shape = CircleShape
+                                    )
+                                    .background(
+                                        color = Color.White,
+                                        shape = CircleShape
+                                    )
+                            )
+                        }
                     }
                 }
 

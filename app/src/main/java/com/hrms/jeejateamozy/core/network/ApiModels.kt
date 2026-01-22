@@ -251,7 +251,7 @@ data class DayTimesheetData(
     val has_pending_request: Boolean? = null,
     val available_actions: List<String>? = null,
     val can_request_new_attendance: Boolean? = null,
-    val action_available: Map<String, Boolean>? = null
+    val action_available: String? = null
 ) {
     fun toDomain() = DayTimesheet(
         hasAttendance = has_attendance,
@@ -599,7 +599,7 @@ data class DayTimesheet(
     val hasPendingRequest: Boolean? = null,
     val availableActions: List<String>? = null,
     val canRequestNewAttendance: Boolean? = null,
-    val actionAvailable: Map<String, Boolean>? = null
+    val actionAvailable: String? = null
 )
 
 data class CorrectionRequestContainer(
@@ -1897,11 +1897,15 @@ data class LogoutPushNotifications(
 
 data class PendingMessage(
     val id: Int,
-    val type: String,
+    @SerializedName("message_type")
+    val type: String?,
     val title: String,
+    @SerializedName("content")
     val body: String,
+    @SerializedName("has_attachments")
     val has_attachment: Boolean,
     val attachment_url: String?,
+    @SerializedName("require_acknowledgment")
     val requires_acknowledgment: Boolean
 )
 
@@ -1923,3 +1927,71 @@ enum class CorrectionStatus {
     @SerializedName("REJECTED") REJECTED,
     @SerializedName("WITHDRAWN") WITHDRAWN
 }
+
+// ========================================
+// LOCATION SYNC MODELS
+// ========================================
+
+/**
+ * Response model for location sync API error responses (400)
+ * Contains stop_tracking flag that indicates session has ended
+ */
+data class LocationSyncErrorResponse(
+    val status: String? = null,
+    val code: String? = null,
+    val message: String? = null,
+    @SerializedName("stop_tracking")
+    val stopTracking: Boolean = false
+)
+
+// ========================================
+// NOTIFICATION API MODELS
+// ========================================
+
+/**
+ * Response for GET /notifications
+ */
+data class NotificationsResponse(
+    val success: Boolean,
+    val data: NotificationsData? = null,
+    val message: String? = null
+)
+
+data class NotificationsData(
+    val notifications: List<ServerNotification>,
+    @SerializedName("unread_count")
+    val unreadCount: Int
+)
+
+/**
+ * Single notification from server
+ * Note: Extra fields like circular_id, leave_id, date are flattened from mobile_params
+ */
+data class ServerNotification(
+    val id: Int,
+    @SerializedName("notification_uid")
+    val notificationUid: String?,
+    val type: String?,
+    val title: String?,
+    val message: String?,
+    val priority: String?,
+    val screen: String?,
+    @SerializedName("is_read")
+    val isRead: Boolean = false,
+    @SerializedName("created_at")
+    val createdAt: String?,
+    // Flattened params from mobile_params
+    @SerializedName("circular_id")
+    val circularId: Int? = null,
+    @SerializedName("leave_id")
+    val leaveId: Int? = null,
+    val date: String? = null
+)
+
+/**
+ * Response for mark read / mark all read / delete operations
+ */
+data class NotificationActionResponse(
+    val success: Boolean,
+    val message: String? = null
+)

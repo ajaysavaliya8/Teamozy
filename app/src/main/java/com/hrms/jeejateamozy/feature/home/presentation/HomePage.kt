@@ -9,7 +9,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceEvent
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceViewModel
@@ -22,12 +25,13 @@ import com.hrms.jeejateamozy.feature.home.presentation.dialogs.WorkReportBottomS
 import com.hrms.jeejateamozy.feature.home.presentation.utils.calculateElapsedSeconds
 import com.hrms.jeejateamozy.feature.home.presentation.utils.rememberPermissionChecker
 import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.PendingMessageDialog
-import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository  // ⭐ NEW IMPORT
+import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 private const val TAG = "HomePage"
 
@@ -48,9 +52,9 @@ fun HomePage(
     val snack = remember { SnackbarHostState() }
     val prefs = remember { PreferencesManager.getInstance(context) }
 
-    // ⭐ NEW: Notification count from repository
-    val notificationRepo = remember { NotificationRepository.getInstance(context) }
-    val notificationCount by notificationRepo.getUnreadCountFlow().collectAsState(initial = 0)
+    // Notification count from server (for badge)
+    val notificationRepo: NotificationRepository = koinInject()
+    val notificationCount by notificationRepo.serverUnreadCountFlow.collectAsState()
 
     // Face verification state
     var faceVerifyBusy by remember { mutableStateOf(false) }
@@ -103,6 +107,26 @@ fun HomePage(
     // Initial refresh
     LaunchedEffect(Unit) {
         vm.refreshStatus()
+        // Fetch notification unread count for badge
+        Log.d(TAG, "🔔 Fetching notification unread count...")
+        notificationRepo.refreshUnreadCount()
+    }
+
+    // Refresh status when app returns from background
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                Log.d(TAG, "🔄 App resumed - refreshing status")
+                vm.refreshStatus(force = false, context = context)
+                // Also refresh notification count for badge
+                scope.launch { notificationRepo.refreshUnreadCount() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // Handle events

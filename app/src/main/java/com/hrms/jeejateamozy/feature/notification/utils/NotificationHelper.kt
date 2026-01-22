@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.hrms.jeejateamozy.R
 import com.hrms.jeejateamozy.app.MainActivity
+import com.hrms.jeejateamozy.navigation.DeepLink
 
 /**
  * Helper class for creating and showing system notifications
@@ -20,19 +21,13 @@ object NotificationHelper {
     private const val TAG = "NotificationHelper"
 
     // Notification Channel IDs
-    const val CHANNEL_ID_CIRCULAR = "circular_notifications"
-    const val CHANNEL_ID_CIRCULAR_HIGH = "circular_notifications_high"
-    const val CHANNEL_ID_DEFAULT = "teamozy_notifications"  // ✅ Backend's expected channel
+    private const val CHANNEL_ID_DEFAULT = "teamozy_notifications"
+    private const val CHANNEL_ID_HIGH = "teamozy_notifications_high"
 
-    // Notification Channel Names
-    private const val CHANNEL_NAME_CIRCULAR = "Circulars"
-    private const val CHANNEL_NAME_CIRCULAR_HIGH = "Important Circulars"
-    private const val CHANNEL_NAME_DEFAULT = "Teamozy Notifications"
-
-    // Intent extras - ALL AS STRING to avoid ClassCastException
+    // Intent extras
+    const val EXTRA_SCREEN = "screen"
     const val EXTRA_NOTIFICATION_TYPE = "notification_type"
-    const val EXTRA_CIRCULAR_ID = "circular_id"
-    const val EXTRA_NOTIFICATION_ID = "notification_id"
+    const val EXTRA_NOTIFICATION_UID = "notification_uid"
 
     /**
      * Create notification channels (call on app startup)
@@ -41,153 +36,88 @@ object NotificationHelper {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = context.getSystemService(NotificationManager::class.java)
 
-            // ✅ Default channel (backend sends notifications with this channel)
+            // Default channel
             val defaultChannel = NotificationChannel(
                 CHANNEL_ID_DEFAULT,
-                CHANNEL_NAME_DEFAULT,
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "General Teamozy notifications"
-                enableLights(true)
-                enableVibration(true)
-                setShowBadge(true)
-            }
-
-            // Normal priority channel
-            val normalChannel = NotificationChannel(
-                CHANNEL_ID_CIRCULAR,
-                CHANNEL_NAME_CIRCULAR,
+                "Teamozy Notifications",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Notifications for circulars and announcements"
+                description = "General notifications"
                 enableLights(true)
                 enableVibration(true)
             }
 
-            // High priority channel (for important circulars)
+            // High priority channel
             val highChannel = NotificationChannel(
-                CHANNEL_ID_CIRCULAR_HIGH,
-                CHANNEL_NAME_CIRCULAR_HIGH,
+                CHANNEL_ID_HIGH,
+                "Important Notifications",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Important circular notifications"
+                description = "Important notifications"
                 enableLights(true)
                 enableVibration(true)
                 setShowBadge(true)
             }
 
             notificationManager.createNotificationChannel(defaultChannel)
-            notificationManager.createNotificationChannel(normalChannel)
             notificationManager.createNotificationChannel(highChannel)
-
-            Log.d(TAG, "✅ Notification channels created (including teamozy_notifications)")
+            Log.d(TAG, "✅ Notification channels created")
         }
     }
 
     /**
-     * Show circular notification
+     * Show notification - opens notification list screen when clicked
      */
-    fun showCircularNotification(
+    fun showNotification(
         context: Context,
-        notificationId: String,
-        circularId: Int,
+        notificationId: Int,
         title: String,
         message: String,
-        priority: String,
-        type: String
+        type: String = "general",
+        priority: String = "normal",
+        extras: Map<String, String> = emptyMap()
     ) {
         try {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Create intent for opening circular detail
-            // ✅ Pass ALL extras as String to avoid ClassCastException
+            // Create intent - always opens notification screen
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(EXTRA_SCREEN, DeepLink.SCREEN_NOTIFICATIONS)
                 putExtra(EXTRA_NOTIFICATION_TYPE, type)
-                putExtra(EXTRA_CIRCULAR_ID, circularId.toString())
-                putExtra(EXTRA_NOTIFICATION_ID, notificationId)
-                // ✅ Also pass title and message for saving when clicked
                 putExtra("title", title)
                 putExtra("message", message)
-                putExtra("priority", priority)
+                extras.forEach { (key, value) -> putExtra(key, value) }
             }
 
             val pendingIntent = PendingIntent.getActivity(
                 context,
-                circularId,
+                notificationId,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // Determine channel based on priority
             val isHighPriority = priority.equals("high", ignoreCase = true)
-            val channelId = if (isHighPriority) {
-                CHANNEL_ID_CIRCULAR_HIGH
-            } else {
-                CHANNEL_ID_CIRCULAR
-            }
+            val channelId = if (isHighPriority) CHANNEL_ID_HIGH else CHANNEL_ID_DEFAULT
 
-            // Determine notification priority for pre-O devices
-            val notificationPriority = if (isHighPriority) {
-                NotificationCompat.PRIORITY_HIGH
-            } else {
-                NotificationCompat.PRIORITY_DEFAULT
-            }
-
-            // Build notification
             val notification = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-                .setPriority(notificationPriority)
+                .setPriority(if (isHighPriority) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
                 .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
                 .setVibrate(longArrayOf(0, 250, 250, 250))
-                .apply {
-                    when (type) {
-                        "circular_reminder" -> setSubText("Reminder")
-                        "circular_new" -> setSubText("New Circular")
-                        else -> setSubText("Circular")
-                    }
-                }
                 .build()
 
-            // Use circular ID as notification ID
-            notificationManager.notify(circularId, notification)
-
-            Log.d(TAG, "✅ Notification shown - CircularID: $circularId, Title: $title, Priority: $priority")
+            notificationManager.notify(notificationId, notification)
+            Log.d(TAG, "✅ Notification shown - ID: $notificationId, Title: $title")
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error showing notification", e)
-        }
-    }
-
-    /**
-     * Cancel notification by circular ID
-     */
-    fun cancelNotification(context: Context, circularId: Int) {
-        try {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.cancel(circularId)
-            Log.d(TAG, "✅ Notification cancelled: $circularId")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error cancelling notification", e)
-        }
-    }
-
-    /**
-     * Cancel all notifications
-     */
-    fun cancelAllNotifications(context: Context) {
-        try {
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.cancelAll()
-            Log.d(TAG, "✅ All notifications cancelled")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error cancelling all notifications", e)
         }
     }
 }

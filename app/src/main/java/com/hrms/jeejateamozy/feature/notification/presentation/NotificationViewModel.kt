@@ -3,16 +3,16 @@ package com.hrms.jeejateamozy.feature.notification.presentation
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hrms.jeejateamozy.core.network.ServerNotification
 import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository
-import com.hrms.jeejateamozy.feature.notification.database.NotificationEntity
+import com.hrms.jeejateamozy.feature.notification.data.NotificationResult
+import com.hrms.jeejateamozy.navigation.DeepLink
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -21,19 +21,13 @@ import kotlinx.coroutines.launch
  */
 data class NotificationUiState(
     val isLoading: Boolean = false,
-    val notifications: List<NotificationEntity> = emptyList(),
+    val isRefreshing: Boolean = false,
+    val notifications: List<ServerNotification> = emptyList(),
+    val unreadCount: Int = 0,
     val errorMessage: String? = null,
-    val selectedFilter: NotificationFilter = NotificationFilter.ALL
+    val selectedNotifications: Set<Int> = emptySet(),
+    val isSelectionMode: Boolean = false
 )
-
-/**
- * Filter options for notifications - ONLY All, Unread, Read
- */
-enum class NotificationFilter {
-    ALL,
-    UNREAD,
-    READ
-}
 
 /**
  * Events from NotificationViewModel
@@ -41,7 +35,7 @@ enum class NotificationFilter {
 sealed class NotificationEvent {
     data class ShowError(val message: String) : NotificationEvent()
     data class ShowSuccess(val message: String) : NotificationEvent()
-    data class NavigateToCircular(val circularId: Int) : NotificationEvent()
+    data class NavigateToScreen(val deepLink: DeepLink) : NotificationEvent()
 }
 
 /**
@@ -55,101 +49,126 @@ class NotificationViewModel(
         private const val TAG = "NotificationVM"
     }
 
-    // UI State
     private val _uiState = MutableStateFlow(NotificationUiState())
     val uiState: StateFlow<NotificationUiState> = _uiState.asStateFlow()
 
-    // Events
     private val _events = MutableSharedFlow<NotificationEvent>()
     val events: SharedFlow<NotificationEvent> = _events.asSharedFlow()
-
-    // Unread count as StateFlow (for badge)
-    val unreadCount: StateFlow<Int> = repository.getUnreadCountFlow()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = 0
-        )
 
     init {
         loadNotifications()
     }
 
     /**
-     * Load notifications based on current filter
+     * Load notifications from server
      */
     fun loadNotifications() {
         viewModelScope.launch {
-            try {
-                _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
-                // Collect notifications from Flow
-                val flow = when (_uiState.value.selectedFilter) {
-                    NotificationFilter.ALL -> repository.getAllNotifications()
-                    NotificationFilter.UNREAD -> repository.getUnreadNotifications()
-                    NotificationFilter.READ -> repository.getReadNotifications()
-                }
-
-                flow.collect { notifications ->
+            when (val result = repository.fetchNotificationsFromServer()) {
+                is NotificationResult.Success -> {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            notifications = notifications,
+                            isRefreshing = false,
+                            notifications = result.data.notifications,
+                            unreadCount = result.data.unreadCount,
                             errorMessage = null
                         )
                     }
-                    Log.d(TAG, "Loaded ${notifications.size} notifications")
+                    Log.d(TAG, "Loaded ${result.data.notifications.size} notifications, unread: ${result.data.unreadCount}")
                 }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = e.message ?: "Failed to load notifications"
-                    )
+                is NotificationResult.Error -> {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isRefreshing = false,
+                            errorMessage = result.message
+                        )
+                    }
+                    Log.e(TAG, "Error loading notifications: ${result.message}")
                 }
-                Log.e(TAG, "Error loading notifications", e)
             }
         }
     }
 
     /**
-     * Set filter and reload notifications
+     * Refresh notifications (pull-to-refresh)
      */
-    fun setFilter(filter: NotificationFilter) {
-        _uiState.update { it.copy(selectedFilter = filter) }
-        loadNotifications()
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            loadNotifications()
+        }
     }
 
     /**
      * Handle notification click - mark as read and navigate
      */
-    fun onNotificationClick(notification: NotificationEntity) {
+    fun onNotificationClick(notification: ServerNotification) {
         viewModelScope.launch {
-            try {
-                // Mark as read
-                repository.markAsRead(notification.id)
-                Log.d(TAG, "Marked notification ${notification.id} as read")
+            // Mark as read on server if not already read
+            if (!notification.isRead) {
+                when (val result = repository.markAsReadOnServer(notification.id)) {
+                    is NotificationResult.Success -> {
+                        updateNotificationReadStatus(notification.id)
+                        Log.d(TAG, "Marked notification ${notification.id} as read")
+                    }
+                    is NotificationResult.Error -> {
+                        Log.e(TAG, "Failed to mark as read: ${result.message}")
+                    }
+                }
+            }
 
-                // Navigate to circular detail
-                _events.emit(NotificationEvent.NavigateToCircular(notification.circularId))
-            } catch (e: Exception) {
-                Log.e(TAG, "Error handling notification click", e)
-                _events.emit(NotificationEvent.ShowError("Failed to open notification"))
+            // Navigate based on notification data
+            createDeepLink(notification)?.let { deepLink ->
+                _events.emit(NotificationEvent.NavigateToScreen(deepLink))
             }
         }
     }
 
     /**
-     * Mark notification as read without navigation
+     * Create DeepLink from notification
      */
-    fun markAsRead(notificationId: Long) {
-        viewModelScope.launch {
-            try {
-                repository.markAsRead(notificationId)
-                Log.d(TAG, "Marked notification $notificationId as read")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error marking notification as read", e)
+    private fun createDeepLink(notification: ServerNotification): DeepLink? {
+        // If screen is provided, use it
+        notification.screen?.let { screen ->
+            val extras = mutableMapOf<String, String?>()
+            notification.circularId?.let { extras["circular_id"] = it.toString() }
+            notification.leaveId?.let { extras["leave_id"] = it.toString() }
+            notification.date?.let { extras["date"] = it }
+            return DeepLink.fromFcmData(screen, extras)
+        }
+
+        // Fallback: determine deep link from notification data
+        notification.circularId?.takeIf { it > 0 }?.let {
+            return DeepLink.CircularDetail(it)
+        }
+
+        notification.leaveId?.takeIf { it > 0 }?.let {
+            return DeepLink.LeaveDetail(it)
+        }
+
+        notification.date?.let {
+            return DeepLink.AttendanceDetail(it)
+        }
+
+        return null
+    }
+
+    /**
+     * Update notification read status in local state
+     */
+    private fun updateNotificationReadStatus(notificationId: Int) {
+        _uiState.update { state ->
+            val updatedList = state.notifications.map {
+                if (it.id == notificationId) it.copy(isRead = true) else it
             }
+            state.copy(
+                notifications = updatedList,
+                unreadCount = updatedList.count { !it.isRead }
+            )
         }
     }
 
@@ -158,61 +177,102 @@ class NotificationViewModel(
      */
     fun markAllAsRead() {
         viewModelScope.launch {
-            try {
-                repository.markAllAsRead()
-                _events.emit(NotificationEvent.ShowSuccess("All notifications marked as read"))
-                Log.d(TAG, "All notifications marked as read")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error marking all as read", e)
-                _events.emit(NotificationEvent.ShowError("Failed to mark all as read"))
-            }
-        }
-    }
+            _uiState.update { it.copy(isLoading = true) }
 
-    /**
-     * Delete notification
-     */
-    fun deleteNotification(notificationId: Long) {
-        viewModelScope.launch {
-            try {
-                repository.deleteById(notificationId)
-                _events.emit(NotificationEvent.ShowSuccess("Notification deleted"))
-                Log.d(TAG, "Notification $notificationId deleted")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error deleting notification", e)
-                _events.emit(NotificationEvent.ShowError("Failed to delete notification"))
-            }
-        }
-    }
-
-    /**
-     * Delete all notifications
-     */
-    fun deleteAllNotifications() {
-        viewModelScope.launch {
-            try {
-                repository.deleteAll()
-                _events.emit(NotificationEvent.ShowSuccess("All notifications deleted"))
-                Log.d(TAG, "All notifications deleted")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error deleting all notifications", e)
-                _events.emit(NotificationEvent.ShowError("Failed to delete notifications"))
-            }
-        }
-    }
-
-    /**
-     * Cleanup old notifications
-     */
-    fun cleanupOldNotifications() {
-        viewModelScope.launch {
-            try {
-                val deleted = repository.cleanupOldNotifications()
-                if (deleted > 0) {
-                    Log.d(TAG, "Cleaned up $deleted old notifications")
+            when (val result = repository.markAllAsReadOnServer()) {
+                is NotificationResult.Success -> {
+                    _uiState.update { state ->
+                        state.copy(
+                            isLoading = false,
+                            notifications = state.notifications.map { it.copy(isRead = true) },
+                            unreadCount = 0
+                        )
+                    }
+                    _events.emit(NotificationEvent.ShowSuccess("All notifications marked as read"))
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error cleaning up notifications", e)
+                is NotificationResult.Error -> {
+                    _uiState.update { it.copy(isLoading = false) }
+                    _events.emit(NotificationEvent.ShowError(result.message))
+                }
+            }
+        }
+    }
+
+    // ============================================
+    // SELECTION MODE (for multi-delete)
+    // ============================================
+
+    fun toggleSelectionMode() {
+        _uiState.update {
+            it.copy(
+                isSelectionMode = !it.isSelectionMode,
+                selectedNotifications = emptySet()
+            )
+        }
+    }
+
+    fun toggleNotificationSelection(notificationId: Int) {
+        _uiState.update { state ->
+            val newSelection = if (notificationId in state.selectedNotifications) {
+                state.selectedNotifications - notificationId
+            } else {
+                state.selectedNotifications + notificationId
+            }
+            state.copy(selectedNotifications = newSelection)
+        }
+    }
+
+    fun selectAll() {
+        _uiState.update { state ->
+            state.copy(selectedNotifications = state.notifications.map { it.id }.toSet())
+        }
+    }
+
+    fun deleteSelectedNotifications() {
+        viewModelScope.launch {
+            val selectedIds = _uiState.value.selectedNotifications.toList()
+            if (selectedIds.isEmpty()) return@launch
+
+            _uiState.update { it.copy(isLoading = true) }
+
+            when (val result = repository.deleteNotificationsOnServer(selectedIds)) {
+                is NotificationResult.Success -> {
+                    _uiState.update { state ->
+                        val remaining = state.notifications.filter { it.id !in selectedIds }
+                        state.copy(
+                            isLoading = false,
+                            notifications = remaining,
+                            unreadCount = remaining.count { !it.isRead },
+                            selectedNotifications = emptySet(),
+                            isSelectionMode = false
+                        )
+                    }
+                    _events.emit(NotificationEvent.ShowSuccess("${selectedIds.size} notifications deleted"))
+                }
+                is NotificationResult.Error -> {
+                    _uiState.update { it.copy(isLoading = false) }
+                    _events.emit(NotificationEvent.ShowError(result.message))
+                }
+            }
+        }
+    }
+
+    fun deleteNotification(notificationId: Int) {
+        viewModelScope.launch {
+            when (val result = repository.deleteNotificationsOnServer(listOf(notificationId))) {
+                is NotificationResult.Success -> {
+                    _uiState.update { state ->
+                        val remaining = state.notifications.filter { it.id != notificationId }
+                        state.copy(
+                            notifications = remaining,
+                            unreadCount = remaining.count { !it.isRead }
+                        )
+                    }
+                    _events.emit(NotificationEvent.ShowSuccess("Notification deleted"))
+                }
+                is NotificationResult.Error -> {
+                    _events.emit(NotificationEvent.ShowError(result.message))
+                }
             }
         }
     }

@@ -1,6 +1,7 @@
 package com.hrms.jeejateamozy.feature.main.presentation
 
 import android.app.Activity
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.WindowInsets
@@ -20,17 +21,19 @@ import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryViewModel
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryScreen
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceDayDetailScreen
-import com.hrms.jeejateamozy.feature.notification.presentation.NotificationListScreen  // ⭐ NEW IMPORT
-import com.hrms.jeejateamozy.feature.notification.presentation.NotificationViewModel  // ⭐ NEW IMPORT
-import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository  // ⭐ NEW IMPORT
+import com.hrms.jeejateamozy.feature.notification.presentation.NotificationListScreen
+import com.hrms.jeejateamozy.feature.notification.presentation.NotificationViewModel
+import com.hrms.jeejateamozy.navigation.DeepLink
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
+private const val TAG = "MainScreen"
+
 @Composable
 fun MainScreen(
     onLogout: () -> Unit,
-    initialCircularId: Int? = null  // ⭐ NEW: For deep linking from notification
+    initialDeepLink: DeepLink? = null  // Supports all screen types from notifications
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -74,17 +77,85 @@ fun MainScreen(
     // ⭐ NEW: Notification List State
     var showNotificationList by remember { mutableStateOf(false) }
 
-    // ⭐ NEW: Handle deep link to circular detail
-    LaunchedEffect(initialCircularId) {
-        if (initialCircularId != null && initialCircularId > 0) {
-            showCircularDetail = initialCircularId
-            // Mark related notifications as read
-            scope.launch {
-                try {
-                    val repo = NotificationRepository.getInstance(context)
-                    repo.markAsReadByCircularId(initialCircularId)
-                } catch (e: Exception) {
-                    // Ignore errors
+    // Handle deep link navigation from notifications
+    LaunchedEffect(initialDeepLink) {
+        if (initialDeepLink != null) {
+            Log.d(TAG, "📱 Processing deep link: $initialDeepLink")
+
+            when (initialDeepLink) {
+                // Main tabs
+                is DeepLink.Home -> {
+                    currentNavigationScreen = NavigationScreen.HOME
+                }
+                is DeepLink.Attendance -> {
+                    currentNavigationScreen = NavigationScreen.ATTENDANCE
+                }
+                is DeepLink.Profile -> {
+                    currentNavigationScreen = NavigationScreen.PROFILE
+                }
+
+                // Circular screens
+                is DeepLink.CircularList -> {
+                    showCircularList = true
+                }
+                is DeepLink.CircularDetail -> {
+                    showCircularDetail = initialDeepLink.circularId
+                }
+
+                // Leave screens
+                is DeepLink.LeaveHistory -> {
+                    showLeaveHistory = true
+                }
+                is DeepLink.ApplyLeave -> {
+                    showApplyLeave = true
+                }
+                is DeepLink.LeaveDetail -> {
+                    // TODO: Add leave detail navigation when screen exists
+                    showLeaveHistory = true
+                }
+
+                // Attendance detail
+                is DeepLink.AttendanceDetail -> {
+                    selectedAttendanceDate = initialDeepLink.date
+                    showAttendanceHistory = true
+                }
+
+                // Other screens
+                is DeepLink.WorkReport -> {
+                    showWorkReport = true
+                }
+                is DeepLink.NotificationList -> {
+                    showNotificationList = true
+                }
+
+                // Profile child screens
+                is DeepLink.EditSocialMedia -> {
+                    currentNavigationScreen = NavigationScreen.PROFILE
+                    showEditSocialMedia = true
+                }
+                is DeepLink.EditContact -> {
+                    currentNavigationScreen = NavigationScreen.PROFILE
+                    showEditContactDetail = true
+                }
+                is DeepLink.EditPersonalInfo -> {
+                    currentNavigationScreen = NavigationScreen.PROFILE
+                    showEditPersonalInfo = true
+                }
+                is DeepLink.ViewEmploymentDetail -> {
+                    currentNavigationScreen = NavigationScreen.PROFILE
+                    showViewEmploymentDetail = true
+                }
+                is DeepLink.EditBankingInfo -> {
+                    currentNavigationScreen = NavigationScreen.PROFILE
+                    showEditBankingInfo = true
+                }
+                is DeepLink.ViewEmploymentIdentity -> {
+                    currentNavigationScreen = NavigationScreen.PROFILE
+                    showViewEmploymentIdentity = true
+                }
+                is DeepLink.ViewShiftDetails -> {
+                    currentNavigationScreen = NavigationScreen.PROFILE
+                    showViewShiftDetails = true
                 }
             }
         }
@@ -225,9 +296,53 @@ fun MainScreen(
                     onNavigateBack = {
                         showNotificationList = false
                     },
-                    onNavigateToCircular = { circularId ->
+                    onNavigateToScreen = { deepLink ->
                         showNotificationList = false
-                        showCircularDetail = circularId
+                        // Handle navigation based on deep link type
+                        when (deepLink) {
+                            is DeepLink.Home -> currentNavigationScreen = NavigationScreen.HOME
+                            is DeepLink.Attendance -> currentNavigationScreen = NavigationScreen.ATTENDANCE
+                            is DeepLink.Profile -> currentNavigationScreen = NavigationScreen.PROFILE
+                            is DeepLink.CircularList -> showCircularList = true
+                            is DeepLink.CircularDetail -> showCircularDetail = deepLink.circularId
+                            is DeepLink.LeaveHistory -> showLeaveHistory = true
+                            is DeepLink.ApplyLeave -> showApplyLeave = true
+                            is DeepLink.LeaveDetail -> showLeaveHistory = true  // Open leave history for now
+                            is DeepLink.AttendanceDetail -> {
+                                selectedAttendanceDate = deepLink.date
+                                showAttendanceHistory = true
+                            }
+                            is DeepLink.WorkReport -> showWorkReport = true
+                            is DeepLink.NotificationList -> showNotificationList = true
+                            is DeepLink.EditSocialMedia -> {
+                                currentNavigationScreen = NavigationScreen.PROFILE
+                                showEditSocialMedia = true
+                            }
+                            is DeepLink.EditContact -> {
+                                currentNavigationScreen = NavigationScreen.PROFILE
+                                showEditContactDetail = true
+                            }
+                            is DeepLink.EditPersonalInfo -> {
+                                currentNavigationScreen = NavigationScreen.PROFILE
+                                showEditPersonalInfo = true
+                            }
+                            is DeepLink.ViewEmploymentDetail -> {
+                                currentNavigationScreen = NavigationScreen.PROFILE
+                                showViewEmploymentDetail = true
+                            }
+                            is DeepLink.EditBankingInfo -> {
+                                currentNavigationScreen = NavigationScreen.PROFILE
+                                showEditBankingInfo = true
+                            }
+                            is DeepLink.ViewEmploymentIdentity -> {
+                                currentNavigationScreen = NavigationScreen.PROFILE
+                                showViewEmploymentIdentity = true
+                            }
+                            is DeepLink.ViewShiftDetails -> {
+                                currentNavigationScreen = NavigationScreen.PROFILE
+                                showViewShiftDetails = true
+                            }
+                        }
                     }
                 )
             }
