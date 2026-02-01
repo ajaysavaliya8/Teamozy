@@ -16,6 +16,8 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.core.network.LeaveApplication
 import com.hrms.jeejateamozy.core.network.LeaveSummary
 import com.hrms.jeejateamozy.core.network.PaginationInfo
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import java.time.LocalDate
@@ -46,7 +49,9 @@ fun LeaveHistoryScreen(
     viewModel: LeaveViewModel = koinViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToApplyLeave: () -> Unit = {},
-    onNavigateToDetail: ((Int) -> Unit)? = null
+    onNavigateToDetail: ((Int) -> Unit)? = null,
+    successMessage: String? = null,
+    onSuccessMessageShown: () -> Unit = {}
 ) {
     val uiState by viewModel.historyUiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -74,6 +79,17 @@ fun LeaveHistoryScreen(
                 }
                 else -> {}
             }
+        }
+    }
+
+    // Show success message from leave application
+    LaunchedEffect(successMessage) {
+        if (successMessage != null) {
+            snackbarHostState.showSnackbar(
+                message = "✅ $successMessage",
+                duration = SnackbarDuration.Short
+            )
+            onSuccessMessageShown()
         }
     }
 
@@ -138,7 +154,20 @@ fun LeaveHistoryScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        // Pull to refresh state
+        var isRefreshing by remember { mutableStateOf(false) }
+
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                isRefreshing = true
+                scope.launch {
+                    viewModel.loadLeaveHistory(status = uiState.selectedStatus)
+                    viewModel.loadLeaveSummary()
+                    delay(500) // Small delay for visual feedback
+                    isRefreshing = false
+                }
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -209,8 +238,8 @@ fun LeaveHistoryScreen(
                 }
             }
 
-            // Loading overlay
-            if (uiState.isLoading) {
+            // Loading overlay (only show on initial load, not on refresh)
+            if (uiState.isLoading && !isRefreshing) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -236,7 +265,7 @@ fun LeaveHistoryScreen(
 }
 
 // ==========================================
-// ENHANCED LEAVE APPLICATION CARD
+// LEAVE APPLICATION CARD (Minimal)
 // ==========================================
 @Composable
 private fun EnhancedLeaveApplicationCard(
@@ -244,370 +273,114 @@ private fun EnhancedLeaveApplicationCard(
     onWithdraw: () -> Unit,
     onClick: () -> Unit
 ) {
+    // Parse color from colorCode
+    val leaveTypeColor = application.colorCode?.let {
+        try {
+            Color(android.graphics.Color.parseColor(it))
+        } catch (e: Exception) {
+            MaterialTheme.colorScheme.primary
+        }
+    } ?: MaterialTheme.colorScheme.primary
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         onClick = onClick
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Header Row with Reference Number
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+            // Color indicator
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(60.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(leaveTypeColor)
+            )
+
+            // Main content
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    // Leave Type
+                // Leave Type Name
+                Text(
+                    text = application.leaveTypeName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                // Reference Number
+                application.referenceNumber?.let { ref ->
                     Text(
-                        text = application.leaveType.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        text = ref,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
+                }
 
-                    // Reference Number
-                    application.referenceNumber?.let { ref ->
-                        Text(
-                            text = ref,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    // Days count
+                // Date Range and Days
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarToday,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatDateRange(application.startDate, application.endDate),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "•",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Text(
                         text = "${application.numDays} day${if (application.numDays > 1) "s" else ""}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
 
-                // Status Badge with Workflow Status
-                Column(horizontalAlignment = Alignment.End) {
-                    StatusBadge(status = application.status)
+            // Status Badge
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatusBadge(status = application.status)
 
-                    // Workflow Status (if different from main status)
-                    application.workflowStatus?.let { workflowStatus ->
-                        if (workflowStatus.lowercase() != application.status.lowercase()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            WorkflowStatusChip(status = workflowStatus)
-                        }
+                // Withdraw button for pending/draft
+                if (application.status.lowercase() in listOf("pending", "draft")) {
+                    IconButton(
+                        onClick = onWithdraw,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Withdraw",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // Date Range
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CalendarToday,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = formatDateRange(application.startDate, application.endDate),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            // Leave Reason
-            Text(
-                text = application.leaveReason,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            // ==========================================
-            // WORKFLOW INFO SECTION (NEW!)
-            // ==========================================
-            application.workflow?.let { workflow ->
-                WorkflowInfoSection(
-                    workflow = workflow,
-                    status = application.status
-                )
-            }
-
-            // Approver Info (for approved/rejected)
-            application.approver?.let { approver ->
-                ApproverInfoRow(
-                    approverName = approver.name,
-                    status = application.status,
-                    remarks = approver.remarks
-                )
-            }
-
-            // Rejection reason
-            application.rejectionReason?.let { reason ->
-                RejectionReasonCard(reason = reason)
-            }
-
-            // Actions
-            if (application.status.lowercase() in listOf("pending", "draft")) {
-                OutlinedButton(
-                    onClick = onWithdraw,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Withdraw Application")
-                }
-            }
-
-            // Applied Date Footer
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Applied on ${formatDate(application.appliedAt)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "View Details",
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-// ==========================================
-// WORKFLOW INFO SECTION
-// ==========================================
-@Composable
-private fun WorkflowInfoSection(
-    workflow: com.hrms.jeejateamozy.core.network.LeaveWorkflowInfo,
-    status: String
-) {
-    val isPending = status.lowercase() in listOf("pending", "in_progress")
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isPending)
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-            else
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Workflow Progress Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                } else {
                     Icon(
-                        imageVector = Icons.Outlined.AccountTree,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
-                    Text(
-                        text = "Approval Workflow",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.secondary
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "View Details",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                // Step Progress
-                if (workflow.currentStep != null && workflow.totalSteps != null) {
-                    Text(
-                        text = "Step ${workflow.currentStep}/${workflow.totalSteps}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Progress Bar
-            if (workflow.currentStep != null && workflow.totalSteps != null && workflow.totalSteps > 0) {
-                val progress = (workflow.currentStep - 1).toFloat() / workflow.totalSteps
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = when (status.lowercase()) {
-                        "approved" -> Color(0xFF4CAF50)
-                        "rejected" -> Color(0xFFF44336)
-                        else -> MaterialTheme.colorScheme.primary
-                    },
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            }
-
-            // Current Step Name
-            workflow.currentStepName?.let { stepName ->
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Circle,
-                        contentDescription = null,
-                        modifier = Modifier.size(8.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = stepName,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            // Pending With (Important!)
-            if (workflow.pendingWith.isNotEmpty() && isPending) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.HourglassTop,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = Color(0xFFFF9800)
-                    )
-                    Text(
-                        text = "Pending with: ",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = workflow.pendingWith.joinToString(", "),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFFF9800)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ==========================================
-// APPROVER INFO ROW
-// ==========================================
-@Composable
-private fun ApproverInfoRow(
-    approverName: String?,
-    status: String,
-    remarks: String?
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = when (status.lowercase()) {
-                "approved" -> Icons.Default.CheckCircle
-                "rejected" -> Icons.Default.Cancel
-                else -> Icons.Outlined.Person
-            },
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = when (status.lowercase()) {
-                "approved" -> Color(0xFF4CAF50)
-                "rejected" -> Color(0xFFF44336)
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-        )
-        Column {
-            Text(
-                text = when (status.lowercase()) {
-                    "approved" -> "Approved by: ${approverName ?: "N/A"}"
-                    "rejected" -> "Rejected by: ${approverName ?: "N/A"}"
-                    else -> "Approver: ${approverName ?: "N/A"}"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium
-            )
-            remarks?.let {
-                Text(
-                    text = "\"$it\"",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                )
-            }
-        }
-    }
-}
-
-// ==========================================
-// REJECTION REASON CARD
-// ==========================================
-@Composable
-private fun RejectionReasonCard(reason: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.error
-            )
-            Column {
-                Text(
-                    text = "Rejection Reason",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.error
-                )
-                Text(
-                    text = reason,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
             }
         }
     }
@@ -701,31 +474,6 @@ private fun StatusBadge(status: String) {
     }
 }
 
-@Composable
-private fun WorkflowStatusChip(status: String) {
-    val color = when (status.lowercase()) {
-        "pending" -> Color(0xFF2196F3)
-        "in_progress" -> Color(0xFF9C27B0)
-        "approved" -> Color(0xFF4CAF50)
-        "rejected" -> Color(0xFFF44336)
-        "draft" -> Color(0xFFFF9800)
-        else -> Color(0xFF9E9E9E)
-    }
-
-    Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = color.copy(alpha = 0.15f)
-    ) {
-        Text(
-            text = "WF: ${status.replace("_", " ")}",
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            fontSize = 10.sp
-        )
-    }
-}
-
 // ==========================================
 // LEAVE SUMMARY CARD
 // ==========================================
@@ -733,78 +481,73 @@ private fun WorkflowStatusChip(status: String) {
 private fun LeaveSummaryCard(summary: LeaveSummary) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            // Total taken
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "Leave Summary ${summary.year}",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
                 Icon(
                     imageVector = Icons.Outlined.CalendarMonth,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "${summary.year}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-
-            // Total Days Taken
+            // Status chips in a row
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                val statusOrder = listOf("APPROVED", "PENDING", "REJECTED")
+                statusOrder.forEach { key ->
+                    val count = summary.byStatus[key]
+                    if (count != null && count.count > 0) {
+                        val color = when (key) {
+                            "APPROVED" -> Color(0xFF4CAF50)
+                            "PENDING" -> Color(0xFF2196F3)
+                            "REJECTED" -> Color(0xFFF44336)
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = color.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "${count.count}",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = color
+                            )
+                        }
+                    }
+                }
+
+                // Total days
                 Text(
-                    text = "Total Days Taken",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Text(
-                    text = "${summary.totalDaysTaken} days",
-                    style = MaterialTheme.typography.bodyLarge,
+                    text = "${summary.totalDaysTaken}d",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
-            }
-
-            // By Status
-            if (summary.byStatus.isNotEmpty()) {
-                Text(
-                    text = "By Status",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                summary.byStatus.forEach { (status, count) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = status.replace("_", " ").lowercase()
-                                .replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = "${count.count} (${count.totalDays} days)",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
             }
         }
     }

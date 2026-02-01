@@ -251,8 +251,11 @@ class AuthRepository(
             // Use the app version from BuildConfig
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
 
-            val res = api.verifyToken(appVersion)
-            Log.d("NET", "verifyToken -> app_version=$appVersion, code=${res.code()}")
+            // Get FCM token to keep it fresh on backend
+            val fcmToken = pm.fcmToken
+
+            val res = api.verifyToken(appVersion, fcmToken)
+            Log.d("NET", "verifyToken -> app_version=$appVersion, fcm_token=${fcmToken?.take(20)}..., code=${res.code()}")
 
             when (res.code()) {
                 426 -> {

@@ -8,7 +8,13 @@
       "Bash(.gradlew.bat assembleDebug)",
       "Bash(gradlew.bat:*)",
       "Bash(cmd.exe /c \"gradlew.bat assembleDebug\")",
-      "Bash(./gradlew.bat assembleDebug)"
+      "Bash(./gradlew.bat assembleDebug)",
+      "Bash(.gradlew.bat --stop)",
+      "Bash(./gradlew.bat --stop)",
+      "Bash(taskkill:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(del \"D:\\\\android\\\\Teamozy\\\\app\\\\src\\\\main\\\\res\\\\drawable\\\\ic_notification.xml\")"
     ]
   }
 }

@@ -46,7 +46,8 @@ interface ApiService {
 
     @GET("verify-token")
     suspend fun verifyToken(
-        @Query("app_version") appVersion: String
+        @Query("app_version") appVersion: String,
+        @Query("fcm_token") fcmToken: String? = null
     ): Response<VerifyTokenResponse>
 
     @FormUrlEncoded
@@ -284,7 +285,7 @@ interface ApiService {
     suspend fun getLeaveTypes(): Response<LeaveTypesResponse>
 
     /**
-     * Apply for leave with half-day support
+     * Apply for leave
      */
     @Multipart
     @POST("apply-leave")
@@ -293,14 +294,12 @@ interface ApiService {
         @Part("start_date") startDate: RequestBody,
         @Part("end_date") endDate: RequestBody,
         @Part("leave_reason") leaveReason: RequestBody,
-        @Part("is_half_day_start") isHalfDayStart: RequestBody,
-        @Part("is_half_day_end") isHalfDayEnd: RequestBody,
-        @Part("half_day_type") halfDayType: RequestBody?,
         @Part("alternate_contact") alternateContact: RequestBody?,
         @Part("emergency_contact") emergencyContact: RequestBody?,
         @Part("task_depended_on_you") taskDependedOnYou: RequestBody,
         @Part("dependency_handled_by") dependencyHandledBy: RequestBody?,
         @Part("handover_notes") handoverNotes: RequestBody?,
+        @Part("priority") priority: RequestBody,
         @Part supportingDocument: MultipartBody.Part?
     ): Response<ApplyLeaveResponse>
 
@@ -361,34 +360,6 @@ interface ApiService {
         @Query("year") year: Int
     ): Response<LeaveCalendarResponse>
 
-    /**
-     * Save a leave application as draft
-     */
-    @FormUrlEncoded
-    @POST("save-draft-leave")
-    suspend fun saveDraftLeave(
-        @Field("leave_type_id") leaveTypeId: Int,
-        @Field("start_date") startDate: String,
-        @Field("end_date") endDate: String,
-        @Field("leave_reason") leaveReason: String?,
-        @Field("is_half_day_start") isHalfDayStart: Boolean = false,
-        @Field("is_half_day_end") isHalfDayEnd: Boolean = false,
-        @Field("half_day_type") halfDayType: String? = null,
-        @Field("alternate_contact") alternateContact: String? = null,
-        @Field("emergency_contact") emergencyContact: String? = null,
-        @Field("task_depended_on_you") taskDependedOnYou: Boolean = false,
-        @Field("dependency_handled_by") dependencyHandledBy: String? = null,
-        @Field("handover_notes") handoverNotes: String? = null
-    ): Response<SaveDraftLeaveResponse>
-
-    /**
-     * Submit a draft leave application for approval
-     */
-    @POST("submit-draft/{application_id}")
-    suspend fun submitDraftLeave(
-        @Path("application_id") applicationId: Int
-    ): Response<SubmitDraftResponse>
-
     // ========================================
     // TIMESHEET ENDPOINTS
     // ========================================
@@ -408,40 +379,49 @@ interface ApiService {
     // CORRECTION REQUEST ENDPOINTS
     // ========================================
 
-    @GET("timesheet/correction-request/options")
+    @GET("correction-options-types")
     suspend fun getCorrectionRequestOptions(): Response<CorrectionRequestOptionsResponse>
 
     @Multipart
-    @POST("timesheet/correction-request/submit")
+    @POST("apply-correction")
     suspend fun submitCorrectionRequest(
         @Part("request_type") requestType: RequestBody,
         @Part("attendance_date") attendanceDate: RequestBody,
         @Part("reason") reason: RequestBody,
         @Part("attendance_record_id") attendanceRecordId: RequestBody? = null,
-        @Part("attendance_session_id") attendanceSessionId: RequestBody? = null,
         @Part("leave_type_id") leaveTypeId: RequestBody? = null,
         @Part("requested_status") requestedStatus: RequestBody? = null,
         @Part("requested_check_in") requestedCheckIn: RequestBody? = null,
         @Part("requested_check_out") requestedCheckOut: RequestBody? = null,
         @Part("priority") priority: RequestBody? = null,
-        @Part attachment: MultipartBody.Part? = null
+        @Part supporting_document: MultipartBody.Part? = null
     ): Response<SubmitCorrectionRequestResponse>
 
-    @PATCH("timesheet/correction-request/{request_id}/withdraw")
-    suspend fun withdrawCorrectionRequest(
+    @GET("correction-requests")
+    suspend fun getCorrectionRequests(
+        @Query("status") status: String? = null,
+        @Query("start_date") startDate: String? = null,
+        @Query("end_date") endDate: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 10
+    ): Response<CorrectionRequestListResponse>
+
+    @GET("correction-requests/{request_id}")
+    suspend fun getCorrectionRequestDetail(
         @Path("request_id") requestId: Int
+    ): Response<CorrectionRequestDetailResponse>
+
+    @FormUrlEncoded
+    @POST("withdraw-correction/{request_id}")
+    suspend fun withdrawCorrectionRequest(
+        @Path("request_id") requestId: Int,
+        @Field("withdrawal_reason") withdrawalReason: String
     ): Response<WithdrawCorrectionRequestResponse>
 
     @Streaming
-    @GET("timesheet/correction-request/attachment/{request_id}")
+    @GET("correction-requests/{request_id}/attachment")
     suspend fun downloadCorrectionAttachment(
         @Path("request_id") requestId: Int
-    ): Response<ResponseBody>
-
-    @Streaming
-    @GET("timesheet/correction-request/settled-attachment/{settled_id}")
-    suspend fun downloadSettledCorrectionAttachment(
-        @Path("settled_id") settledId: Int
     ): Response<ResponseBody>
 
     // ========================================
@@ -490,6 +470,19 @@ interface ApiService {
         @Query("notification_ids") notificationIds: List<Int>,
         @Query("token") token: String
     ): Response<NotificationActionResponse>
+
+    // ========================================
+    // LOCATION REVERIFY ENDPOINT
+    // ========================================
+
+    @FormUrlEncoded
+    @POST("check-in-location-reverify")
+    suspend fun checkInLocationReverify(
+        @Field("t_token") tToken: String,
+        @Field("latitude") latitude: Double,
+        @Field("longitude") longitude: Double,
+        @Query("token") token: String
+    ): Response<LocationReverifyResponse>
 
     // ========================================
     // LOGOUT ENDPOINT

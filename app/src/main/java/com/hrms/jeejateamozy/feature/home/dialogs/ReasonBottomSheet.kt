@@ -9,11 +9,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LocationOff
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,7 +35,10 @@ fun ReasonBottomSheet(
     lateOrEarlyReasonRequired: Boolean,
     outOfRangeReasonRequired: Boolean,
     onDismiss: () -> Unit,
-    onSubmit: (lateOrEarlyReason: String?, outOfRangeReason: String?) -> Unit
+    onSubmit: (lateOrEarlyReason: String?, outOfRangeReason: String?) -> Unit,
+    onLocationReverify: (() -> Unit)? = null,
+    isReverifying: Boolean = false,
+    reverifyError: String? = null
 ) {
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
@@ -92,7 +99,113 @@ fun ReasonBottomSheet(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
+
+            // Status chips row
+            if (isLateOrEarly || isOutOfRange) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (isLateOrEarly) {
+                        SuggestionChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    text = if (isCheckIn) "Late" else "Early Leave",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = Color(0xFFF59E0B)
+                                )
+                            },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = Color(0xFFFEF3C7),
+                                labelColor = Color(0xFF92400E)
+                            ),
+                            border = SuggestionChipDefaults.suggestionChipBorder(
+                                enabled = true,
+                                borderColor = Color(0xFFFCD34D)
+                            )
+                        )
+                    }
+                    if (isOutOfRange) {
+                        SuggestionChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    text = "Out of Range",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOff,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = Color(0xFFEF4444)
+                                )
+                            },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = Color(0xFFFEE2E2),
+                                labelColor = Color(0xFF991B1B)
+                            ),
+                            border = SuggestionChipDefaults.suggestionChipBorder(
+                                enabled = true,
+                                borderColor = Color(0xFFFCA5A5)
+                            )
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+            }
+
+            // Re-verify Location button (only when out of range)
+            if (isOutOfRange && onLocationReverify != null) {
+                OutlinedButton(
+                    onClick = onLocationReverify,
+                    enabled = !isReverifying,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                ) {
+                    if (isReverifying) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Verifying Location...")
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.MyLocation,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Re-verify Location")
+                    }
+                }
+
+                if (reverifyError != null) {
+                    Text(
+                        text = reverifyError,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+            }
 
             // Reason input field (if required)
             if (reasonRequired) {

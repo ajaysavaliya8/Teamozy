@@ -3,13 +3,16 @@ package com.hrms.jeejateamozy.feature.home.presentation.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -19,8 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Quick Access Section Component
- * Displays 3x1 horizontal grid with professional, clean design
+ * Redesigned Quick Access Section
+ * Clean horizontal scrollable cards with icons
  */
 @Composable
 fun QuickAccessSection(
@@ -29,141 +32,117 @@ fun QuickAccessSection(
     onWorkReportClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val quickAccessItems = listOf(
+        QuickAccessItem(
+            icon = Icons.Outlined.BeachAccess,
+            title = "Leaves",
+            color = Color(0xFFEF5350)
+        ) to onApplyLeavesClick,
+        QuickAccessItem(
+            icon = Icons.Outlined.Campaign,
+            title = "Circulars",
+            color = Color(0xFF26A69A)
+        ) to onCircularClick,
+        QuickAccessItem(
+            icon = Icons.AutoMirrored.Outlined.Assignment,
+            title = "Reports",
+            color = Color(0xFFFF7043)
+        ) to onWorkReportClick
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Quick Access",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.width(8.dp))
-            Icon(
-                Icons.Outlined.TouchApp,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-
-        Spacer(Modifier.height(4.dp))
-
+        // Section Header
         Text(
-            text = "All Your Work Related Tools.",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "Quick Access",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // 3x1 Horizontal Grid with Professional Clean Cards
+        // Centered row of quick access cards
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            ProfessionalCleanCard(
-                icon = Icons.Outlined.Description,
-                title = "Circular",
-                primaryColor = Color(0xFF1976D2),
-                backgroundColor = Color(0xFFE3F2FD),
-                onClick = onCircularClick,
-                modifier = Modifier.weight(1f)
-            )
-
-            ProfessionalCleanCard(
-                icon = Icons.Outlined.EventBusy,
-                title = "Apply Leaves",
-                primaryColor = Color(0xFFE65100),
-                backgroundColor = Color(0xFFFFF3E0),
-                onClick = onApplyLeavesClick,
-                modifier = Modifier.weight(1f)
-            )
-
-            ProfessionalCleanCard(
-                icon = Icons.Outlined.Assignment,
-                title = "Work Report",
-                primaryColor = Color(0xFF6A1B9A),
-                backgroundColor = Color(0xFFF3E5F5),
-                onClick = onWorkReportClick,
-                modifier = Modifier.weight(1f)
-            )
+            quickAccessItems.forEach { (item, onClick) ->
+                QuickAccessCard(
+                    icon = item.icon,
+                    title = item.title,
+                    iconColor = item.color,
+                    onClick = onClick
+                )
+            }
         }
     }
 }
 
+private data class QuickAccessItem(
+    val icon: ImageVector,
+    val title: String,
+    val color: Color
+)
+
 /**
- * Professional Clean Card Component
- * Simple, elegant design suitable for corporate HRMS applications
+ * Individual Quick Access Card
  */
 @Composable
-private fun ProfessionalCleanCard(
+private fun QuickAccessCard(
     icon: ImageVector,
     title: String,
-    primaryColor: Color,
-    backgroundColor: Color,
+    iconColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier
-            .height(110.dp)  // ✅ Increased from 100dp to 110dp
+            .width(85.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = backgroundColor
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 2.dp,
-            pressedElevation = 6.dp
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),  // ✅ Reduced from 16dp to 12dp for more space
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Icon with subtle background
-            Surface(
-                modifier = Modifier.size(42.dp),  // ✅ Slightly reduced from 44dp to 42dp
-                shape = RoundedCornerShape(12.dp),
-                color = primaryColor.copy(alpha = 0.1f)
+            // Icon with colored background
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(iconColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = primaryColor,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(24.dp)
+                )
             }
 
-            Spacer(Modifier.height(6.dp))  // ✅ Reduced from 8dp to 6dp
+            Spacer(Modifier.height(8.dp))
 
             Text(
                 text = title,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = primaryColor,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
-                lineHeight = 14.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Visible,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 2.dp)
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

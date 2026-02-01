@@ -7,7 +7,9 @@ import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingWorker
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingAlarmReceiver
+import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
 import com.hrms.jeejateamozy.feature.notification.utils.NotificationHelper
+import org.json.JSONObject
 
 /**
  * Firebase Cloud Messaging Service
@@ -76,12 +78,26 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         data["date"]?.let { extras["date"] = it }
         data["notification_uid"]?.let { extras["notification_uid"] = it }
 
+        // Parse nested "data" JSON for action and screen
+        var action: String? = null
+        val nestedData = data["data"]
+        if (!nestedData.isNullOrBlank()) {
+            try {
+                val json = JSONObject(nestedData)
+                action = json.optString("action", "").ifEmpty { null }
+                val screen = json.optString("screen", "").ifEmpty { null }
+                screen?.let { extras["screen"] = it }
+            } catch (e: Exception) {
+                Log.e(TAG, "⚠️ Failed to parse nested data JSON", e)
+            }
+        }
+
         // Generate unique notification ID
         val notificationId = data["circular_id"]?.toIntOrNull()
             ?: data["leave_id"]?.toIntOrNull()
             ?: System.currentTimeMillis().toInt()
 
-        Log.d(TAG, "📬 Showing notification - Type: $type, Title: $title")
+        Log.d(TAG, "📬 Showing notification - Type: $type, Title: $title, Action: $action")
 
         NotificationHelper.showNotification(
             context = applicationContext,
@@ -92,6 +108,25 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
             priority = priority,
             extras = extras
         )
+
+        // Handle location tracking actions
+        when (action) {
+            "start_location_tracking" -> {
+                Log.d(TAG, "🚀 Bulk check-in: starting location tracking")
+                startTracking()
+                LocationTrackingService.startTracking(applicationContext)
+                NotificationEventBus.notifyAttendanceRefresh()
+            }
+            "stop_location_tracking" -> {
+                Log.d(TAG, "⏹️ Bulk checkout: stopping location tracking")
+                stopTracking()
+                LocationTrackingService.stopTracking(applicationContext)
+                NotificationEventBus.notifyAttendanceRefresh()
+            }
+        }
+
+        // Notify the notification screen and home screen to refresh
+        NotificationEventBus.notifyNewNotification()
     }
 
     // ============================================

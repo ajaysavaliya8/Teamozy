@@ -16,17 +16,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hrms.jeejateamozy.core.network.*
 
-/**
- * Submit Correction Request Bottom Sheet
- * Comprehensive form for submitting correction requests
- */
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubmitCorrectionRequestBottomSheet(
     date: String,
     attendanceRecordId: Int?,
-    availableActions: List<String>,
     options: CorrectionRequestOptionsData,
     onDismiss: () -> Unit,
     onSubmit: (
@@ -46,13 +40,12 @@ fun SubmitCorrectionRequestBottomSheet(
     var requestedCheckIn by remember { mutableStateOf("") }
     var requestedCheckOut by remember { mutableStateOf("") }
     var leaveTypeId by remember { mutableStateOf<Int?>(null) }
-    var priority by remember { mutableStateOf("NORMAL") }
+    var priority by remember { mutableStateOf("normal") }
     var attachmentUri by remember { mutableStateOf<Uri?>(null) }
     var attachmentFileName by remember { mutableStateOf<String?>(null) }
 
     var showReasonError by remember { mutableStateOf(false) }
 
-    // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -75,7 +68,6 @@ fun SubmitCorrectionRequestBottomSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header
             Text(
                 text = "Submit Correction Request",
                 style = MaterialTheme.typography.headlineSmall,
@@ -112,32 +104,30 @@ fun SubmitCorrectionRequestBottomSheet(
                     expanded = expandedRequestType,
                     onDismissRequest = { expandedRequestType = false }
                 ) {
-                    options.requestTypes
-                        .filter { availableActions.isEmpty() || availableActions.contains(it.value) }
-                        .forEach { option ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(option.label, fontWeight = FontWeight.Bold)
-                                        Text(
-                                            option.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    requestType = option.value
-                                    expandedRequestType = false
+                    options.requestTypes.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(option.label, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        option.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            )
-                        }
+                            },
+                            onClick = {
+                                requestType = option.value
+                                expandedRequestType = false
+                            }
+                        )
+                    }
                 }
             }
 
             // Conditional Fields based on Request Type
             when (requestType) {
-                "NEW_ATTENDANCE", "STATUS_CHANGE" -> {
+                "NEW_ATTENDANCE" -> {
                     // Status Dropdown
                     var expandedStatus by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(
@@ -245,7 +235,7 @@ fun SubmitCorrectionRequestBottomSheet(
                 onExpandedChange = { expandedPriority = it }
             ) {
                 OutlinedTextField(
-                    value = priority.replace("_", " "),
+                    value = options.priorityOptions.find { it.value == priority }?.label ?: priority,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Priority") },
@@ -312,7 +302,7 @@ fun SubmitCorrectionRequestBottomSheet(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Max size: 5MB",
+                        text = "Max size: 5MB (image/PDF)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

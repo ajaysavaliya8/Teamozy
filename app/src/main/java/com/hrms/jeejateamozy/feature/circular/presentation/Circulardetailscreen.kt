@@ -127,12 +127,7 @@ private fun CircularDetailContent(circular: CircularDetail) {
             }
         }
 
-        // Metadata Section
-        item {
-            MetadataSection(circular = circular)
-        }
-
-        // ✅ REMOVED: Approval Section
+        // ✅ REMOVED: Metadata Section (fields no longer in API)
         // circular.approvedBy?.let {
         //     item {
         //         ApprovalSection(circular = circular)
@@ -184,26 +179,6 @@ private fun HeaderSection(circular: CircularDetail) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Company Wide Indicator
-            if (circular.isCompanyWide) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Public,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Company Wide",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    )
-                }
-            }
         }
     }
 }
@@ -392,109 +367,6 @@ private fun AttachmentItem(attachment: String) {
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.primary
             )
-        }
-    }
-}
-
-/**
- * Metadata Section Component
- */
-@Composable
-private fun MetadataSection(circular: CircularDetail) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Outlined.Info,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Information",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Created By
-            circular.createdBy?.let {
-                MetadataRow(
-                    label = "Created By",
-                    value = it.name ?: "Unknown",
-                    subtitle = it.email
-                )
-            }
-
-            // Status
-            Spacer(modifier = Modifier.height(8.dp))
-            MetadataRow(
-                label = "Status",
-                value = circular.status
-            )
-
-            // Created At
-            circular.createdAt?.let {
-                Spacer(modifier = Modifier.height(8.dp))
-                MetadataRow(
-                    label = "Created",
-                    value = formatDetailDate(it)
-                )
-            }
-
-            // Updated At
-            circular.updatedAt?.let {
-                Spacer(modifier = Modifier.height(8.dp))
-                MetadataRow(
-                    label = "Updated",
-                    value = formatDetailDate(it)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetadataRow(
-    label: String,
-    value: String,
-    subtitle: String? = null
-) {
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = label,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = value,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal
-                )
-                subtitle?.let {
-                    Text(
-                        text = it,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                }
-            }
         }
     }
 }

@@ -171,10 +171,16 @@ class MainActivity : ComponentActivity() {
 
                 Log.d(TAG, "📋 Notification: screen=$screen, type=$notificationType, hasData=$hasNotificationData")
 
-                // Determine deep link target - open notification list for notification clicks
+                // Determine deep link target based on screen value
                 if (hasNotificationData) {
-                    pendingDeepLink = DeepLink.NotificationList
-                    Log.d(TAG, "✅ Deep link set: NotificationList")
+                    val extras = mapOf(
+                        "circular_id" to it.getStringExtra("circular_id"),
+                        "leave_id" to it.getStringExtra("leave_id"),
+                        "date" to it.getStringExtra("date")
+                    )
+                    val deepLink = DeepLink.fromFcmData(screen, extras) ?: DeepLink.NotificationList
+                    pendingDeepLink = deepLink
+                    Log.d(TAG, "✅ Deep link set: $deepLink")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error handling notification intent", e)

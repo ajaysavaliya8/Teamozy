@@ -3,6 +3,7 @@ package com.hrms.jeejateamozy.feature.notification.presentation
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hrms.jeejateamozy.core.fcm.NotificationEventBus
 import com.hrms.jeejateamozy.core.network.ServerNotification
 import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository
 import com.hrms.jeejateamozy.feature.notification.data.NotificationResult
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -57,6 +59,20 @@ class NotificationViewModel(
 
     init {
         loadNotifications()
+        observeNewNotifications()
+    }
+
+    /**
+     * Listen for new FCM notifications and auto-refresh the list
+     */
+    private fun observeNewNotifications() {
+        viewModelScope.launch {
+            NotificationEventBus.newNotificationEvent.collect {
+                // Small delay to allow the server to store the notification
+                delay(1500)
+                loadNotifications()
+            }
+        }
     }
 
     /**

@@ -16,22 +16,32 @@ import okhttp3.ResponseBody
 import java.io.File
 import java.io.FileOutputStream
 
-/**
- * Sealed classes for correction request outcomes
- */
 sealed class CorrectionRequestOptionsOutcome {
     data class Success(val options: CorrectionRequestOptionsData) : CorrectionRequestOptionsOutcome()
     data class Error(val message: String) : CorrectionRequestOptionsOutcome()
 }
 
 sealed class SubmitCorrectionRequestOutcome {
-    data class Success(val data: SubmittedCorrectionRequestDataDto) : SubmitCorrectionRequestOutcome()
+    data class Success(val message: String) : SubmitCorrectionRequestOutcome()
     data class Error(val message: String) : SubmitCorrectionRequestOutcome()
 }
 
 sealed class WithdrawCorrectionRequestOutcome {
-    data class Success(val data: WithdrawnCorrectionRequestDataDto) : WithdrawCorrectionRequestOutcome()
+    data class Success(val message: String) : WithdrawCorrectionRequestOutcome()
     data class Error(val message: String) : WithdrawCorrectionRequestOutcome()
+}
+
+sealed class CorrectionRequestListOutcome {
+    data class Success(
+        val requests: List<CorrectionRequestListItem>,
+        val pagination: PaginationInfo
+    ) : CorrectionRequestListOutcome()
+    data class Error(val message: String) : CorrectionRequestListOutcome()
+}
+
+sealed class CorrectionRequestDetailOutcome {
+    data class Success(val detail: CorrectionRequestDetail) : CorrectionRequestDetailOutcome()
+    data class Error(val message: String) : CorrectionRequestDetailOutcome()
 }
 
 sealed class DownloadAttachmentOutcome {
@@ -39,32 +49,19 @@ sealed class DownloadAttachmentOutcome {
     data class Error(val message: String) : DownloadAttachmentOutcome()
 }
 
-/**
- * Repository for Correction Request operations
- * ✅ UPDATED: Now using NetworkErrorHandler
- */
 class CorrectionRequestRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
     private val TAG = "CorrectionRequestRepo"
 
-    /**
-     * Get form options for correction request
-     */
     suspend fun getCorrectionRequestOptions(): CorrectionRequestOptionsOutcome =
         withContext(Dispatchers.IO) {
             return@withContext try {
-                Log.d(TAG, "Fetching correction request options")
-
                 val response = api.getCorrectionRequestOptions()
-
-                Log.d(TAG, "Options response code: ${response.code()}")
-
                 when {
                     response.isSuccessful && response.code() == 200 -> {
                         val responseBody = response.body()
                         if (responseBody?.status == "success") {
-                            Log.d(TAG, "Successfully fetched options")
                             CorrectionRequestOptionsOutcome.Success(
                                 options = responseBody.data.toDomain()
                             )
@@ -72,12 +69,10 @@ class CorrectionRequestRepository(private val context: Context) {
                             CorrectionRequestOptionsOutcome.Error("Failed to fetch options")
                         }
                     }
-
                     response.code() == 401 -> {
                         AppStateManager.emitUnauthorized()
                         CorrectionRequestOptionsOutcome.Error("Unauthorized. Please login again.")
                     }
-
                     else -> {
                         val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch options")
                         CorrectionRequestOptionsOutcome.Error(errorMsg)
@@ -89,37 +84,25 @@ class CorrectionRequestRepository(private val context: Context) {
             }
         }
 
-    /**
-     * Submit correction request
-     */
     suspend fun submitCorrectionRequest(
         requestType: String,
         attendanceDate: String,
         reason: String,
         attendanceRecordId: Int? = null,
-        attendanceSessionId: Int? = null,
         leaveTypeId: Int? = null,
         requestedStatus: String? = null,
         requestedCheckIn: String? = null,
         requestedCheckOut: String? = null,
-        priority: String = "NORMAL",
+        priority: String = "normal",
         attachmentUri: Uri? = null
     ): SubmitCorrectionRequestOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d(TAG, "Submitting correction request")
-            Log.d(TAG, "  request_type: $requestType")
-            Log.d(TAG, "  attendance_date: $attendanceDate")
-            Log.d(TAG, "  reason: ${reason.take(50)}")
-
-            // Prepare multipart request bodies
             val requestTypeBody = requestType.toRequestBody("text/plain".toMediaTypeOrNull())
             val attendanceDateBody = attendanceDate.toRequestBody("text/plain".toMediaTypeOrNull())
             val reasonBody = reason.toRequestBody("text/plain".toMediaTypeOrNull())
             val priorityBody = priority.toRequestBody("text/plain".toMediaTypeOrNull())
 
             val attendanceRecordIdBody = attendanceRecordId?.toString()
-                ?.toRequestBody("text/plain".toMediaTypeOrNull())
-            val attendanceSessionIdBody = attendanceSessionId?.toString()
                 ?.toRequestBody("text/plain".toMediaTypeOrNull())
             val leaveTypeIdBody = leaveTypeId?.toString()
                 ?.toRequestBody("text/plain".toMediaTypeOrNull())
@@ -130,7 +113,6 @@ class CorrectionRequestRepository(private val context: Context) {
             val requestedCheckOutBody = requestedCheckOut
                 ?.toRequestBody("text/plain".toMediaTypeOrNull())
 
-            // Prepare attachment if provided
             var attachmentPart: MultipartBody.Part? = null
             attachmentUri?.let { uri ->
                 try {
@@ -140,7 +122,6 @@ class CorrectionRequestRepository(private val context: Context) {
                     inputStream?.close()
 
                     fileBytes?.let { bytes ->
-                        // Validate file size (max 5MB)
                         val fileSizeMB = bytes.size / (1024.0 * 1024.0)
                         if (fileSizeMB > 5.0) {
                             return@withContext SubmitCorrectionRequestOutcome.Error(
@@ -156,12 +137,10 @@ class CorrectionRequestRepository(private val context: Context) {
 
                         val requestBody = tempFile.asRequestBody(mimeType.toMediaTypeOrNull())
                         attachmentPart = MultipartBody.Part.createFormData(
-                            "attachment",
+                            "supporting_document",
                             fileName,
                             requestBody
                         )
-
-                        Log.d(TAG, "Attachment prepared: $fileName (${fileSizeMB}MB)")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error preparing attachment", e)
@@ -176,40 +155,31 @@ class CorrectionRequestRepository(private val context: Context) {
                 attendanceDate = attendanceDateBody,
                 reason = reasonBody,
                 attendanceRecordId = attendanceRecordIdBody,
-                attendanceSessionId = attendanceSessionIdBody,
                 leaveTypeId = leaveTypeIdBody,
                 requestedStatus = requestedStatusBody,
                 requestedCheckIn = requestedCheckInBody,
                 requestedCheckOut = requestedCheckOutBody,
                 priority = priorityBody,
-                attachment = attachmentPart
+                supporting_document = attachmentPart
             )
 
-            Log.d(TAG, "Submit response code: ${response.code()}")
-
             when {
-                response.isSuccessful && response.code() == 200 -> {
+                response.isSuccessful && (response.code() == 200 || response.code() == 201) -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success" && responseBody.data != null) {
-                        Log.d(TAG, "Successfully submitted correction request")
-                        SubmitCorrectionRequestOutcome.Success(data = responseBody.data)
+                    if (responseBody?.status == "success") {
+                        SubmitCorrectionRequestOutcome.Success(
+                            message = responseBody.message
+                        )
                     } else {
                         SubmitCorrectionRequestOutcome.Error(
                             responseBody?.message ?: "Failed to submit correction request"
                         )
                     }
                 }
-
                 response.code() == 401 -> {
                     AppStateManager.emitUnauthorized()
                     SubmitCorrectionRequestOutcome.Error("Unauthorized. Please login again.")
                 }
-
-                response.code() == 400 -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid request data")
-                    SubmitCorrectionRequestOutcome.Error(errorMsg)
-                }
-
                 else -> {
                     val errorMsg = NetworkErrorHandler.extract(response, "Failed to submit correction request")
                     SubmitCorrectionRequestOutcome.Error(errorMsg)
@@ -221,45 +191,33 @@ class CorrectionRequestRepository(private val context: Context) {
         }
     }
 
-    /**
-     * Withdraw correction request
-     */
-    suspend fun withdrawCorrectionRequest(requestId: Int): WithdrawCorrectionRequestOutcome =
+    suspend fun withdrawCorrectionRequest(
+        requestId: Int,
+        withdrawalReason: String
+    ): WithdrawCorrectionRequestOutcome =
         withContext(Dispatchers.IO) {
             return@withContext try {
-                Log.d(TAG, "Withdrawing correction request: $requestId")
-
-                val response = api.withdrawCorrectionRequest(requestId = requestId)
-
-                Log.d(TAG, "Withdraw response code: ${response.code()}")
-
+                val response = api.withdrawCorrectionRequest(
+                    requestId = requestId,
+                    withdrawalReason = withdrawalReason
+                )
                 when {
                     response.isSuccessful && response.code() == 200 -> {
                         val responseBody = response.body()
-                        if (responseBody?.status == "success" && responseBody.data != null) {
-                            Log.d(TAG, "Successfully withdrawn correction request")
-                            WithdrawCorrectionRequestOutcome.Success(data = responseBody.data)
+                        if (responseBody?.status == "success") {
+                            WithdrawCorrectionRequestOutcome.Success(
+                                message = responseBody.message
+                            )
                         } else {
                             WithdrawCorrectionRequestOutcome.Error(
                                 responseBody?.message ?: "Failed to withdraw correction request"
                             )
                         }
                     }
-
                     response.code() == 401 -> {
                         AppStateManager.emitUnauthorized()
                         WithdrawCorrectionRequestOutcome.Error("Unauthorized. Please login again.")
                     }
-
-                    response.code() == 404 -> {
-                        WithdrawCorrectionRequestOutcome.Error("Correction request not found")
-                    }
-
-                    response.code() == 400 -> {
-                        val errorMsg = NetworkErrorHandler.extract(response, "Cannot withdraw this request")
-                        WithdrawCorrectionRequestOutcome.Error(errorMsg)
-                    }
-
                     else -> {
                         val errorMsg = NetworkErrorHandler.extract(response, "Failed to withdraw correction request")
                         WithdrawCorrectionRequestOutcome.Error(errorMsg)
@@ -271,27 +229,89 @@ class CorrectionRequestRepository(private val context: Context) {
             }
         }
 
-    /**
-     * Download active correction request attachment
-     */
+    suspend fun getCorrectionRequests(
+        status: String? = null,
+        startDate: String? = null,
+        endDate: String? = null,
+        page: Int = 1,
+        pageSize: Int = 10
+    ): CorrectionRequestListOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val response = api.getCorrectionRequests(
+                status = status,
+                startDate = startDate,
+                endDate = endDate,
+                page = page,
+                pageSize = pageSize
+            )
+            when {
+                response.isSuccessful && response.code() == 200 -> {
+                    val responseBody = response.body()
+                    if (responseBody?.status == "success") {
+                        CorrectionRequestListOutcome.Success(
+                            requests = responseBody.data.requests.map { it.toDomain() },
+                            pagination = responseBody.data.pagination.toDomain()
+                        )
+                    } else {
+                        CorrectionRequestListOutcome.Error("Failed to fetch correction requests")
+                    }
+                }
+                response.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    CorrectionRequestListOutcome.Error("Unauthorized. Please login again.")
+                }
+                else -> {
+                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch correction requests")
+                    CorrectionRequestListOutcome.Error(errorMsg)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching correction requests", e)
+            CorrectionRequestListOutcome.Error(e.message ?: "Network error occurred")
+        }
+    }
+
+    suspend fun getCorrectionRequestDetail(requestId: Int): CorrectionRequestDetailOutcome =
+        withContext(Dispatchers.IO) {
+            return@withContext try {
+                val response = api.getCorrectionRequestDetail(requestId = requestId)
+                when {
+                    response.isSuccessful && response.code() == 200 -> {
+                        val responseBody = response.body()
+                        if (responseBody?.status == "success") {
+                            CorrectionRequestDetailOutcome.Success(
+                                detail = responseBody.data.toDomain()
+                            )
+                        } else {
+                            CorrectionRequestDetailOutcome.Error("Failed to fetch correction request detail")
+                        }
+                    }
+                    response.code() == 401 -> {
+                        AppStateManager.emitUnauthorized()
+                        CorrectionRequestDetailOutcome.Error("Unauthorized. Please login again.")
+                    }
+                    else -> {
+                        val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch correction request detail")
+                        CorrectionRequestDetailOutcome.Error(errorMsg)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching correction request detail", e)
+                CorrectionRequestDetailOutcome.Error(e.message ?: "Network error occurred")
+            }
+        }
+
     suspend fun downloadCorrectionAttachment(requestId: Int): DownloadAttachmentOutcome =
         withContext(Dispatchers.IO) {
             return@withContext try {
-                Log.d(TAG, "Downloading attachment for request: $requestId")
-
                 val response = api.downloadCorrectionAttachment(requestId = requestId)
-
-                Log.d(TAG, "Download response code: ${response.code()}")
-
                 when {
                     response.isSuccessful && response.code() == 200 -> {
                         val responseBody = response.body()
                         if (responseBody != null) {
                             val fileName = extractFileName(response) ?: "attachment_$requestId"
                             val file = saveAttachment(responseBody, fileName)
-
                             if (file != null) {
-                                Log.d(TAG, "Successfully downloaded attachment: ${file.name}")
                                 DownloadAttachmentOutcome.Success(file = file)
                             } else {
                                 DownloadAttachmentOutcome.Error("Failed to save attachment")
@@ -300,16 +320,13 @@ class CorrectionRequestRepository(private val context: Context) {
                             DownloadAttachmentOutcome.Error("Empty response body")
                         }
                     }
-
                     response.code() == 401 -> {
                         AppStateManager.emitUnauthorized()
                         DownloadAttachmentOutcome.Error("Unauthorized. Please login again.")
                     }
-
                     response.code() == 404 -> {
                         DownloadAttachmentOutcome.Error("Attachment not found")
                     }
-
                     else -> {
                         DownloadAttachmentOutcome.Error("Failed to download attachment")
                     }
@@ -320,73 +337,14 @@ class CorrectionRequestRepository(private val context: Context) {
             }
         }
 
-    /**
-     * Download settled correction request attachment
-     */
-    suspend fun downloadSettledCorrectionAttachment(settledId: Int): DownloadAttachmentOutcome =
-        withContext(Dispatchers.IO) {
-            return@withContext try {
-                Log.d(TAG, "Downloading settled attachment: $settledId")
-
-                val response = api.downloadSettledCorrectionAttachment(settledId = settledId)
-
-                Log.d(TAG, "Download response code: ${response.code()}")
-
-                when {
-                    response.isSuccessful && response.code() == 200 -> {
-                        val responseBody = response.body()
-                        if (responseBody != null) {
-                            val fileName = extractFileName(response) ?: "settled_attachment_$settledId"
-                            val file = saveAttachment(responseBody, fileName)
-
-                            if (file != null) {
-                                Log.d(TAG, "Successfully downloaded settled attachment: ${file.name}")
-                                DownloadAttachmentOutcome.Success(file = file)
-                            } else {
-                                DownloadAttachmentOutcome.Error("Failed to save attachment")
-                            }
-                        } else {
-                            DownloadAttachmentOutcome.Error("Empty response body")
-                        }
-                    }
-
-                    response.code() == 401 -> {
-                        AppStateManager.emitUnauthorized()
-                        DownloadAttachmentOutcome.Error("Unauthorized. Please login again.")
-                    }
-
-                    response.code() == 404 -> {
-                        DownloadAttachmentOutcome.Error("Attachment not found")
-                    }
-
-                    else -> {
-                        DownloadAttachmentOutcome.Error("Failed to download attachment")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error downloading settled attachment", e)
-                DownloadAttachmentOutcome.Error(e.message ?: "Network error occurred")
-            }
-        }
-
-    // ==========================================
-    // HELPER METHODS
-    // ==========================================
-
     private fun getFileName(uri: Uri): String? {
         return try {
             val cursor = context.contentResolver.query(uri, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex != -1) {
-                        it.getString(nameIndex)
-                    } else {
-                        null
-                    }
-                } else {
-                    null
-                }
+                    if (nameIndex != -1) it.getString(nameIndex) else null
+                } else null
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error getting file name", e)
@@ -398,31 +356,20 @@ class CorrectionRequestRepository(private val context: Context) {
         val contentDisposition = response.headers()["Content-Disposition"]
         return contentDisposition?.let {
             val startIndex = it.indexOf("filename=")
-            if (startIndex != -1) {
-                it.substring(startIndex + 9).replace("\"", "")
-            } else {
-                null
-            }
+            if (startIndex != -1) it.substring(startIndex + 9).replace("\"", "") else null
         }
     }
 
     private fun saveAttachment(responseBody: ResponseBody, fileName: String): File? {
         return try {
             val downloadDir = File(context.getExternalFilesDir(null), "Downloads")
-            if (!downloadDir.exists()) {
-                downloadDir.mkdirs()
-            }
-
+            if (!downloadDir.exists()) downloadDir.mkdirs()
             val file = File(downloadDir, fileName)
-            val inputStream = responseBody.byteStream()
-            val outputStream = FileOutputStream(file)
-
-            inputStream.use { input ->
-                outputStream.use { output ->
+            responseBody.byteStream().use { input ->
+                FileOutputStream(file).use { output ->
                     input.copyTo(output)
                 }
             }
-
             file
         } catch (e: Exception) {
             Log.e(TAG, "Error saving attachment", e)

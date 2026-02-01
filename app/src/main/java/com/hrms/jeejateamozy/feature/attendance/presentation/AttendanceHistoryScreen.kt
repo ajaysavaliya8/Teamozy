@@ -25,42 +25,35 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.core.network.CalendarDay
 import com.hrms.jeejateamozy.core.network.MonthSummary
-import com.hrms.jeejateamozy.feature.attendance.presentation.components.CorrectionRequestMiniBadge
-import com.hrms.jeejateamozy.feature.attendance.presentation.components.CorrectionRequestSummaryBadge
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
-
-/**
- * ✅ UPDATED: AttendanceHistoryScreen with Correction Request Support
- *
- * Changes:
- * - Added correction request mini badges on calendar days
- * - Added correction request summary card below month summary
- * - Import correction request components
- * - ✅ FIX: Added BackHandler for gesture navigation
- */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttendanceHistoryScreen(
     viewModel: AttendanceHistoryViewModel = koinViewModel(),
     onNavigateBack: () -> Unit,
-    onNavigateToDayDetail: (String) -> Unit
+    onNavigateToDayDetail: (String) -> Unit,
+    paddingValues: PaddingValues = PaddingValues(0.dp)
 ) {
     val uiState by viewModel.historyUiState.collectAsState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // ✅ FIX: Handle gesture back navigation (swipe from left edge)
     BackHandler {
         onNavigateBack()
     }
 
-    // Handle events
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
                 is AttendanceHistoryEvent.ShowError -> {
+                    snackbarHostState.showSnackbar(
+                        message = event.message,
+                        duration = SnackbarDuration.Short
+                    )
+                }
+                is AttendanceHistoryEvent.ShowSuccess -> {
                     snackbarHostState.showSnackbar(
                         message = event.message,
                         duration = SnackbarDuration.Short
@@ -96,17 +89,16 @@ fun AttendanceHistoryScreen(
                 )
             )
         }
-    ) { paddingValues ->
+    ) { scaffoldPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(scaffoldPadding)
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 100.dp)
+                contentPadding = PaddingValues(bottom = paddingValues.calculateBottomPadding() + 16.dp)
             ) {
-                // Compact Month Navigation
                 item {
                     CompactMonthNavigationBar(
                         monthName = uiState.monthName,
@@ -116,7 +108,6 @@ fun AttendanceHistoryScreen(
                     )
                 }
 
-                // Calendar Grid
                 item {
                     if (uiState.calendarDays.isNotEmpty()) {
                         CalendarGrid(
@@ -130,37 +121,17 @@ fun AttendanceHistoryScreen(
                     }
                 }
 
-                // Month Summary Card
                 item {
                     uiState.summary?.let { summary ->
                         MonthSummaryCard(summary = summary)
                     }
                 }
 
-                // ✅ NEW: Correction Request Summary Card
-                item {
-                    uiState.correctionRequests?.let { correctionSummary ->
-                        if (correctionSummary.total > 0) {
-                            CorrectionRequestSummaryBadge(
-                                pending = correctionSummary.pending,
-                                approved = correctionSummary.approved,
-                                rejected = correctionSummary.rejected,
-                                infoNeeded = correctionSummary.infoNeeded,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Extra spacer at bottom
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
 
-            // Loading overlay
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
@@ -256,15 +227,11 @@ private fun MonthSummaryCard(summary: MonthSummary) {
 
             HorizontalDivider()
 
-            // Total Time
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Total Time",
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                Text(text = "Total Time", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     text = summary.totalTime,
                     style = MaterialTheme.typography.bodyLarge,
@@ -273,15 +240,11 @@ private fun MonthSummaryCard(summary: MonthSummary) {
                 )
             }
 
-            // Present Days
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Present Days",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text(text = "Present Days", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     text = "${summary.presentDays} days",
                     style = MaterialTheme.typography.bodyMedium,
@@ -289,16 +252,12 @@ private fun MonthSummaryCard(summary: MonthSummary) {
                 )
             }
 
-            // Irregular Days
             if (summary.irregularDays > 0) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Days with Issues",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text(text = "Days with Issues", style = MaterialTheme.typography.bodyMedium)
                     Text(
                         text = "${summary.irregularDays} days",
                         style = MaterialTheme.typography.bodyMedium,
@@ -321,7 +280,6 @@ private fun CalendarGrid(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        // Weekday headers
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -340,7 +298,6 @@ private fun CalendarGrid(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Calendar days grid
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -357,49 +314,47 @@ private fun CalendarGrid(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Legend
         CalendarLegend()
     }
 }
 
-/**
- * ✅ UPDATED: CalendarDayItem with Correction Request Badge Support
- */
 @Composable
 private fun CalendarDayItem(
     day: CalendarDay,
     onClick: () -> Unit
 ) {
-    // Handle empty padding days
     if (day.day == 0) {
         Box(modifier = Modifier.aspectRatio(1f))
         return
     }
 
-    // Check if day has meaningful attendance (not NO_DATA or empty)
     val hasAttendance = day.status.isNotEmpty() && day.status != "NO_DATA"
 
-    val backgroundColor = when (day.color) {
-        "red" -> Color(0xFFE57373)
-        "orange" -> Color(0xFFFFB74D)
-        "gray" -> Color(0xFFBDBDBD)
-        "transparent", "", "black" -> Color.Transparent
+    val backgroundColor = when {
+        day.status == "PRESENT" -> Color(0xFF4CAF50)
+        day.status == "ABSENT" || day.status == "LEAVE" -> Color(0xFFF44336)
+        day.status == "PENDING" -> Color(0xFFFFEB3B)
+        day.hasIrregularity -> Color(0xFFFF9800)
+        day.color == "green" -> Color(0xFF4CAF50)
+        day.color == "red" -> Color(0xFFF44336)
+        day.color == "yellow" -> Color(0xFFFFEB3B)
+        day.color == "orange" -> Color(0xFFFF9800)
         else -> Color.Transparent
     }
 
-    val borderColor = when (day.status) {
-        "PRESENT" -> Color(0xFFD32F2F)
-        "PENDING" -> Color(0xFFF57C00)
-        "ABSENT", "LEAVE" -> Color(0xFF757575)
-        "", "transparent" -> Color(0xFFE0E0E0)
+    val borderColor = when {
+        day.status == "PRESENT" -> Color(0xFF388E3C)
+        day.status == "ABSENT" || day.status == "LEAVE" -> Color(0xFFD32F2F)
+        day.status == "PENDING" -> Color(0xFFFBC02D)
+        day.hasIrregularity -> Color(0xFFE65100)
+        day.color == "green" -> Color(0xFF388E3C)
+        day.color == "red" -> Color(0xFFD32F2F)
+        day.color == "yellow" -> Color(0xFFFBC02D)
+        day.color == "orange" -> Color(0xFFE65100)
         else -> Color(0xFFE0E0E0)
     }
 
-    val textColor = if (hasAttendance) {
-        Color.White
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
+    val textColor = if (hasAttendance) Color.White else MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = Modifier
@@ -421,20 +376,13 @@ private fun CalendarDayItem(
                 color = textColor
             )
 
-            // ✅ NEW: Show correction request badge
-            day.correctionBadge?.let { badge ->
-                Spacer(modifier = Modifier.height(2.dp))
-                CorrectionRequestMiniBadge(badge = badge)
-            }
-
-            // Show irregularity indicator
-            if (day.hasIrregularity) {
+            // Show correction pending indicator
+            if (day.isCorrectionRequestPending) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Box(
                     modifier = Modifier
-                        .size(4.dp)
-                        .clip(CircleShape)
-                        .background(Color.Yellow)
+                        .size(6.dp)
+                        .background(Color(0xFF2196F3), shape = RoundedCornerShape(3.dp))
                 )
             }
         }
@@ -466,9 +414,10 @@ private fun CalendarLegend() {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                LegendItem(color = Color(0xFFE57373), label = "Present")
-                LegendItem(color = Color(0xFFFFB74D), label = "Issues")
-                LegendItem(color = Color(0xFFBDBDBD), label = "Absent/Leave")
+                LegendItem(color = Color(0xFF4CAF50), label = "Present")
+                LegendItem(color = Color(0xFFF44336), label = "Absent/Leave")
+                LegendItem(color = Color(0xFFFFEB3B), label = "Pending")
+                LegendItem(color = Color(0xFFFF9800), label = "Issues")
             }
         }
     }
@@ -486,10 +435,7 @@ private fun LegendItem(color: Color, label: String) {
                 .clip(CircleShape)
                 .background(color)
         )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall
-        )
+        Text(text = label, style = MaterialTheme.typography.labelSmall)
     }
 }
 

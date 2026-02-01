@@ -109,8 +109,7 @@ fun WorkReportHistoryTab(
                     ) { report ->
                         WorkReportCard(
                             report = report,
-                            onClick = { viewModel.onReportClicked(report) },
-                            onDownload = { viewModel.onDownloadReport(report) }
+                            onClick = { viewModel.onReportClicked(report) }
                         )
                     }
 
@@ -127,8 +126,7 @@ fun WorkReportHistoryTab(
 @Composable
 private fun WorkReportCard(
     report: WorkReport,
-    onClick: () -> Unit,
-    onDownload: () -> Unit
+    onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -214,41 +212,25 @@ private fun WorkReportCard(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
-            // Action buttons
+            // View details
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Download button
-                OutlinedButton(
-                    onClick = onDownload,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "Download",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Download")
-                }
-
-                Spacer(Modifier.width(8.dp))
-
-                // View details button
-                IconButton(onClick = onClick) {
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = "View details",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
+                Text(
+                    text = "View details",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "View details",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

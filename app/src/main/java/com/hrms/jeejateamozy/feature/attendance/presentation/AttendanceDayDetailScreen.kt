@@ -18,50 +18,45 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.hrms.jeejateamozy.core.network.DayCorrectionRequest
 import com.hrms.jeejateamozy.core.network.DayTimesheet
 import com.hrms.jeejateamozy.core.network.PunchRecord
 import com.hrms.jeejateamozy.feature.attendance.presentation.components.CorrectionRequestCard
 import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.SubmitCorrectionRequestBottomSheet
+import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.WithdrawCorrectionDialog
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
-
-/**
- * ✅ UPDATED: AttendanceDayDetailScreen with Correction Request Support
- *
- * Changes:
- * - Added correction request card display
- * - Added submit correction button
- * - Added submit correction dialog
- * - Added withdrawal and attachment download handling
- * - ✅ FIX: Added BackHandler for gesture navigation
- */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttendanceDayDetailScreen(
     date: String,
     viewModel: AttendanceHistoryViewModel = koinViewModel(),
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val uiState by viewModel.dayDetailUiState.collectAsState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // ✅ FIX: Handle gesture back navigation
     BackHandler {
         onNavigateBack()
     }
 
-    // Load day timesheet when screen opens
     LaunchedEffect(date) {
         viewModel.loadDayTimesheet(date)
     }
 
-    // Handle events
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
                 is AttendanceHistoryEvent.ShowError -> {
+                    snackbarHostState.showSnackbar(
+                        message = event.message,
+                        duration = SnackbarDuration.Short
+                    )
+                }
+                is AttendanceHistoryEvent.ShowSuccess -> {
                     snackbarHostState.showSnackbar(
                         message = event.message,
                         duration = SnackbarDuration.Short
@@ -112,25 +107,25 @@ fun AttendanceDayDetailScreen(
                 uiState.timesheet != null -> {
                     DayDetailContent(
                         timesheet = uiState.timesheet!!,
-                        onWithdrawCorrection = { requestId ->
-                            viewModel.withdrawCorrectionRequest(requestId, date)
+                        onWithdrawCorrection = {
+                            viewModel.showWithdrawDialog(true)
                         },
-                        onDownloadAttachment = { downloadUrl, isSettled, requestId ->
-                            viewModel.downloadAttachment(downloadUrl, isSettled, requestId)
+                        onDownloadAttachment = { requestId ->
+                            viewModel.downloadAttachment(requestId)
                         },
                         onSubmitCorrection = {
                             viewModel.showSubmitCorrectionDialog(true)
-                        }
+                        },
+                        bottomPadding = bottomPadding
                     )
                 }
             }
 
-            // ✅ NEW: Submit Correction Dialog
+            // Submit Correction Dialog
             if (uiState.showSubmitCorrectionDialog && uiState.correctionOptions != null) {
                 SubmitCorrectionRequestBottomSheet(
                     date = date,
                     attendanceRecordId = uiState.timesheet?.attendanceRecordId,
-                    availableActions = uiState.timesheet?.availableActions ?: emptyList(),
                     options = uiState.correctionOptions!!,
                     onDismiss = {
                         viewModel.showSubmitCorrectionDialog(false)
@@ -151,6 +146,24 @@ fun AttendanceDayDetailScreen(
                     }
                 )
             }
+
+            // Withdraw Correction Dialog
+            if (uiState.showWithdrawDialog) {
+                val correctionRequest = uiState.timesheet?.correctionRequest
+                if (correctionRequest != null) {
+                    WithdrawCorrectionDialog(
+                        onDismiss = { viewModel.showWithdrawDialog(false) },
+                        onConfirm = { reason ->
+                            viewModel.withdrawCorrectionRequest(
+                                requestId = correctionRequest.id,
+                                attendanceDate = date,
+                                withdrawalReason = reason
+                            )
+                        },
+                        isLoading = uiState.isWithdrawingCorrection
+                    )
+                }
+            }
         }
     }
 }
@@ -158,20 +171,21 @@ fun AttendanceDayDetailScreen(
 @Composable
 private fun DayDetailContent(
     timesheet: DayTimesheet,
-    onWithdrawCorrection: (Int) -> Unit,
-    onDownloadAttachment: (String, Boolean, Int) -> Unit,
-    onSubmitCorrection: () -> Unit
+    onWithdrawCorrection: () -> Unit,
+    onDownloadAttachment: (Int) -> Unit,
+    onSubmitCorrection: () -> Unit,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomPadding + 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Date Header
         item {
             DateHeaderCard(
                 dayName = timesheet.dayName,
-                formattedDate = timesheet.formattedDate ?: timesheet.date
+                formattedDate = timesheet.date
             )
         }
 
@@ -181,7 +195,7 @@ private fun DayDetailContent(
                 NoAttendanceView(
                     date = timesheet.date,
                     dayName = timesheet.dayName,
-                    message = timesheet.message ?: "No attendance record"
+                    message = "No attendance record for this day"
                 )
             }
         } else {
@@ -202,7 +216,8 @@ private fun DayDetailContent(
                     ShiftInfoCard(
                         shiftName = shift.name,
                         hours = shift.hours,
-                        timingDisplay = shift.timingDisplay
+                        startTime = shift.startTime,
+                        endTime = shift.endTime
                     )
                 }
             }
@@ -235,28 +250,20 @@ private fun DayDetailContent(
             }
         }
 
-        // ✅ NEW: Correction Request Card
-        timesheet.correctionRequest?.let { container ->
-            if (container.hasAny) {
-                item {
-                    CorrectionRequestCard(
-                        correctionRequest = container.active,
-                        settledRequest = container.settled,
-                        onWithdraw = { requestId ->
-                            onWithdrawCorrection(requestId)
-                        },
-                        onDownloadAttachment = { downloadUrl ->
-                            val requestId = container.active?.id ?: container.settled?.id ?: 0
-                            val isSettled = container.active == null
-                            onDownloadAttachment(downloadUrl, isSettled, requestId)
-                        }
-                    )
-                }
+        // Correction Request Card
+        timesheet.correctionRequest?.let { correction ->
+            item {
+                CorrectionRequestCard(
+                    correctionRequest = correction,
+                    allowWithdraw = timesheet.allowWithdraw,
+                    onWithdraw = { onWithdrawCorrection() },
+                    onDownloadAttachment = { onDownloadAttachment(correction.id) }
+                )
             }
         }
 
-        // ✅ NEW: Submit Correction Button
-        if (timesheet.canSubmitCorrection == true) {
+        // Submit Correction Button - show when allowed
+        if (timesheet.allowCorrection) {
             item {
                 Button(
                     onClick = onSubmitCorrection,
@@ -273,7 +280,6 @@ private fun DayDetailContent(
             }
         }
 
-        // Extra spacing at bottom
         item {
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -402,7 +408,7 @@ private fun StatusCard(text: String, color: String, isComplete: Boolean) {
 }
 
 @Composable
-private fun ShiftInfoCard(shiftName: String?, hours: String, timingDisplay: String?) {
+private fun ShiftInfoCard(shiftName: String?, hours: String, startTime: String, endTime: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp)
@@ -435,12 +441,8 @@ private fun ShiftInfoCard(shiftName: String?, hours: String, timingDisplay: Stri
                 InfoRow(label = "Shift", value = it)
             }
             InfoRow(label = "Hours", value = hours)
-            timingDisplay?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (startTime.isNotEmpty() && endTime.isNotEmpty()) {
+                InfoRow(label = "Timing", value = "$startTime - $endTime")
             }
         }
     }

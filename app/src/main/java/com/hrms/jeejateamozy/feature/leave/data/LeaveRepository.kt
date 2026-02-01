@@ -24,24 +24,7 @@ sealed class LeaveTypesOutcome {
 }
 
 sealed class ApplyLeaveOutcome {
-    data class Success(
-        val message: String,
-        val applicationId: Int,
-        val appliedAt: String,
-        val totalDays: Double,
-        val effectiveDays: Double,
-        val requiresApproval: Boolean,
-        // New workflow fields
-        val referenceNumber: String? = null,
-        val workflowStatus: String? = null,
-        val approvalInstanceId: Int? = null,
-        val workflowName: String? = null,
-        val currentStep: Int? = null,
-        val currentStepName: String? = null,
-        val totalSteps: Int? = null,
-        val pendingWith: List<String> = emptyList(),
-        val autoApproved: Boolean = false
-    ) : ApplyLeaveOutcome()
+    data class Success(val message: String) : ApplyLeaveOutcome()
     data class Error(val message: String) : ApplyLeaveOutcome()
 }
 
@@ -54,7 +37,7 @@ sealed class LeaveApplicationsOutcome {
 }
 
 sealed class LeaveApplicationDetailOutcome {
-    data class Success(val application: LeaveApplicationDetailDto) : LeaveApplicationDetailOutcome()
+    data class Success(val detail: LeaveApplicationDetail) : LeaveApplicationDetailOutcome()
     data class Error(val message: String) : LeaveApplicationDetailOutcome()
 }
 
@@ -76,20 +59,6 @@ sealed class CancelLeaveOutcome {
 sealed class LeaveCalendarOutcome {
     data class Success(val data: LeaveCalendarData) : LeaveCalendarOutcome()
     data class Error(val message: String) : LeaveCalendarOutcome()
-}
-
-sealed class SaveDraftOutcome {
-    data class Success(
-        val message: String,
-        val draftId: Int,
-        val totalDays: Double
-    ) : SaveDraftOutcome()
-    data class Error(val message: String) : SaveDraftOutcome()
-}
-
-sealed class SubmitDraftOutcome {
-    data class Success(val message: String) : SubmitDraftOutcome()
-    data class Error(val message: String) : SubmitDraftOutcome()
 }
 
 // =============================================================================
@@ -156,33 +125,28 @@ class LeaveRepository(private val context: Context) {
         startDate: String,
         endDate: String,
         leaveReason: String,
-        isHalfDayStart: Boolean,
-        isHalfDayEnd: Boolean,
-        halfDayType: String?,
         alternateContact: String?,
         emergencyContact: String?,
         taskDependedOnYou: Boolean,
         dependencyHandledBy: String?,
         handoverNotes: String?,
+        priority: String,
         supportingDocumentFile: File?
     ): ApplyLeaveOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d(TAG, "Applying for leave: type=$leaveTypeId, dates=$startDate to $endDate")
-            Log.d(TAG, "Half day: start=$isHalfDayStart, end=$isHalfDayEnd, type=$halfDayType")
+            Log.d(TAG, "Applying for leave: type=$leaveTypeId, dates=$startDate to $endDate, priority=$priority")
 
             // Create request bodies
             val leaveTypeIdBody = leaveTypeId.toString().toRequestBody("text/plain".toMediaTypeOrNull())
             val startDateBody = startDate.toRequestBody("text/plain".toMediaTypeOrNull())
             val endDateBody = endDate.toRequestBody("text/plain".toMediaTypeOrNull())
             val leaveReasonBody = leaveReason.toRequestBody("text/plain".toMediaTypeOrNull())
-            val isHalfDayStartBody = isHalfDayStart.toString().toRequestBody("text/plain".toMediaTypeOrNull())
-            val isHalfDayEndBody = isHalfDayEnd.toString().toRequestBody("text/plain".toMediaTypeOrNull())
-            val halfDayTypeBody = halfDayType?.toRequestBody("text/plain".toMediaTypeOrNull())
             val alternateContactBody = alternateContact?.toRequestBody("text/plain".toMediaTypeOrNull())
             val emergencyContactBody = emergencyContact?.toRequestBody("text/plain".toMediaTypeOrNull())
             val taskDependedOnYouBody = taskDependedOnYou.toString().toRequestBody("text/plain".toMediaTypeOrNull())
             val dependencyHandledByBody = dependencyHandledBy?.toRequestBody("text/plain".toMediaTypeOrNull())
             val handoverNotesBody = handoverNotes?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val priorityBody = priority.toRequestBody("text/plain".toMediaTypeOrNull())
 
             // Create multipart file if provided
             val filePart = supportingDocumentFile?.let {
@@ -195,14 +159,12 @@ class LeaveRepository(private val context: Context) {
                 startDate = startDateBody,
                 endDate = endDateBody,
                 leaveReason = leaveReasonBody,
-                isHalfDayStart = isHalfDayStartBody,
-                isHalfDayEnd = isHalfDayEndBody,
-                halfDayType = halfDayTypeBody,
                 alternateContact = alternateContactBody,
                 emergencyContact = emergencyContactBody,
                 taskDependedOnYou = taskDependedOnYouBody,
                 dependencyHandledBy = dependencyHandledByBody,
                 handoverNotes = handoverNotesBody,
+                priority = priorityBody,
                 supportingDocument = filePart
             )
 
@@ -211,28 +173,9 @@ class LeaveRepository(private val context: Context) {
             when {
                 response.isSuccessful && (response.code() == 201 || response.code() == 200) -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success" && responseBody.data != null) {
-                        Log.d(TAG, "Leave applied successfully: ID=${responseBody.data.application_id}")
-                        Log.d(TAG, "Reference: ${responseBody.data.reference_number}, Workflow: ${responseBody.data.workflow_status}")
-
-                        ApplyLeaveOutcome.Success(
-                            message = responseBody.message,
-                            applicationId = responseBody.data.application_id,
-                            appliedAt = responseBody.data.applied_at,
-                            totalDays = responseBody.data.total_days,
-                            effectiveDays = responseBody.data.effective_days,
-                            requiresApproval = responseBody.data.requires_approval,
-                            // New workflow fields
-                            referenceNumber = responseBody.data.reference_number,
-                            workflowStatus = responseBody.data.workflow_status,
-                            approvalInstanceId = responseBody.data.approval_instance_id,
-                            workflowName = responseBody.data.workflow_name,
-                            currentStep = responseBody.data.current_step,
-                            currentStepName = responseBody.data.current_step_name,
-                            totalSteps = responseBody.data.total_steps,
-                            pendingWith = responseBody.data.pending_with ?: emptyList(),
-                            autoApproved = responseBody.data.auto_approved ?: false
-                        )
+                    if (responseBody?.status == "success") {
+                        Log.d(TAG, "Leave applied successfully")
+                        ApplyLeaveOutcome.Success(message = responseBody.message)
                     } else {
                         ApplyLeaveOutcome.Error(responseBody?.message ?: "Failed to apply leave")
                     }
@@ -345,7 +288,7 @@ class LeaveRepository(private val context: Context) {
                     val responseBody = response.body()
                     if (responseBody?.status == "success") {
                         Log.d(TAG, "Successfully fetched leave application detail")
-                        LeaveApplicationDetailOutcome.Success(application = responseBody.data)
+                        LeaveApplicationDetailOutcome.Success(detail = responseBody.data.toDomain())
                     } else {
                         LeaveApplicationDetailOutcome.Error("Failed to fetch leave application detail")
                     }
@@ -569,127 +512,4 @@ class LeaveRepository(private val context: Context) {
         }
     }
 
-    // =========================================================================
-    // SAVE DRAFT LEAVE
-    // =========================================================================
-
-    suspend fun saveDraftLeave(
-        leaveTypeId: Int,
-        startDate: String,
-        endDate: String,
-        leaveReason: String?,
-        isHalfDayStart: Boolean,
-        isHalfDayEnd: Boolean,
-        halfDayType: String?,
-        alternateContact: String?,
-        emergencyContact: String?,
-        taskDependedOnYou: Boolean,
-        dependencyHandledBy: String?,
-        handoverNotes: String?
-    ): SaveDraftOutcome = withContext(Dispatchers.IO) {
-        return@withContext try {
-            Log.d(TAG, "Saving leave draft: type=$leaveTypeId, dates=$startDate to $endDate")
-
-            val response = api.saveDraftLeave(
-                leaveTypeId = leaveTypeId,
-                startDate = startDate,
-                endDate = endDate,
-                leaveReason = leaveReason,
-                isHalfDayStart = isHalfDayStart,
-                isHalfDayEnd = isHalfDayEnd,
-                halfDayType = halfDayType,
-                alternateContact = alternateContact,
-                emergencyContact = emergencyContact,
-                taskDependedOnYou = taskDependedOnYou,
-                dependencyHandledBy = dependencyHandledBy,
-                handoverNotes = handoverNotes
-            )
-
-            Log.d(TAG, "Save draft response code: ${response.code()}")
-
-            when {
-                response.isSuccessful && response.code() == 201 -> {
-                    val responseBody = response.body()
-                    if (responseBody?.status == "success" && responseBody.data != null) {
-                        Log.d(TAG, "Draft saved successfully: ID=${responseBody.data.draft_id}")
-                        SaveDraftOutcome.Success(
-                            message = responseBody.message,
-                            draftId = responseBody.data.draft_id,
-                            totalDays = responseBody.data.total_days
-                        )
-                    } else {
-                        SaveDraftOutcome.Error(responseBody?.message ?: "Failed to save draft")
-                    }
-                }
-
-                response.code() == 400 -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid draft data")
-                    SaveDraftOutcome.Error(errorMsg)
-                }
-
-                response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
-                    SaveDraftOutcome.Error("Unauthorized. Please login again.")
-                }
-
-                else -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to save draft")
-                    SaveDraftOutcome.Error(errorMsg)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving draft", e)
-            SaveDraftOutcome.Error(e.message ?: "Network error occurred")
-        }
-    }
-
-    // =========================================================================
-    // SUBMIT DRAFT LEAVE
-    // =========================================================================
-
-    suspend fun submitDraftLeave(
-        applicationId: Int
-    ): SubmitDraftOutcome = withContext(Dispatchers.IO) {
-        return@withContext try {
-            Log.d(TAG, "Submitting draft leave: ID=$applicationId")
-
-            val response = api.submitDraftLeave(applicationId = applicationId)
-
-            Log.d(TAG, "Submit draft response code: ${response.code()}")
-
-            when {
-                response.isSuccessful && response.code() == 200 -> {
-                    val responseBody = response.body()
-                    if (responseBody?.status == "success") {
-                        Log.d(TAG, "Draft submitted successfully")
-                        SubmitDraftOutcome.Success(message = responseBody.message)
-                    } else {
-                        SubmitDraftOutcome.Error(responseBody?.message ?: "Failed to submit draft")
-                    }
-                }
-
-                response.code() == 400 -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Cannot submit this draft")
-                    SubmitDraftOutcome.Error(errorMsg)
-                }
-
-                response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
-                    SubmitDraftOutcome.Error("Unauthorized. Please login again.")
-                }
-
-                response.code() == 404 -> {
-                    SubmitDraftOutcome.Error("Draft not found")
-                }
-
-                else -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to submit draft")
-                    SubmitDraftOutcome.Error(errorMsg)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error submitting draft", e)
-            SubmitDraftOutcome.Error(e.message ?: "Network error occurred")
-        }
-    }
 }

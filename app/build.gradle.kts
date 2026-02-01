@@ -16,8 +16,8 @@ android {
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.1.8"
+        versionCode = 19
+        versionName = "1.1.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -25,12 +25,17 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.getByName("debug")
+            // Include mapping file for Play Console
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
     compileOptions {

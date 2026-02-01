@@ -80,10 +80,11 @@ object NotificationHelper {
         try {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Create intent - always opens notification screen
+            // Create intent - use screen from extras if provided, otherwise open notifications
+            val screen = extras["screen"] ?: DeepLink.SCREEN_NOTIFICATIONS
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(EXTRA_SCREEN, DeepLink.SCREEN_NOTIFICATIONS)
+                putExtra(EXTRA_SCREEN, screen)
                 putExtra(EXTRA_NOTIFICATION_TYPE, type)
                 putExtra("title", title)
                 putExtra("message", message)
@@ -101,7 +102,7 @@ object NotificationHelper {
             val channelId = if (isHighPriority) CHANNEL_ID_HIGH else CHANNEL_ID_DEFAULT
 
             val notification = NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_stat_notification)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))

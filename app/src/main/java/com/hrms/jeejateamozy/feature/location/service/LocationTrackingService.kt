@@ -19,6 +19,9 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -99,6 +102,18 @@ class LocationTrackingService : Service() {
          */
         fun startTracking(context: Context, geofenceId: Int? = null) {
             Log.d(TAG, "▶️ startTracking() called - geofenceId=$geofenceId")
+
+            // Check location permissions before starting (required for Android 14+)
+            val hasLocationPermission = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasLocationPermission) {
+                Log.e(TAG, "❌ Cannot start tracking - location permission not granted")
+                return
+            }
 
             val intent = Intent(context, LocationTrackingService::class.java).apply {
                 putExtra(EXTRA_COMMAND, COMMAND_START)
@@ -348,8 +363,27 @@ class LocationTrackingService : Service() {
 
         Log.d(TAG, "▶️ Starting foreground tracking - geofenceId=$geofenceId")
 
+        // Check location permissions before starting foreground service (required for Android 14+)
+        val hasLocationPermission = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasLocationPermission) {
+            Log.e(TAG, "❌ Location permission not granted - cannot start foreground service")
+            stopSelf()
+            return
+        }
+
         // Start foreground with notification FIRST (required before any other work)
-        startForeground(NOTIFICATION_ID, createNotification())
+        try {
+            startForeground(NOTIFICATION_ID, createNotification())
+        } catch (e: SecurityException) {
+            Log.e(TAG, "❌ SecurityException starting foreground service - missing permissions", e)
+            stopSelf()
+            return
+        }
 
         // Acquire wake lock (with try-catch for safety)
         acquireWakeLock()

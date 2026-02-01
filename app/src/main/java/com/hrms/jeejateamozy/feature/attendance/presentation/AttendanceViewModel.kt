@@ -13,6 +13,7 @@ import com.hrms.jeejateamozy.feature.attendance.data.AttendanceOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
 import com.hrms.jeejateamozy.feature.attendance.data.CheckInOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.CheckOutOutcome
+import com.hrms.jeejateamozy.feature.attendance.data.LocationReverifyOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.SignatureOutcome
 import com.hrms.jeejateamozy.feature.location.model.LocationData
 import com.hrms.jeejateamozy.feature.location.data.repository.LocationRepository
@@ -92,6 +93,13 @@ class AttendanceViewModel(
             return
         }
 
+        // Don't refresh if there's an active check-in/check-out flow in progress
+        // (e.g. face verification just completed and reason dialog should be shown)
+        if (!force && (_ui.value.checkInTToken != null || _ui.value.checkOutTToken != null)) {
+            Log.d(TAG, "Active check-in/check-out flow in progress, skipping refresh")
+            return
+        }
+
         viewModelScope.launch {
             _ui.value = _ui.value.copy(isRefreshing = true)
 
@@ -105,6 +113,7 @@ class AttendanceViewModel(
                         lastCheckInTime = outcome.lastCheckInTime,
                         attendanceStatus = outcome.attendanceStatus,
                         isComplete = outcome.isComplete,
+                        checkOutTime = outcome.checkOutTime,
                         checkInTToken = null,
                         checkOutTToken = null,
                         showFaceVerification = false,
@@ -234,7 +243,8 @@ class AttendanceViewModel(
                     checkInMessage = outcome.message,
                     pendingMessage = pendingMessage,
                     showPendingMessageDialog = pendingMessage != null,
-                    showReasonDialog = (outcome.lateReasonRequired || outcome.outOfRangeReasonRequired) && pendingMessage == null
+                    showReasonDialog = (outcome.lateReasonRequired || outcome.outOfRangeReasonRequired) && pendingMessage == null,
+                    reverifyError = null
                 )
 
                 if (!outcome.lateReasonRequired && !outcome.outOfRangeReasonRequired && pendingMessage == null) {
@@ -308,7 +318,8 @@ class AttendanceViewModel(
                     checkOutWorkReportRequired = outcome.workReportRequired,
                     checkOutMessage = outcome.message,
                     showReasonDialog = outcome.earlyReasonRequired || outcome.outOfRangeReasonRequired,
-                    showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired
+                    showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired,
+                    reverifyError = null
                 )
 
                 if (!outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired && !outcome.workReportRequired) {
@@ -351,7 +362,7 @@ class AttendanceViewModel(
                 _ui.value = _ui.value.copy(showFaceVerification = true)
             }
             hasLateOrOutOfRangeReasons -> {
-                _ui.value = _ui.value.copy(showReasonDialog = true)
+                _ui.value = _ui.value.copy(showReasonDialog = true, reverifyError = null)
             }
             else -> {
                 completeCheckIn(null, null, context)
@@ -445,7 +456,7 @@ class AttendanceViewModel(
             val outOfRangeReasonRequired = _ui.value.checkInOutOfRangeReasonRequired
 
             if (lateReasonRequired || outOfRangeReasonRequired) {
-                _ui.value = _ui.value.copy(showReasonDialog = true)
+                _ui.value = _ui.value.copy(showReasonDialog = true, reverifyError = null)
             } else {
                 completeCheckIn(null, null, context)
             }
@@ -456,13 +467,68 @@ class AttendanceViewModel(
 
             when {
                 earlyReasonRequired || outOfRangeReasonRequired -> {
-                    _ui.value = _ui.value.copy(showReasonDialog = true)
+                    _ui.value = _ui.value.copy(showReasonDialog = true, reverifyError = null)
                 }
                 workReportRequired -> {
                     _ui.value = _ui.value.copy(showWorkReportDialog = true)
                 }
                 else -> {
                     completeCheckOut(null, null, null, null, context)
+                }
+            }
+        }
+    }
+
+    fun onLocationReverify(context: Context) {
+        val isCheckIn = _ui.value.checkInTToken != null
+        val tToken = if (isCheckIn) _ui.value.checkInTToken else _ui.value.checkOutTToken
+        if (tToken == null) {
+            emitError("No active session for reverification")
+            return
+        }
+
+        viewModelScope.launch {
+            _ui.value = _ui.value.copy(isReverifying = true, reverifyError = null)
+
+            // Get fresh GPS location
+            when (val locResult = LocationHelper(context).getCurrentLocation()) {
+                is LocationResult.Success -> {
+                    when (val outcome = repo.locationReverify(tToken, locResult.latitude, locResult.longitude)) {
+                        is LocationReverifyOutcome.Success -> {
+                            Log.d(TAG, "✅ Location reverify success: ${outcome.message}")
+                            if (isCheckIn) {
+                                _ui.value = _ui.value.copy(
+                                    isReverifying = false,
+                                    reverifyError = null,
+                                    checkInTToken = outcome.newTToken ?: tToken,
+                                    checkInIsOutOfRange = outcome.isOutOfRange,
+                                    checkInOutOfRangeReasonRequired = outcome.isOutOfRange
+                                )
+                            } else {
+                                _ui.value = _ui.value.copy(
+                                    isReverifying = false,
+                                    reverifyError = null,
+                                    checkOutTToken = outcome.newTToken ?: tToken,
+                                    checkOutIsOutOfRange = outcome.isOutOfRange,
+                                    checkOutOutOfRangeReasonRequired = outcome.isOutOfRange
+                                )
+                            }
+                            emitSuccess(outcome.message)
+                        }
+                        is LocationReverifyOutcome.Error -> {
+                            Log.e(TAG, "❌ Location reverify error: ${outcome.message}")
+                            _ui.value = _ui.value.copy(
+                                isReverifying = false,
+                                reverifyError = outcome.message
+                            )
+                        }
+                    }
+                }
+                is LocationResult.Error -> {
+                    _ui.value = _ui.value.copy(
+                        isReverifying = false,
+                        reverifyError = locResult.message
+                    )
                 }
             }
         }
@@ -601,6 +667,7 @@ class AttendanceViewModel(
                             loadingMessage = null,
                             currentState = "CHECK_OUT_NEEDED",
                             lastCheckInTime = outcome.checkInTime,
+                            checkOutTime = outcome.checkOutTime,
                             checkInTToken = null,
                             checkInFaceVector = null,
                             checkInMessage = null,
@@ -906,5 +973,10 @@ data class AttendanceUiState(
     val acknowledgmentNote: String? = null,
 
     val tempEarlyReason: String? = null,
-    val tempOutOfRangeReason: String? = null
+    val tempOutOfRangeReason: String? = null,
+
+    val isReverifying: Boolean = false,
+    val reverifyError: String? = null,
+
+    val checkOutTime: String? = null
 )

@@ -17,6 +17,7 @@ import com.hrms.jeejateamozy.feature.circular.presentation.CircularListScreen
 import com.hrms.jeejateamozy.feature.circular.presentation.CircularDetailScreen
 import com.hrms.jeejateamozy.feature.leave.presentation.LeaveViewModel
 import com.hrms.jeejateamozy.feature.leave.presentation.ApplyLeaveScreen
+import com.hrms.jeejateamozy.feature.leave.presentation.LeaveDetailScreen
 import com.hrms.jeejateamozy.feature.leave.presentation.LeaveHistoryScreen
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryViewModel
 import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceHistoryScreen
@@ -69,6 +70,8 @@ fun MainScreen(
 
     var showApplyLeave by remember { mutableStateOf(false) }
     var showLeaveHistory by remember { mutableStateOf(false) }
+    var showLeaveDetail by remember { mutableStateOf<Int?>(null) }
+    var leaveSubmitSuccessMessage by remember { mutableStateOf<String?>(null) }
 
     // Attendance History States
     var showAttendanceHistory by remember { mutableStateOf(false) }
@@ -110,8 +113,7 @@ fun MainScreen(
                     showApplyLeave = true
                 }
                 is DeepLink.LeaveDetail -> {
-                    // TODO: Add leave detail navigation when screen exists
-                    showLeaveHistory = true
+                    showLeaveDetail = initialDeepLink.leaveId
                 }
 
                 // Attendance detail
@@ -214,6 +216,7 @@ fun MainScreen(
             }
             showApplyLeave -> {
                 showApplyLeave = false
+                showLeaveHistory = true  // Go back to Leave History instead of Home
             }
             showWorkReport -> {
                 showWorkReport = false
@@ -358,6 +361,18 @@ fun MainScreen(
                         selectedAttendanceDate = null
                         showAttendanceHistory = false
                         currentNavigationScreen = NavigationScreen.ATTENDANCE
+                    },
+                    bottomPadding = paddingValues.calculateBottomPadding()
+                )
+            }
+
+            // Leave Detail Screen
+            showLeaveDetail != null -> {
+                LeaveDetailScreen(
+                    applicationId = showLeaveDetail!!,
+                    onNavigateBack = {
+                        showLeaveDetail = null
+                        showLeaveHistory = true
                     }
                 )
             }
@@ -375,6 +390,14 @@ fun MainScreen(
                     onNavigateToApplyLeave = {
                         showLeaveHistory = false
                         showApplyLeave = true
+                    },
+                    onNavigateToDetail = { applicationId ->
+                        showLeaveHistory = false
+                        showLeaveDetail = applicationId
+                    },
+                    successMessage = leaveSubmitSuccessMessage,
+                    onSuccessMessageShown = {
+                        leaveSubmitSuccessMessage = null
                     }
                 )
             }
@@ -387,11 +410,14 @@ fun MainScreen(
                     viewModel = leaveViewModel,
                     onNavigateBack = {
                         showApplyLeave = false
-                        currentNavigationScreen = NavigationScreen.HOME
+                        showLeaveHistory = true  // Go back to Leave History instead of Home
                     },
-                    onNavigateToHistory = { applicationId ->
+                    onNavigateToHistory = { success ->
                         showApplyLeave = false
                         showLeaveHistory = true
+                        if (success == 1) {
+                            leaveSubmitSuccessMessage = "Leave application submitted successfully!"
+                        }
                     }
                 )
             }
@@ -526,9 +552,11 @@ fun MainScreen(
                             onNavigateToApplyLeaves = {
                                 showLeaveHistory = true  // ✅ FIXED: Show overview first instead of form
                             },
-                            // ⭐ NEW: Navigate to notifications
                             onNavigateToNotifications = {
                                 showNotificationList = true
+                            },
+                            onNavigateToAttendanceHistory = {
+                                currentNavigationScreen = NavigationScreen.ATTENDANCE
                             },
                             paddingValues = paddingValues
                         )
@@ -545,7 +573,8 @@ fun MainScreen(
                             onNavigateToDayDetail = { date ->
                                 selectedAttendanceDate = date
                                 showAttendanceHistory = true
-                            }
+                            },
+                            paddingValues = paddingValues
                         )
                     }
 

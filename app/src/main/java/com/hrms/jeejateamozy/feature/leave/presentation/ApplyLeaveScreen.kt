@@ -86,10 +86,8 @@ fun ApplyLeaveScreen(
     var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
     var selectedFileName by remember { mutableStateOf<String?>(null) }
 
-    // Half-day support
-    var isHalfDayStart by remember { mutableStateOf(false) }
-    var isHalfDayEnd by remember { mutableStateOf(false) }
-    var halfDayType by remember { mutableStateOf<String?>(null) }
+    // Priority
+    var selectedPriority by remember { mutableStateOf("normal") }
 
     // ==========================================
     // UI State
@@ -143,14 +141,8 @@ fun ApplyLeaveScreen(
         } else 0
     }
 
-    val effectiveDays = remember(numberOfDays, isHalfDayStart, isHalfDayEnd) {
-        var days = numberOfDays.toDouble()
-        if (isHalfDayStart) days -= 0.5
-        if (isHalfDayEnd) days -= 0.5
-        days
-    }
-
-    val isSingleDay = startDate != null && endDate != null && startDate == endDate
+    // Effective days is now same as numberOfDays (half-day removed from API)
+    val effectiveDays = numberOfDays.toDouble()
 
     // ==========================================
     // File Picker
@@ -185,44 +177,21 @@ fun ApplyLeaveScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is LeaveEvent.ShowError -> {
-                    snackbarHostState.showSnackbar(
-                        message = "❌ ${event.message}",
-                        duration = SnackbarDuration.Long,
-                        withDismissAction = true
-                    )
+                    // Launch in separate coroutine to not block event collection
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "❌ ${event.message}",
+                            duration = SnackbarDuration.Long,
+                            withDismissAction = true
+                        )
+                    }
                 }
                 is LeaveEvent.ShowSuccess -> {
-                    snackbarHostState.showSnackbar(
-                        message = "✅ ${event.message}",
-                        duration = SnackbarDuration.Short
-                    )
+                    // Don't show snackbar here - will be shown on history screen
                 }
                 is LeaveEvent.NavigateToHistory -> {
-                    val successMessage = buildString {
-                        append("✅ Leave submitted successfully!")
-                        event.referenceNumber?.let { append("\nRef: $it") }
-                        if (event.autoApproved) {
-                            append("\n🎉 Auto-approved!")
-                        } else if (event.pendingWith.isNotEmpty()) {
-                            append("\n⏳ Pending with: ${event.pendingWith.joinToString(", ")}")
-                        }
-                        if (event.currentStep != null && event.totalSteps != null) {
-                            append("\n📋 Step ${event.currentStep}/${event.totalSteps}")
-                        }
-                    }
-
-                    snackbarHostState.showSnackbar(
-                        message = successMessage,
-                        duration = SnackbarDuration.Long
-                    )
-                    kotlinx.coroutines.delay(1500)
-                    onNavigateBack()
-                }
-                is LeaveEvent.DraftSaved -> {
-                    snackbarHostState.showSnackbar(
-                        message = "📝 ${event.message}",
-                        duration = SnackbarDuration.Short
-                    )
+                    // Navigate to history screen immediately - success message shown there
+                    onNavigateToHistory(1) // Pass 1 to indicate success
                 }
             }
         }
@@ -265,16 +234,6 @@ fun ApplyLeaveScreen(
             Log.d("LEAVE_SUBMIT", "❌ Date validation FAILED")
         } else {
             Log.d("LEAVE_SUBMIT", "✅ Date validation PASSED")
-        }
-
-        // Validate half-day type when half-day is selected
-        Log.d("LEAVE_SUBMIT", "Half Day Start: $isHalfDayStart, Half Day End: $isHalfDayEnd, Half Day Type: $halfDayType")
-        if ((isHalfDayStart || isHalfDayEnd) && halfDayType == null) {
-            showDateError = true
-            dateErrorMessage = "Please select half day type (First Half or Second Half)"
-            errorMessages.add("Half day type is required")
-            isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Half day type validation FAILED")
         }
 
         // Validate reason
@@ -372,20 +331,19 @@ fun ApplyLeaveScreen(
         Log.d("LEAVE_SUBMIT", "  startDate: ${startDate!!.format(dateFormatter)}")
         Log.d("LEAVE_SUBMIT", "  endDate: ${endDate!!.format(dateFormatter)}")
         Log.d("LEAVE_SUBMIT", "  leaveReason: ${leaveReason.trim()}")
+        Log.d("LEAVE_SUBMIT", "  priority: $selectedPriority")
 
         viewModel.applyLeave(
             leaveTypeId = selectedLeaveType!!.id,
             startDate = startDate!!.format(dateFormatter),
             endDate = endDate!!.format(dateFormatter),
             leaveReason = leaveReason.trim(),
-            isHalfDayStart = isHalfDayStart,
-            isHalfDayEnd = isHalfDayEnd,
-            halfDayType = halfDayType,
             alternateContact = alternateContact.ifBlank { null },
             emergencyContact = emergencyContact.ifBlank { null },
             taskDependedOnYou = taskDependedOnYou,
             dependencyHandledBy = dependencyHandledBy.ifBlank { null },
             handoverNotes = handoverNotes.ifBlank { null },
+            priority = selectedPriority,
             supportingDocumentFile = supportingDocumentFile
         )
 
@@ -403,14 +361,12 @@ fun ApplyLeaveScreen(
             ) { data ->
                 val isSuccess = data.visuals.message.contains("✅")
                 val isError = data.visuals.message.contains("❌")
-                val isDraft = data.visuals.message.contains("📝")
 
                 Snackbar(
                     snackbarData = data,
                     containerColor = when {
                         isSuccess -> Color(0xFF4CAF50)
                         isError -> Color(0xFFF44336)
-                        isDraft -> Color(0xFF2196F3)
                         else -> MaterialTheme.colorScheme.inverseSurface
                     },
                     contentColor = Color.White,
@@ -466,10 +422,6 @@ fun ApplyLeaveScreen(
                         numberOfDays = numberOfDays,
                         workingDays = workingDays,
                         effectiveDays = effectiveDays,
-                        isSingleDay = isSingleDay,
-                        isHalfDayStart = isHalfDayStart,
-                        isHalfDayEnd = isHalfDayEnd,
-                        halfDayType = halfDayType,
                         leaveReason = leaveReason,
                         alternateContact = alternateContact,
                         emergencyContact = emergencyContact,
@@ -477,6 +429,7 @@ fun ApplyLeaveScreen(
                         dependencyHandledBy = dependencyHandledBy,
                         handoverNotes = handoverNotes,
                         selectedFileName = selectedFileName,
+                        selectedPriority = selectedPriority,
                         showLeaveTypeError = showLeaveTypeError,
                         showDateError = showDateError,
                         showReasonError = showReasonError,
@@ -491,9 +444,6 @@ fun ApplyLeaveScreen(
                             showDateRangePicker = true
                             showDateError = false
                         },
-                        onHalfDayStartChange = { isHalfDayStart = it },
-                        onHalfDayEndChange = { isHalfDayEnd = it },
-                        onHalfDayTypeChange = { halfDayType = it },
                         onReasonChange = {
                             leaveReason = it
                             showReasonError = false
@@ -513,6 +463,7 @@ fun ApplyLeaveScreen(
                             showDependencyError = false
                         },
                         onHandoverNotesChange = { handoverNotes = it },
+                        onPriorityChange = { selectedPriority = it },
                         onPickFile = { filePicker.launch("*/*") },
                         onRemoveFile = {
                             selectedFileUri = null
@@ -749,10 +700,6 @@ private fun LeaveApplicationContent(
     numberOfDays: Int,
     workingDays: Int,
     effectiveDays: Double,
-    isSingleDay: Boolean,
-    isHalfDayStart: Boolean,
-    isHalfDayEnd: Boolean,
-    halfDayType: String?,
     leaveReason: String,
     alternateContact: String,
     emergencyContact: String,
@@ -760,6 +707,7 @@ private fun LeaveApplicationContent(
     dependencyHandledBy: String,
     handoverNotes: String,
     selectedFileName: String?,
+    selectedPriority: String,
     showLeaveTypeError: Boolean,
     showDateError: Boolean,
     showReasonError: Boolean,
@@ -768,15 +716,13 @@ private fun LeaveApplicationContent(
     reasonErrorMessage: String,
     onLeaveTypeClick: () -> Unit,
     onDateRangeClick: () -> Unit,
-    onHalfDayStartChange: (Boolean) -> Unit,
-    onHalfDayEndChange: (Boolean) -> Unit,
-    onHalfDayTypeChange: (String?) -> Unit,
     onReasonChange: (String) -> Unit,
     onAlternateContactChange: (String) -> Unit,
     onEmergencyContactChange: (String) -> Unit,
     onTaskDependencyChange: (Boolean) -> Unit,
     onDependencyHandledByChange: (String) -> Unit,
     onHandoverNotesChange: (String) -> Unit,
+    onPriorityChange: (String) -> Unit,
     onPickFile: () -> Unit,
     onRemoveFile: () -> Unit,
     onSubmit: () -> Unit
@@ -854,24 +800,17 @@ private fun LeaveApplicationContent(
                 }
             }
 
-            // Half Day Selection (visible when dates selected)
-            if (startDate != null && endDate != null) {
-                item {
-                    FormSection(
-                        title = "Half Day Options",
-                        icon = Icons.Outlined.Timelapse,
-                        isRequired = false
-                    ) {
-                        HalfDaySection(
-                            isSingleDay = isSingleDay,
-                            isHalfDayStart = isHalfDayStart,
-                            isHalfDayEnd = isHalfDayEnd,
-                            halfDayType = halfDayType,
-                            onHalfDayStartChange = onHalfDayStartChange,
-                            onHalfDayEndChange = onHalfDayEndChange,
-                            onHalfDayTypeChange = onHalfDayTypeChange
-                        )
-                    }
+            // Priority Selection
+            item {
+                FormSection(
+                    title = "Priority",
+                    icon = Icons.Outlined.Flag,
+                    isRequired = false
+                ) {
+                    PrioritySelector(
+                        selectedPriority = selectedPriority,
+                        onPriorityChange = onPriorityChange
+                    )
                 }
             }
 
@@ -1218,7 +1157,7 @@ private fun LeaveTypeSelector(
             if (selectedLeaveType != null) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = selectedLeaveType.name ?: selectedLeaveType.leaveTypeName,
+                        text = selectedLeaveType.name,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -1436,177 +1375,68 @@ private fun DaySummaryItem(
 }
 
 // ==========================================
-// HALF DAY SECTION
+// PRIORITY SELECTOR
 // ==========================================
 @Composable
-private fun HalfDaySection(
-    isSingleDay: Boolean,
-    isHalfDayStart: Boolean,
-    isHalfDayEnd: Boolean,
-    halfDayType: String?,
-    onHalfDayStartChange: (Boolean) -> Unit,
-    onHalfDayEndChange: (Boolean) -> Unit,
-    onHalfDayTypeChange: (String?) -> Unit
+private fun PrioritySelector(
+    selectedPriority: String,
+    onPriorityChange: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (isSingleDay) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Half day leave",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Switch(
-                    checked = isHalfDayStart,
-                    onCheckedChange = {
-                        onHalfDayStartChange(it)
-                        onHalfDayEndChange(false)
-                        if (!it) onHalfDayTypeChange(null)
-                    }
-                )
-            }
+    val priorities = listOf(
+        Triple("normal", "Normal", Color(0xFF4CAF50)),
+        Triple("high", "High", Color(0xFFFF9800)),
+        Triple("urgent", "Urgent", Color(0xFFF44336))
+    )
 
-            AnimatedVisibility(
-                visible = isHalfDayStart,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    HalfDayOption(
-                        text = "First Half",
-                        subtext = "Morning",
-                        isSelected = halfDayType == "FIRST_HALF",
-                        onClick = { onHalfDayTypeChange("FIRST_HALF") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    HalfDayOption(
-                        text = "Second Half",
-                        subtext = "Afternoon",
-                        isSelected = halfDayType == "SECOND_HALF",
-                        onClick = { onHalfDayTypeChange("SECOND_HALF") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Half day on start date",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Switch(
-                    checked = isHalfDayStart,
-                    onCheckedChange = onHalfDayStartChange
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Half day on end date",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Switch(
-                    checked = isHalfDayEnd,
-                    onCheckedChange = onHalfDayEndChange
-                )
-            }
-
-            AnimatedVisibility(
-                visible = isHalfDayStart || isHalfDayEnd,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    HalfDayOption(
-                        text = "First Half",
-                        subtext = "Morning",
-                        isSelected = halfDayType == "FIRST_HALF",
-                        onClick = { onHalfDayTypeChange("FIRST_HALF") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    HalfDayOption(
-                        text = "Second Half",
-                        subtext = "Afternoon",
-                        isSelected = halfDayType == "SECOND_HALF",
-                        onClick = { onHalfDayTypeChange("SECOND_HALF") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ==========================================
-// HALF DAY OPTION
-// ==========================================
-@Composable
-private fun HalfDayOption(
-    text: String,
-    subtext: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val backgroundColor = if (isSelected)
-        MaterialTheme.colorScheme.primaryContainer
-    else
-        MaterialTheme.colorScheme.surface
-
-    val contentColor = if (isSelected)
-        MaterialTheme.colorScheme.onPrimaryContainer
-    else
-        MaterialTheme.colorScheme.onSurface
-
-    OutlinedCard(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.outlinedCardColors(containerColor = backgroundColor),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = Brush.linearGradient(
-                colors = if (isSelected) {
-                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
-                } else {
-                    listOf(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.outlineVariant)
-                }
-            )
-        )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = contentColor
-            )
-            Text(
-                text = subtext,
-                style = MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.7f)
-            )
+        priorities.forEach { (value, label, color) ->
+            val isSelected = selectedPriority == value
+            val backgroundColor = if (isSelected) color.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+            val contentColor = if (isSelected) color else MaterialTheme.colorScheme.onSurfaceVariant
+
+            OutlinedCard(
+                onClick = { onPriorityChange(value) },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.outlinedCardColors(containerColor = backgroundColor),
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = Brush.linearGradient(
+                        colors = if (isSelected) {
+                            listOf(color, color)
+                        } else {
+                            listOf(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.outlineVariant)
+                        }
+                    )
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = when (value) {
+                            "urgent" -> Icons.Default.PriorityHigh
+                            "high" -> Icons.Default.Flag
+                            else -> Icons.Outlined.Flag
+                        },
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = contentColor
+                    )
+                }
+            }
         }
     }
 }
@@ -1719,7 +1549,7 @@ private fun LeaveTypeItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = leaveType.name ?: leaveType.leaveTypeName,
+                    text = leaveType.name,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )

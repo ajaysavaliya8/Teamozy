@@ -22,7 +22,8 @@ sealed class AttendanceOutcome {
         val message: String,
         val lastCheckInTime: String?,
         val attendanceStatus: String?,
-        val isComplete: Boolean?
+        val isComplete: Boolean?,
+        val checkOutTime: String? = null
     ) : AttendanceOutcome()
 
     data class Error(val message: String) : AttendanceOutcome()
@@ -84,11 +85,22 @@ sealed class CheckOutOutcome {
     data class Error(val message: String) : CheckOutOutcome()
 }
 
+sealed class LocationReverifyOutcome {
+    data class Success(
+        val newTToken: String?,
+        val message: String,
+        val isOutOfRange: Boolean
+    ) : LocationReverifyOutcome()
+
+    data class Error(val message: String) : LocationReverifyOutcome()
+}
+
 sealed class SignatureOutcome {
     data class Success(
         val message: String,
         val attendanceRecordId: Int?,
-        val checkInTime: String?
+        val checkInTime: String?,
+        val checkOutTime: String? = null
     ) : SignatureOutcome()
 
     data class Error(val message: String) : SignatureOutcome()
@@ -144,7 +156,8 @@ class AttendanceRepository(private val context: Context) {
                             message = data.message,
                             lastCheckInTime = data.last_check_in_time,
                             attendanceStatus = data.attendance_status,
-                            isComplete = data.is_complete
+                            isComplete = data.is_complete,
+                            checkOutTime = data.check_out_time
                         )
                     } else {
                         AttendanceOutcome.Error("Invalid response from server")
@@ -315,7 +328,8 @@ class AttendanceRepository(private val context: Context) {
                         SignatureOutcome.Success(
                             message = body.message,
                             attendanceRecordId = body.attendance_record_id,
-                            checkInTime = body.check_in_time
+                            checkInTime = body.check_in_time,
+                            checkOutTime = body.check_out_time
                         )
                     } else {
                         SignatureOutcome.Error("Invalid response from server")
@@ -575,6 +589,54 @@ class AttendanceRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e("NET", "Exception in checkOutSignature", e)
             SignatureOutcome.Error(friendlyNetError(e))
+        }
+    }
+
+    /**
+     * Re-verify location for check-in when out of range
+     */
+    suspend fun locationReverify(
+        tToken: String,
+        latitude: Double,
+        longitude: Double
+    ): LocationReverifyOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("NET", "locationReverify called: t_token=${tToken.take(20)}..., lat=$latitude, lng=$longitude")
+
+            val res = api.checkInLocationReverify(
+                tToken = tToken,
+                latitude = latitude,
+                longitude = longitude,
+                token = token()
+            )
+
+            Log.d("NET", "locationReverify -> code=${res.code()}")
+
+            when {
+                res.isSuccessful && res.code() == 200 -> {
+                    val body = res.body()
+                    if (body != null && body.status == "success") {
+                        Log.d("NET", "Location reverify success: ${body.message}")
+                        LocationReverifyOutcome.Success(
+                            newTToken = body.t_token,
+                            message = body.message ?: "Location verified",
+                            isOutOfRange = body.is_out_of_range ?: false
+                        )
+                    } else {
+                        LocationReverifyOutcome.Error(body?.message ?: "Location reverification failed")
+                    }
+                }
+
+                res.code() == 401 -> {
+                    AppStateManager.emitUnauthorized()
+                    LocationReverifyOutcome.Error("Unauthorized. Please login again.")
+                }
+
+                else -> LocationReverifyOutcome.Error(extractError(res))
+            }
+        } catch (e: Exception) {
+            Log.e("NET", "Exception in locationReverify", e)
+            LocationReverifyOutcome.Error(friendlyNetError(e))
         }
     }
 

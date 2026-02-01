@@ -19,12 +19,14 @@ import com.hrms.jeejateamozy.feature.attendance.presentation.AttendanceViewModel
 import com.hrms.jeejateamozy.feature.face.data.EmbeddingExtractor
 import com.hrms.jeejateamozy.feature.face.presentation.FaceCaptureScreen
 import com.hrms.jeejateamozy.feature.home.presentation.components.AttendanceStatusCard
+import com.hrms.jeejateamozy.feature.home.presentation.components.GreetingSection
 import com.hrms.jeejateamozy.feature.home.presentation.components.QuickAccessSection
 import com.hrms.jeejateamozy.feature.home.presentation.dialogs.ReasonBottomSheet
 import com.hrms.jeejateamozy.feature.home.presentation.dialogs.WorkReportBottomSheet
 import com.hrms.jeejateamozy.feature.home.presentation.utils.calculateElapsedSeconds
 import com.hrms.jeejateamozy.feature.home.presentation.utils.rememberPermissionChecker
 import com.hrms.jeejateamozy.feature.attendance.presentation.dialogs.PendingMessageDialog
+import com.hrms.jeejateamozy.core.fcm.NotificationEventBus
 import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -42,7 +44,8 @@ fun HomePage(
     onNavigateToWorkReport: () -> Unit = {},
     onNavigateToCircular: () -> Unit = {},
     onNavigateToApplyLeaves: () -> Unit = {},
-    onNavigateToNotifications: () -> Unit = {},  // ⭐ NEW: Notification navigation
+    onNavigateToNotifications: () -> Unit = {},
+    onNavigateToAttendanceHistory: () -> Unit = {},
     paddingValues: PaddingValues,
     vm: AttendanceViewModel = koinViewModel()
 ) {
@@ -110,6 +113,14 @@ fun HomePage(
         // Fetch notification unread count for badge
         Log.d(TAG, "🔔 Fetching notification unread count...")
         notificationRepo.refreshUnreadCount()
+    }
+
+    // Refresh when bulk check-in/checkout FCM arrives
+    LaunchedEffect(Unit) {
+        NotificationEventBus.attendanceRefreshEvent.collect {
+            Log.d(TAG, "🔔 Attendance refresh event from FCM - refreshing status")
+            vm.refreshStatus(force = true, context = context)
+        }
     }
 
     // Refresh status when app returns from background
@@ -180,7 +191,11 @@ fun HomePage(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
-                Spacer(Modifier.height(24.dp))
+                // Greeting Section
+                GreetingSection(
+                    userName = prefs.userName,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+                )
 
                 // Attendance Status Card
                 AttendanceStatusCard(
@@ -189,6 +204,7 @@ fun HomePage(
                     elapsedSeconds = elapsedSeconds,
                     isLoading = ui.isLoading,
                     isFaceVerifyBusy = faceVerifyBusy,
+                    checkOutTime = ui.checkOutTime,
                     onCheckInClick = {
                         Log.d(TAG, "CHECK IN BUTTON CLICKED")
                         faceVerificationGeneration++
@@ -201,7 +217,7 @@ fun HomePage(
                     }
                 )
 
-                Spacer(Modifier.height(40.dp))
+                Spacer(Modifier.height(32.dp))
 
                 // Quick Access Section
                 QuickAccessSection(
@@ -210,7 +226,7 @@ fun HomePage(
                         onNavigateToCircular()
                     },
                     onApplyLeavesClick = {
-                        Log.d(TAG, "Apply Leaves clicked - Coming Soon")
+                        Log.d(TAG, "Apply Leaves clicked")
                         onNavigateToApplyLeaves()
                     },
                     onWorkReportClick = {
@@ -218,7 +234,9 @@ fun HomePage(
                         onNavigateToWorkReport()
                     }
                 )
-                Spacer(Modifier.height(40.dp))
+
+                // Bottom padding for better scroll experience
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
@@ -312,7 +330,10 @@ fun HomePage(
             onDismiss = { vm.onReasonDialogDismissed() },
             onSubmit = { lateOrEarlyReason, outOfRangeReason ->
                 vm.onReasonSubmitted(lateOrEarlyReason, outOfRangeReason, context)
-            }
+            },
+            onLocationReverify = if (isOutOfRange) {{ vm.onLocationReverify(context) }} else null,
+            isReverifying = ui.isReverifying,
+            reverifyError = ui.reverifyError
         )
     }
 
