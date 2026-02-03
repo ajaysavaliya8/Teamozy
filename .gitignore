@@ -14,6 +14,9 @@
 .cxx
 local.properties
 
+# Release bundles
+app/release/app-release.aab
+
 # Log files
 *.log
 hs_err_pid*.log
