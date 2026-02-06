@@ -36,15 +36,6 @@ data class LeaveHistoryUiState(
     val summary: LeaveSummary? = null
 )
 
-/**
- * UI State for Leave Calendar Screen
- */
-data class LeaveCalendarUiState(
-    val isLoading: Boolean = false,
-    val calendarData: LeaveCalendarData? = null,
-    val errorMessage: String? = null
-)
-
 // =============================================================================
 // EVENTS
 // =============================================================================
@@ -68,9 +59,6 @@ class LeaveViewModel(
 
     private val _historyUiState = MutableStateFlow(LeaveHistoryUiState())
     val historyUiState: StateFlow<LeaveHistoryUiState> = _historyUiState.asStateFlow()
-
-    private val _calendarUiState = MutableStateFlow(LeaveCalendarUiState())
-    val calendarUiState: StateFlow<LeaveCalendarUiState> = _calendarUiState.asStateFlow()
 
     private val _events = MutableSharedFlow<LeaveEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<LeaveEvent> = _events.asSharedFlow()
@@ -420,51 +408,6 @@ class LeaveViewModel(
                 }
                 _events.emit(LeaveEvent.ShowError(e.message ?: "Unknown error"))
                 Log.e("LeaveViewModel", "Exception cancelling leave", e)
-            }
-        }
-    }
-
-    // =========================================================================
-    // LOAD LEAVE CALENDAR
-    // =========================================================================
-
-    fun loadLeaveCalendar(month: Int, year: Int) {
-        viewModelScope.launch {
-            try {
-                _calendarUiState.update { it.copy(isLoading = true, errorMessage = null) }
-
-                when (val outcome = repo.getLeaveCalendar(month, year)) {
-                    is LeaveCalendarOutcome.Success -> {
-                        _calendarUiState.update {
-                            it.copy(
-                                isLoading = false,
-                                calendarData = outcome.data,
-                                errorMessage = null
-                            )
-                        }
-                        Log.d("LeaveViewModel", "Loaded leave calendar for $month/$year")
-                    }
-
-                    is LeaveCalendarOutcome.Error -> {
-                        _calendarUiState.update {
-                            it.copy(
-                                isLoading = false,
-                                errorMessage = outcome.message
-                            )
-                        }
-                        _events.emit(LeaveEvent.ShowError(outcome.message))
-                        Log.e("LeaveViewModel", "Error loading leave calendar: ${outcome.message}")
-                    }
-                }
-            } catch (e: Exception) {
-                _calendarUiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = e.message ?: "Unknown error"
-                    )
-                }
-                _events.emit(LeaveEvent.ShowError(e.message ?: "Unknown error"))
-                Log.e("LeaveViewModel", "Exception loading leave calendar", e)
             }
         }
     }

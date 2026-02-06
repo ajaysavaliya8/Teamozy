@@ -351,15 +351,6 @@ interface ApiService {
         @Query("year") year: Int? = null
     ): Response<LeaveSummaryResponse>
 
-    /**
-     * Get leave calendar for a specific month
-     */
-    @GET("leave-calendar")
-    suspend fun getLeaveCalendar(
-        @Query("month") month: Int,
-        @Query("year") year: Int
-    ): Response<LeaveCalendarResponse>
-
     // ========================================
     // TIMESHEET ENDPOINTS
     // ========================================

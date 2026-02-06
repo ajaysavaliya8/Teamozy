@@ -48,6 +48,7 @@ fun LeaveDetailScreen(
     var isActionLoading by remember { mutableStateOf(false) }
     var showWithdrawDialog by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
+    var dialogErrorMessage by remember { mutableStateOf<String?>(null) }
 
     // Handle system back button
     BackHandler {
@@ -84,21 +85,28 @@ fun LeaveDetailScreen(
             confirmText = "Withdraw",
             confirmColor = Color(0xFF795548),
             isLoading = isActionLoading,
-            onDismiss = { showWithdrawDialog = false },
+            errorMessage = dialogErrorMessage,
+            onDismiss = {
+                showWithdrawDialog = false
+                dialogErrorMessage = null
+            },
             onConfirm = { reason ->
+                dialogErrorMessage = null
                 scope.launch {
                     isActionLoading = true
                     when (val result = repository.withdrawLeave(applicationId, reason)) {
                         is com.hrms.jeejateamozy.feature.leave.data.WithdrawLeaveOutcome.Success -> {
-                            snackbarHostState.showSnackbar(result.message)
                             showWithdrawDialog = false
+                            isActionLoading = false
+                            dialogErrorMessage = null
+                            snackbarHostState.showSnackbar(result.message)
                             reloadDetail()
                         }
                         is com.hrms.jeejateamozy.feature.leave.data.WithdrawLeaveOutcome.Error -> {
-                            snackbarHostState.showSnackbar(result.message)
+                            isActionLoading = false
+                            dialogErrorMessage = result.message
                         }
                     }
-                    isActionLoading = false
                 }
             }
         )
@@ -112,21 +120,28 @@ fun LeaveDetailScreen(
             confirmText = "Request Cancellation",
             confirmColor = Color(0xFFF44336),
             isLoading = isActionLoading,
-            onDismiss = { showCancelDialog = false },
+            errorMessage = dialogErrorMessage,
+            onDismiss = {
+                showCancelDialog = false
+                dialogErrorMessage = null
+            },
             onConfirm = { reason ->
+                dialogErrorMessage = null
                 scope.launch {
                     isActionLoading = true
                     when (val result = repository.cancelLeave(applicationId, reason)) {
                         is com.hrms.jeejateamozy.feature.leave.data.CancelLeaveOutcome.Success -> {
-                            snackbarHostState.showSnackbar(result.message)
                             showCancelDialog = false
+                            isActionLoading = false
+                            dialogErrorMessage = null
+                            snackbarHostState.showSnackbar(result.message)
                             reloadDetail()
                         }
                         is com.hrms.jeejateamozy.feature.leave.data.CancelLeaveOutcome.Error -> {
-                            snackbarHostState.showSnackbar(result.message)
+                            isActionLoading = false
+                            dialogErrorMessage = result.message
                         }
                     }
-                    isActionLoading = false
                 }
             }
         )
@@ -1065,6 +1080,7 @@ private fun ReasonDialog(
     confirmText: String,
     confirmColor: Color,
     isLoading: Boolean,
+    errorMessage: String? = null,
     onDismiss: () -> Unit,
     onConfirm: (reason: String) -> Unit
 ) {
@@ -1075,6 +1091,32 @@ private fun ReasonDialog(
         title = { Text(title, fontWeight = FontWeight.SemiBold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (errorMessage != null) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = errorMessage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = "Please provide a reason:",
                     style = MaterialTheme.typography.bodyMedium,

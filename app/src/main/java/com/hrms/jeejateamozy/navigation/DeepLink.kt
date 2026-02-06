@@ -84,17 +84,19 @@ sealed class DeepLink {
                 SCREEN_PROFILE -> Profile
                 SCREEN_CIRCULAR_LIST -> CircularList
                 SCREEN_CIRCULAR_DETAIL -> {
-                    val id = extras["circular_id"]?.toIntOrNull() ?: return CircularList
+                    val id = extras["circular_id"]?.toIntOrNull() ?: return null
                     CircularDetail(id)
                 }
                 SCREEN_LEAVE_HISTORY -> LeaveHistory
                 SCREEN_APPLY_LEAVE -> ApplyLeave
                 SCREEN_LEAVE_DETAIL -> {
-                    val id = extras["leave_id"]?.toIntOrNull() ?: return LeaveHistory
+                    val id = extras["leave_id"]?.toIntOrNull()
+                        ?: extras["application_id"]?.toIntOrNull()
+                        ?: return null
                     LeaveDetail(id)
                 }
                 SCREEN_ATTENDANCE_DETAIL -> {
-                    val date = extras["date"] ?: return Attendance
+                    val date = extras["date"] ?: return null
                     AttendanceDetail(date)
                 }
                 SCREEN_WORK_REPORT -> WorkReport

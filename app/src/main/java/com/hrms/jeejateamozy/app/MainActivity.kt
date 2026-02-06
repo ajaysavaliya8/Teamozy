@@ -157,30 +157,30 @@ class MainActivity : ComponentActivity() {
                 }
                 Log.d(TAG, "========================================")
 
-                // Read notification extras
+                // Read notification extras (support both old and new payload field names)
                 val screen = it.getStringExtra(NotificationHelper.EXTRA_SCREEN)
                     ?: it.getStringExtra("screen")
+                    ?: it.getStringExtra("mobile_screen")
 
                 val notificationType = it.getStringExtra(NotificationHelper.EXTRA_NOTIFICATION_TYPE)
                     ?: it.getStringExtra("type")
                     ?: "general"
 
-                // Check if this is from a notification click
-                val hasNotificationData = !screen.isNullOrEmpty() ||
-                    (notificationType != "general" && notificationType.isNotEmpty())
+                Log.d(TAG, "📋 Notification: screen=$screen, type=$notificationType")
 
-                Log.d(TAG, "📋 Notification: screen=$screen, type=$notificationType, hasData=$hasNotificationData")
-
-                // Determine deep link target based on screen value
-                if (hasNotificationData) {
+                // Only navigate if screen is explicitly provided
+                if (!screen.isNullOrEmpty()) {
                     val extras = mapOf(
                         "circular_id" to it.getStringExtra("circular_id"),
                         "leave_id" to it.getStringExtra("leave_id"),
+                        "application_id" to it.getStringExtra("application_id"),
                         "date" to it.getStringExtra("date")
                     )
-                    val deepLink = DeepLink.fromFcmData(screen, extras) ?: DeepLink.NotificationList
-                    pendingDeepLink = deepLink
-                    Log.d(TAG, "✅ Deep link set: $deepLink")
+                    val deepLink = DeepLink.fromFcmData(screen, extras)
+                    if (deepLink != null) {
+                        pendingDeepLink = deepLink
+                        Log.d(TAG, "✅ Deep link set: $deepLink")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error handling notification intent", e)

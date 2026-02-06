@@ -153,6 +153,7 @@ class NotificationViewModel(
             val extras = mutableMapOf<String, String?>()
             notification.circularId?.let { extras["circular_id"] = it.toString() }
             notification.leaveId?.let { extras["leave_id"] = it.toString() }
+            notification.applicationId?.let { extras["application_id"] = it.toString() }
             notification.date?.let { extras["date"] = it }
             return DeepLink.fromFcmData(screen, extras)
         }
@@ -163,6 +164,10 @@ class NotificationViewModel(
         }
 
         notification.leaveId?.takeIf { it > 0 }?.let {
+            return DeepLink.LeaveDetail(it)
+        }
+
+        notification.applicationId?.takeIf { it > 0 }?.let {
             return DeepLink.LeaveDetail(it)
         }
 

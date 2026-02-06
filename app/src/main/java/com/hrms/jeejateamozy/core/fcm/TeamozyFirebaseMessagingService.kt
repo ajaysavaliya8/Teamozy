@@ -47,7 +47,7 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "========================================")
 
         val data = message.data
-        val type = data["type"] ?: ""
+        val type = data["type"] ?: data["notification_type"] ?: ""
 
         when (type) {
             TYPE_HEARTBEAT, TYPE_KEEP_ALIVE -> handleHeartbeat()
@@ -62,8 +62,8 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
      */
     private fun handleNotification(data: Map<String, String>, notification: RemoteMessage.Notification?) {
         val title = data["title"] ?: notification?.title ?: "Teamozy"
-        val messageText = data["message"] ?: notification?.body ?: ""
-        val type = data["type"] ?: "general"
+        val messageText = data["message"] ?: data["body"] ?: notification?.body ?: ""
+        val type = data["type"] ?: data["notification_type"] ?: "general"
         val priority = data["priority"] ?: "normal"
 
         if (messageText.isEmpty()) {
@@ -75,18 +75,27 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         val extras = mutableMapOf<String, String>()
         data["circular_id"]?.let { extras["circular_id"] = it }
         data["leave_id"]?.let { extras["leave_id"] = it }
+        data["application_id"]?.let { extras["application_id"] = it }
+        data["entity_type"]?.let { extras["entity_type"] = it }
         data["date"]?.let { extras["date"] = it }
         data["notification_uid"]?.let { extras["notification_uid"] = it }
 
-        // Parse nested "data" JSON for action and screen
+        // Extract screen field (support both "screen" and "mobile_screen")
+        val screen = data["screen"] ?: data["mobile_screen"]
+        screen?.let { extras["screen"] = it }
+
+        // Parse nested "data" JSON for action and screen (legacy format)
         var action: String? = null
         val nestedData = data["data"]
         if (!nestedData.isNullOrBlank()) {
             try {
                 val json = JSONObject(nestedData)
                 action = json.optString("action", "").ifEmpty { null }
-                val screen = json.optString("screen", "").ifEmpty { null }
-                screen?.let { extras["screen"] = it }
+                // Only use nested screen if top-level screen wasn't provided
+                if (!extras.containsKey("screen")) {
+                    val screen = json.optString("screen", "").ifEmpty { null }
+                    screen?.let { extras["screen"] = it }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "⚠️ Failed to parse nested data JSON", e)
             }
@@ -95,6 +104,7 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         // Generate unique notification ID
         val notificationId = data["circular_id"]?.toIntOrNull()
             ?: data["leave_id"]?.toIntOrNull()
+            ?: data["application_id"]?.toIntOrNull()
             ?: System.currentTimeMillis().toInt()
 
         Log.d(TAG, "📬 Showing notification - Type: $type, Title: $title, Action: $action")

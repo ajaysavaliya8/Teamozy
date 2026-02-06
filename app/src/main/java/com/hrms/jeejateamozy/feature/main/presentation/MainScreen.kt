@@ -310,7 +310,7 @@ fun MainScreen(
                             is DeepLink.CircularDetail -> showCircularDetail = deepLink.circularId
                             is DeepLink.LeaveHistory -> showLeaveHistory = true
                             is DeepLink.ApplyLeave -> showApplyLeave = true
-                            is DeepLink.LeaveDetail -> showLeaveHistory = true  // Open leave history for now
+                            is DeepLink.LeaveDetail -> showLeaveDetail = deepLink.leaveId
                             is DeepLink.AttendanceDetail -> {
                                 selectedAttendanceDate = deepLink.date
                                 showAttendanceHistory = true

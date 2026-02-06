@@ -1314,89 +1314,6 @@ data class CancelLeaveResponse(
     val message: String
 )
 
-// Leave Calendar
-data class LeaveCalendarResponse(
-    val status: String,
-    val data: LeaveCalendarData
-)
-
-data class LeaveCalendarData(
-    val month: Int,
-    val year: Int,
-    val first_day: String,
-    val last_day: String,
-    val leaves: List<LeaveCalendarItemDto>
-)
-
-data class LeaveCalendarItemDto(
-    val id: Int,
-    val reference_number: String? = null,
-    val leave_type: String,
-    val leave_type_code: String,
-    val color_code: String? = null,
-    val is_paid: Boolean,
-    val start_date: String,
-    val end_date: String,
-    val display_start_date: String,
-    val display_end_date: String,
-    val total_days: Double,
-    val effective_days: Double,
-    val num_days_in_month: Int,
-    val is_half_day_start: Boolean,
-    val is_half_day_end: Boolean,
-    val half_day_type: String?,
-    val status: String,
-    val current_status: String,
-    val workflow_status: String? = null,
-    val leave_reason: String?
-) {
-    fun toDomain() = LeaveCalendarItem(
-        id = id,
-        referenceNumber = reference_number,
-        leaveType = leave_type,
-        leaveTypeCode = leave_type_code,
-        colorCode = color_code,
-        isPaid = is_paid,
-        startDate = start_date,
-        endDate = end_date,
-        displayStartDate = display_start_date,
-        displayEndDate = display_end_date,
-        totalDays = total_days,
-        effectiveDays = effective_days,
-        numDaysInMonth = num_days_in_month,
-        isHalfDayStart = is_half_day_start,
-        isHalfDayEnd = is_half_day_end,
-        halfDayType = half_day_type,
-        status = status,
-        currentStatus = current_status,
-        workflowStatus = workflow_status,
-        leaveReason = leave_reason
-    )
-}
-
-data class LeaveCalendarItem(
-    val id: Int,
-    val referenceNumber: String?,
-    val leaveType: String,
-    val leaveTypeCode: String,
-    val colorCode: String?,
-    val isPaid: Boolean,
-    val startDate: String,
-    val endDate: String,
-    val displayStartDate: String,
-    val displayEndDate: String,
-    val totalDays: Double,
-    val effectiveDays: Double,
-    val numDaysInMonth: Int,
-    val isHalfDayStart: Boolean,
-    val isHalfDayEnd: Boolean,
-    val halfDayType: String?,
-    val status: String,
-    val currentStatus: String,
-    val workflowStatus: String?,
-    val leaveReason: String?
-)
-
 // Half Day Type Enum
 enum class HalfDayType(val value: String) {
     FIRST_HALF("FIRST_HALF"),
@@ -1534,6 +1451,8 @@ data class ServerNotification(
     val circularId: Int? = null,
     @SerializedName("leave_id")
     val leaveId: Int? = null,
+    @SerializedName("application_id")
+    val applicationId: Int? = null,
     val date: String? = null
 )
 

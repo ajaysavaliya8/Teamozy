@@ -56,11 +56,6 @@ sealed class CancelLeaveOutcome {
     data class Error(val message: String) : CancelLeaveOutcome()
 }
 
-sealed class LeaveCalendarOutcome {
-    data class Success(val data: LeaveCalendarData) : LeaveCalendarOutcome()
-    data class Error(val message: String) : LeaveCalendarOutcome()
-}
-
 // =============================================================================
 // REPOSITORY
 // =============================================================================
@@ -463,52 +458,6 @@ class LeaveRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching leave summary", e)
             LeaveSummaryOutcome.Error(e.message ?: "Network error occurred")
-        }
-    }
-
-    // =========================================================================
-    // GET LEAVE CALENDAR
-    // =========================================================================
-
-    suspend fun getLeaveCalendar(
-        month: Int,
-        year: Int
-    ): LeaveCalendarOutcome = withContext(Dispatchers.IO) {
-        return@withContext try {
-            Log.d(TAG, "Fetching leave calendar for $month/$year")
-
-            val response = api.getLeaveCalendar(month = month, year = year)
-
-            Log.d(TAG, "Get leave calendar response code: ${response.code()}")
-
-            when {
-                response.isSuccessful && response.code() == 200 -> {
-                    val responseBody = response.body()
-                    if (responseBody?.status == "success") {
-                        Log.d(TAG, "Successfully fetched leave calendar with ${responseBody.data.leaves.size} leaves")
-                        LeaveCalendarOutcome.Success(data = responseBody.data)
-                    } else {
-                        LeaveCalendarOutcome.Error("Failed to fetch leave calendar")
-                    }
-                }
-
-                response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
-                    LeaveCalendarOutcome.Error("Unauthorized. Please login again.")
-                }
-
-                response.code() == 404 -> {
-                    LeaveCalendarOutcome.Error("Employee record not found")
-                }
-
-                else -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to fetch leave calendar")
-                    LeaveCalendarOutcome.Error(errorMsg)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching leave calendar", e)
-            LeaveCalendarOutcome.Error(e.message ?: "Network error occurred")
         }
     }
 
