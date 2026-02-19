@@ -34,10 +34,11 @@ fun ViewEmploymentDetailScreen(
 
     // State variables for all employment detail fields
     var joiningDate by remember { mutableStateOf("") }
-    var probationPeriodDate by remember { mutableStateOf("") }
-    var trainingCompletionDate by remember { mutableStateOf("") }
-    var jobLocation by remember { mutableStateOf("") }
+    var probationEndDate by remember { mutableStateOf("") }
+    var confirmationDate by remember { mutableStateOf("") }
+    var workLocation by remember { mutableStateOf("") }
     var employmentType by remember { mutableStateOf("") }
+    var workMode by remember { mutableStateOf("") }
     var designationName by remember { mutableStateOf("") }
     var branchName by remember { mutableStateOf("") }
     var departmentName by remember { mutableStateOf("") }
@@ -54,10 +55,11 @@ fun ViewEmploymentDetailScreen(
             is EmploymentDetailOutcome.Success -> {
                 result.employmentDetail?.let { data ->
                     joiningDate = data.joining_date ?: ""
-                    probationPeriodDate = data.probation_period_date ?: ""
-                    trainingCompletionDate = data.training_completion_date ?: ""
-                    jobLocation = data.job_location ?: ""
+                    probationEndDate = data.probation_end_date ?: ""
+                    confirmationDate = data.confirmation_date ?: ""
+                    workLocation = data.work_location ?: ""
                     employmentType = data.employment_type ?: ""
+                    workMode = data.work_mode ?: ""
                     designationName = data.designation_name ?: ""
                     branchName = data.branch_name ?: ""
                     departmentName = data.department_name ?: ""
@@ -154,10 +156,11 @@ fun ViewEmploymentDetailScreen(
                             HorizontalDivider()
 
                             DetailRow("Joining Date", joiningDate)
-                            DetailRow("Probation Period Date", probationPeriodDate)
-                            DetailRow("Training Completion Date", trainingCompletionDate)
-                            DetailRow("Job Location", jobLocation)
+                            DetailRow("Probation End Date", probationEndDate)
+                            DetailRow("Confirmation Date", confirmationDate)
+                            DetailRow("Work Location", workLocation)
                             DetailRow("Employment Type", formatEmploymentType(employmentType))
+                            DetailRow("Work Mode", formatEmploymentType(workMode))
                             DetailRow("Designation", designationName)
                             DetailRow("Branch", branchName)
                             DetailRow("Department", departmentName)

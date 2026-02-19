@@ -14,7 +14,21 @@
       "Bash(taskkill:*)",
       "Bash(python:*)",
       "Bash(pip install:*)",
-      "Bash(del \"D:\\\\android\\\\Teamozy\\\\app\\\\src\\\\main\\\\res\\\\drawable\\\\ic_notification.xml\")"
+      "Bash(del \"D:\\\\android\\\\Teamozy\\\\app\\\\src\\\\main\\\\res\\\\drawable\\\\ic_notification.xml\")",
+      "WebFetch(domain:github.com)",
+      "Bash(.\\\\gradlew.bat:*)",
+      "Bash(cmd /c \"cd /d G:\\\\Teamozy && gradlew.bat :app:assembleDebug 2>&1\")",
+      "Bash(cmd /c \"cd /d G:\\\\Teamozy && G:\\\\Teamozy\\\\gradlew.bat :app:assembleDebug\")",
+      "Bash(cmd.exe /c \"gradlew.bat :app:assembleDebug 2>&1\")",
+      "Bash(bash -c:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell.exe -Command \"& {cd G:\\\\Teamozy; .\\\\gradlew.bat :app:assembleDebug 2>&1}\")",
+      "Bash(powershell.exe:*)",
+      "Bash(JAVA_HOME=\"C:/Program Files/Android/Android Studio/jbr\" G:/Teamozy/gradlew:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(cmd /c:*)"
     ]
   }
 }

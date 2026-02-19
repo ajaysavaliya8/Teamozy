@@ -4,19 +4,31 @@ package com.hrms.jeejateamozy.feature.profile.data
  * Contact Info Response
  */
 data class ContactInfoResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
     val data: ContactInfoData? = null
 )
 
 data class ContactInfoData(
-    val country_code: Int?,
-    val alternate_phone_number: Long?,
-    val emergency_phone_number: Long?,
-    val whatsapp_number: Long?,
-    val company_phone_number: Long?,
-    val current_address: String?,
-    val permanent_address: String?
+    val personal_mobile: String?,
+    val alternate_mobile: String?,
+    val whatsapp_number: String?,
+    val personal_email: String?,
+    val company_email: String?,
+    val emergency_contact_name: String?,
+    val emergency_contact_relationship: String?,
+    val emergency_contact_number: String?,
+    val current_address: AddressData?,
+    val same_as_current: Boolean?,
+    val permanent_address: AddressData?
+)
+
+data class AddressData(
+    val address_line: String?,
+    val city: String?,
+    val state: String?,
+    val country: String?,
+    val postal_code: String?
 )
 
 /**

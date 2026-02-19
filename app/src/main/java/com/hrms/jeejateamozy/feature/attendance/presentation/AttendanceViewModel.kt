@@ -124,6 +124,11 @@ class AttendanceViewModel(
                         acknowledgmentNote = null
                     )
 
+                    // Pre-warm GPS so check-in/check-out button responds instantly
+                    if (context != null) {
+                        try { LocationHelper(context).warmUpGps() } catch (_: Exception) {}
+                    }
+
                     // ==========================================
                     // AUTO-START LOCATION TRACKING ON APP RESTART
                     // ==========================================
@@ -189,14 +194,20 @@ class AttendanceViewModel(
 
     fun startCheckIn(context: Context) {
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(isLoading = true)
+            _ui.value = _ui.value.copy(isLoading = true, loadingMessage = "Location fetching...")
 
             when (val locResult = LocationHelper(context).getCurrentLocation()) {
                 is LocationResult.Success -> {
+                    if (locResult.isMocked) {
+                        _ui.value = _ui.value.copy(isLoading = false, loadingMessage = null)
+                        emitError("Fake GPS detected. Please disable mock location apps.")
+                        return@launch
+                    }
+                    _ui.value = _ui.value.copy(loadingMessage = null)
                     performCheckIn(locResult.latitude, locResult.longitude, context)
                 }
                 is LocationResult.Error -> {
-                    _ui.value = _ui.value.copy(isLoading = false)
+                    _ui.value = _ui.value.copy(isLoading = false, loadingMessage = null)
                     emitError(locResult.message)
                 }
             }
@@ -271,14 +282,20 @@ class AttendanceViewModel(
 
     fun startCheckOut(context: Context) {
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(isLoading = true)
+            _ui.value = _ui.value.copy(isLoading = true, loadingMessage = "Location fetching...")
 
             when (val locResult = LocationHelper(context).getCurrentLocation()) {
                 is LocationResult.Success -> {
+                    if (locResult.isMocked) {
+                        _ui.value = _ui.value.copy(isLoading = false, loadingMessage = null)
+                        emitError("Fake GPS detected. Please disable mock location apps.")
+                        return@launch
+                    }
+                    _ui.value = _ui.value.copy(loadingMessage = null)
                     performCheckOut(locResult.latitude, locResult.longitude, context)
                 }
                 is LocationResult.Error -> {
-                    _ui.value = _ui.value.copy(isLoading = false)
+                    _ui.value = _ui.value.copy(isLoading = false, loadingMessage = null)
                     emitError(locResult.message)
                 }
             }
@@ -293,7 +310,7 @@ class AttendanceViewModel(
                     isLoading = false,
                     checkOutTToken = outcome.tToken,
                     checkOutMinimumQualityScore = outcome.minimumQualityScore,
-                    checkOutWorkHours = outcome.workHours,
+                    checkOutWorkMinutes = outcome.workMinutes,
                     checkOutIsEarly = outcome.isEarly,
                     checkOutIsOutOfRange = outcome.isOutOfRange,
                     checkOutEarlyReasonRequired = outcome.earlyReasonRequired,
@@ -310,7 +327,7 @@ class AttendanceViewModel(
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     checkOutTToken = outcome.tToken,
-                    checkOutWorkHours = outcome.workHours,
+                    checkOutWorkMinutes = outcome.workMinutes,
                     checkOutIsEarly = outcome.isEarly,
                     checkOutIsOutOfRange = outcome.isOutOfRange,
                     checkOutEarlyReasonRequired = outcome.earlyReasonRequired,
@@ -370,8 +387,12 @@ class AttendanceViewModel(
         }
     }
 
-    fun onPendingMessageDismissed() {
+    fun onPendingMessageDismissed(context: Context? = null) {
         Log.d(TAG, "❌ Message cancelled - stopping check-in process")
+
+        // Re-warm GPS so the next attempt is fast
+        context?.let { try { LocationHelper(it).warmUpGps() } catch (_: Exception) {} }
+
         _ui.value = _ui.value.copy(
             isLoading = false,
             showPendingMessageDialog = false,
@@ -392,8 +413,11 @@ class AttendanceViewModel(
         emitError("Check-in cancelled")
     }
 
-    fun onFaceVerificationCancelled() {
+    fun onFaceVerificationCancelled(context: Context? = null) {
         Log.d(TAG, "❌ Face verification cancelled - stopping process")
+
+        // Re-warm GPS so the next attempt is fast
+        context?.let { try { LocationHelper(it).warmUpGps() } catch (_: Exception) {} }
 
         val isCheckIn = _ui.value.checkInTToken != null
 
@@ -426,7 +450,7 @@ class AttendanceViewModel(
                 checkOutFaceVector = null,
                 checkOutMessage = null,
                 checkOutMinimumQualityScore = null,
-                checkOutWorkHours = null,
+                checkOutWorkMinutes = null,
                 checkOutIsEarly = false,
                 checkOutIsOutOfRange = false,
                 checkOutEarlyReasonRequired = false,
@@ -493,6 +517,11 @@ class AttendanceViewModel(
             // Get fresh GPS location
             when (val locResult = LocationHelper(context).getCurrentLocation()) {
                 is LocationResult.Success -> {
+                    if (locResult.isMocked) {
+                        _ui.value = _ui.value.copy(isReverifying = false)
+                        emitError("Fake GPS detected. Please disable mock location apps.")
+                        return@launch
+                    }
                     when (val outcome = repo.locationReverify(tToken, locResult.latitude, locResult.longitude)) {
                         is LocationReverifyOutcome.Success -> {
                             Log.d(TAG, "✅ Location reverify success: ${outcome.message}")
@@ -534,11 +563,15 @@ class AttendanceViewModel(
         }
     }
 
-    fun onReasonDialogDismissed() {
+    fun onReasonDialogDismissed(context: Context? = null) {
+        // Re-warm GPS so the next attempt is fast
+        context?.let { try { LocationHelper(it).warmUpGps() } catch (_: Exception) {} }
         _ui.value = _ui.value.copy(showReasonDialog = false)
     }
 
-    fun onWorkReportDialogDismissed() {
+    fun onWorkReportDialogDismissed(context: Context? = null) {
+        // Re-warm GPS so the next attempt is fast
+        context?.let { try { LocationHelper(it).warmUpGps() } catch (_: Exception) {} }
         _ui.value = _ui.value.copy(showWorkReportDialog = false)
     }
 
@@ -693,7 +726,7 @@ class AttendanceViewModel(
                         )
                         emitError(outcome.message)
                         delay(500)
-                        refreshStatus(force = true)
+                        refreshStatus(force = true, context = context)
                     }
                 }
 
@@ -881,7 +914,7 @@ class AttendanceViewModel(
                         )
                         emitError(outcome.message)
                         delay(500)
-                        refreshStatus(force = true)
+                        refreshStatus(force = true, context = context)
                     }
                 }
 
@@ -952,7 +985,7 @@ data class AttendanceUiState(
 
     val checkOutTToken: String? = null,
     val checkOutMinimumQualityScore: Float? = null,
-    val checkOutWorkHours: Float? = null,
+    val checkOutWorkMinutes: Int? = null,
     val checkOutIsEarly: Boolean = false,
     val checkOutIsOutOfRange: Boolean = false,
     val checkOutEarlyReasonRequired: Boolean = false,

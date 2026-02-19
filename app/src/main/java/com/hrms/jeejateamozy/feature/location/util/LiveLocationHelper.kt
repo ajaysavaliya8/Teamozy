@@ -18,6 +18,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.hrms.jeejateamozy.BuildConfig
 import com.hrms.jeejateamozy.feature.location.model.LocationData
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
@@ -33,7 +34,10 @@ class LiveLocationHelper(private val context: Context) {
 
     companion object {
         private const val TAG = "LiveLocationHelper"
-        private const val LOCATION_TIMEOUT_MS = 10_000L
+        private const val LOCATION_TIMEOUT_MS = 15_000L
+        private const val MAX_ACCURACY_METERS = 15f
+        private const val MAX_RETRIES = 3
+        private const val RETRY_DELAY_MS = 2_000L
     }
 
     private val fusedLocationClient: FusedLocationProviderClient by lazy {
@@ -49,19 +53,54 @@ class LiveLocationHelper(private val context: Context) {
         Log.d(TAG, "📍 Capturing live location...")
 
         return try {
-            // Get fresh location with timeout
-            val location = withTimeoutOrNull(LOCATION_TIMEOUT_MS) {
-                getFreshLocation()
+            // Try up to MAX_RETRIES times to get an accurate location
+            var bestLocation: Location? = null
+
+            for (attempt in 1..MAX_RETRIES) {
+                Log.d(TAG, "📍 Location attempt $attempt/$MAX_RETRIES")
+
+                val location = withTimeoutOrNull(LOCATION_TIMEOUT_MS) {
+                    getFreshLocation()
+                }
+
+                if (location != null && location.latitude != 0.0 && location.longitude != 0.0) {
+                    // Keep the best (most accurate) location
+                    if (bestLocation == null || location.accuracy < bestLocation!!.accuracy) {
+                        bestLocation = location
+                    }
+
+                    // If accuracy is good enough, stop retrying
+                    if (location.accuracy in 1f..MAX_ACCURACY_METERS) {
+                        Log.d(TAG, "✅ Got accurate location on attempt $attempt: accuracy=${location.accuracy}m")
+                        break
+                    }
+
+                    Log.w(TAG, "⚠️ Attempt $attempt: accuracy=${location.accuracy}m (need <${MAX_ACCURACY_METERS}m)")
+                }
+
+                if (attempt < MAX_RETRIES) delay(RETRY_DELAY_MS)
             }
 
+            val location = bestLocation
             if (location == null) {
-                Log.e(TAG, "❌ Location timeout")
+                Log.e(TAG, "❌ Location timeout after $MAX_RETRIES attempts")
                 return LiveLocationResult.Error("Unable to get location (timeout)")
             }
 
-            if (location.latitude == 0.0 && location.longitude == 0.0) {
-                Log.e(TAG, "❌ Invalid location coordinates")
-                return LiveLocationResult.Error("Unable to get valid location")
+            if (location.accuracy > MAX_ACCURACY_METERS) {
+                Log.w(TAG, "⚠️ Best accuracy=${location.accuracy}m exceeds ${MAX_ACCURACY_METERS}m limit")
+            }
+
+            // Check for mock/fake GPS
+            val isMocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                location.isMock
+            } else {
+                @Suppress("DEPRECATION")
+                location.isFromMockProvider
+            }
+            if (isMocked) {
+                Log.e(TAG, "🚫 Mock location detected!")
+                return LiveLocationResult.Error("Fake GPS detected. Please disable mock location apps.")
             }
 
             // Collect all device metadata (with safe handling for missing permissions)

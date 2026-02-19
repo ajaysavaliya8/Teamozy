@@ -170,8 +170,13 @@ fun ProfileScreen(
 
                         if (response.isSuccessful) {
                             val responseBody = response.body()
-                            val message = responseBody?.message ?: "Face registered successfully!"
-                            faceRegistrationResult = FaceRegistrationResult.Success(message)
+                            if (responseBody?.success == true) {
+                                val message = responseBody.message ?: "Face registered successfully!"
+                                faceRegistrationResult = FaceRegistrationResult.Success(message)
+                            } else {
+                                val message = responseBody?.message ?: "Failed to register face"
+                                faceRegistrationResult = FaceRegistrationResult.Error(message)
+                            }
                         } else {
                             val message = try {
                                 response.errorBody()?.string() ?: response.message()

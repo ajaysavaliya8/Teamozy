@@ -36,7 +36,8 @@ class AttendanceHistoryRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    Log.d("TIMESHEET", "responseBody null? ${responseBody == null}, success=${responseBody?.success}, days=${responseBody?.data?.calendar_days?.size}")
+                    if (responseBody?.success == true) {
                         val data = responseBody.data
                         val timesheet = MonthlyTimesheet(
                             month = data.month,
@@ -45,8 +46,10 @@ class AttendanceHistoryRepository(private val context: Context) {
                             calendarDays = data.calendar_days.map { it.toDomain() },
                             summary = data.summary.toDomain()
                         )
+                        Log.d("TIMESHEET", "Parsed ${timesheet.calendarDays.size} calendar days for ${timesheet.monthName}")
                         MonthlyTimesheetOutcome.Success(timesheet = timesheet)
                     } else {
+                        Log.e("TIMESHEET", "success was not true: ${responseBody?.success}")
                         MonthlyTimesheetOutcome.Error("Failed to fetch monthly timesheet")
                     }
                 }
@@ -79,7 +82,7 @@ class AttendanceHistoryRepository(private val context: Context) {
                 when {
                     response.isSuccessful && response.code() == 200 -> {
                         val responseBody = response.body()
-                        if (responseBody?.status == "success") {
+                        if (responseBody?.success == true) {
                             val data = responseBody.data
                             val timesheet = data.toDomain()
                             DayTimesheetOutcome.Success(timesheet = timesheet)

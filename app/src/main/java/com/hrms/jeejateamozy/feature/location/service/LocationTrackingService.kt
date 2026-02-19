@@ -84,15 +84,14 @@ class LocationTrackingService : Service() {
         // Broadcast action for UI refresh (when stop_tracking is received)
         const val ACTION_REFRESH_CHECK_STATUS = "com.hrms.jeejateamozy.ACTION_REFRESH_CHECK_STATUS"
 
-        // Timing - TESTING VALUES (reduce for production)
-        private const val LOCATION_INTERVAL_MS = 30_000L      // 30 seconds (testing)
-        private const val LOCATION_FASTEST_MS = 15_000L       // 15 seconds minimum
-        private const val SYNC_INTERVAL_MS = 60_000L          // 1 minute (testing) - change to 5 min for production
-        private const val SYNC_THRESHOLD_COUNT = 10           // Sync when 10+ locations pending (testing)
+        // Timing - Production values
+        private const val LOCATION_INTERVAL_MS = 60_000L      // 60 seconds
+        private const val LOCATION_FASTEST_MS = 30_000L       // 30 seconds minimum
+        private const val SYNC_INTERVAL_MS = 300_000L         // 5 minutes
+        private const val SYNC_THRESHOLD_COUNT = 50            // Sync when 50+ locations pending
 
-//        private const val LOCATION_INTERVAL_MS = 60_000L      // 60 seconds
-//        private const val SYNC_INTERVAL_MS = 300_000L         // 5 minutes
-//        private const val SYNC_THRESHOLD_COUNT = 50           // 50 locations
+        // Accuracy filter - discard junk readings
+        private const val MAX_TRACKING_ACCURACY_METERS = 100f
 
         // GPS disabled check interval
         private const val GPS_CHECK_INTERVAL_MS = 30_000L     // Check every 30 seconds when GPS is disabled
@@ -442,6 +441,12 @@ class LocationTrackingService : Service() {
             override fun onLocationResult(result: LocationResult) {
                 result.lastLocation?.let { location ->
                     Log.d(TAG, "📍 Location received: lat=${location.latitude}, lng=${location.longitude}, acc=${location.accuracy}m")
+
+                    // Discard junk readings with very poor accuracy
+                    if (location.accuracy > MAX_TRACKING_ACCURACY_METERS) {
+                        Log.w(TAG, "⚠️ Discarding location: accuracy=${location.accuracy}m exceeds ${MAX_TRACKING_ACCURACY_METERS}m limit")
+                        return
+                    }
 
                     serviceScope.launch {
                         saveLocation(location)

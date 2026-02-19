@@ -5,7 +5,9 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.ApiService
-import com.hrms.jeejateamozy.core.network.BasicResponse
+import com.hrms.jeejateamozy.core.network.AuthResponse
+import com.hrms.jeejateamozy.core.network.LoginResponse
+import com.hrms.jeejateamozy.core.network.ResetOtpResponse
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import com.google.firebase.messaging.FirebaseMessaging
@@ -19,23 +21,23 @@ import retrofit2.Response
 // AUTH OUTCOME SEALED CLASS
 // ============================================
 
-/**
- * Sealed class representing authentication operation outcomes
- */
 sealed class AuthOutcome {
     data class Success(val message: String) : AuthOutcome()
     data class Error(val message: String) : AuthOutcome()
     data class DeviceNotRegistered(val message: String) : AuthOutcome()
-    data class UpdateRequired(val message: String) : AuthOutcome() // For 426 status
+    data class UpdateRequired(val message: String) : AuthOutcome()
+}
+
+sealed class ResetOutcome {
+    data class Success(val message: String) : ResetOutcome()
+    data class Error(val message: String) : ResetOutcome()
+    data class TokenReceived(val resetToken: String, val message: String) : ResetOutcome()
 }
 
 // ============================================
 // AUTH REPOSITORY
 // ============================================
 
-/**
- * ✅ UPDATED: Now fetches FCM token inline if not available
- */
 class AuthRepository(
     private val api: ApiService,
     private val pm: PreferencesManager,
@@ -46,46 +48,31 @@ class AuthRepository(
         return Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown_device"
     }
 
-    /**
-     * Get device manufacturer (e.g., Samsung, Google, Xiaomi)
-     */
     private fun getDeviceManufacturer(): String {
         return Build.MANUFACTURER.replaceFirstChar { it.uppercaseChar() }
     }
 
-    /**
-     * Get device model (e.g., Galaxy S21, Pixel 6)
-     */
     private fun getDeviceModel(): String {
         return Build.MODEL
     }
 
-    /**
-     * Get Android OS version (e.g., Android 13, Android 11)
-     */
     private fun getDeviceOSVersion(): String {
         return "Android ${Build.VERSION.RELEASE}"
     }
 
-    /**
-     * ✅ NEW: Get FCM token - fetch from preferences or Firebase if not available
-     * This ensures FCM token is always available during login
-     */
     private suspend fun getFcmToken(): String? {
-        // First check if we already have it in preferences
         var token = pm.fcmToken
 
         if (token.isNullOrBlank()) {
-            Log.d("AUTH", "⚠️ FCM token not in preferences, fetching from Firebase...")
+            Log.d("AUTH", "FCM token not in preferences, fetching from Firebase...")
             try {
                 token = FirebaseMessaging.getInstance().token.await()
                 if (!token.isNullOrBlank()) {
                     pm.fcmToken = token
-                    Log.d("AUTH", "✅ FCM token fetched and saved: ${token.take(30)}...")
+                    Log.d("AUTH", "FCM token fetched and saved: ${token.take(30)}...")
                 }
             } catch (e: Exception) {
-                Log.e("AUTH", "❌ Failed to get FCM token from Firebase", e)
-                // Don't fail login if FCM token fetch fails
+                Log.e("AUTH", "Failed to get FCM token from Firebase", e)
                 token = null
             }
         }
@@ -93,10 +80,6 @@ class AuthRepository(
         return token
     }
 
-    /**
-     * Extract error message from response
-     * ✅ SIMPLIFIED: Now using NetworkErrorHandler
-     */
     private fun extractMessage(res: Response<*>): String {
         return NetworkErrorHandler.extractErrorMessage(res, res.message())
     }
@@ -112,19 +95,18 @@ class AuthRepository(
             val res = api.sendLogin(mobileNumber = phone.toLong(), deviceId = deviceId)
             Log.d("NET", "sendLogin -> code=${res.code()}")
 
-            // Handle both 409 and 426 status codes
             when (res.code()) {
                 409 -> {
                     val msg = extractMessage(res)
-                    Log.d("AUTH", "⚠️ Device not registered: $msg")
+                    Log.d("AUTH", "Device not registered: $msg")
                     AuthOutcome.DeviceNotRegistered(msg)
                 }
                 426 -> {
                     val msg = extractMessage(res)
-                    Log.d("AUTH", "⚠️ Update required: $msg")
+                    Log.d("AUTH", "Update required: $msg")
                     AuthOutcome.UpdateRequired(msg)
                 }
-                else -> toOutcome(res, requireToken = false)
+                else -> toAuthOutcome(res)
             }
         } catch (e: Exception) {
             Log.e("AUTH", "sendLoginCode error", e)
@@ -132,22 +114,16 @@ class AuthRepository(
         }
     }
 
-    // Alias for backward compatibility
     suspend fun sendOtp(phone: String): AuthOutcome = sendLoginCode(phone)
 
     /**
-     * Login with password - includes FCM token
-     * ✅ UPDATED: Now fetches FCM token inline if not available
+     * Login with password
      */
     suspend fun loginWithPassword(phone: String, password: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val deviceId = androidId()
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
-
-            // ✅ UPDATED: Get FCM token - fetch from Firebase if not in preferences
             val fcmToken = getFcmToken()
-
-            // Get device information
             val deviceManufacturer = getDeviceManufacturer()
             val deviceModel = getDeviceModel()
             val deviceOsVersion = getDeviceOSVersion()
@@ -180,7 +156,7 @@ class AuthRepository(
                     val msg = extractMessage(res)
                     AuthOutcome.UpdateRequired(msg)
                 }
-                else -> toOutcome(res, requireToken = true)
+                else -> toLoginOutcome(res)
             }
         } catch (e: Exception) {
             Log.e("AUTH", "loginWithPassword error", e)
@@ -189,18 +165,13 @@ class AuthRepository(
     }
 
     /**
-     * Login with OTP - includes FCM token
-     * ✅ UPDATED: Now fetches FCM token inline if not available
+     * Login with OTP
      */
     suspend fun loginWithOtp(phone: String, otp: String): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val deviceId = androidId()
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
-
-            // ✅ UPDATED: Get FCM token - fetch from Firebase if not in preferences
             val fcmToken = getFcmToken()
-
-            // Get device information
             val deviceManufacturer = getDeviceManufacturer()
             val deviceModel = getDeviceModel()
             val deviceOsVersion = getDeviceOSVersion()
@@ -233,7 +204,7 @@ class AuthRepository(
                     val msg = extractMessage(res)
                     AuthOutcome.UpdateRequired(msg)
                 }
-                else -> toOutcome(res, requireToken = true)
+                else -> toLoginOutcome(res)
             }
         } catch (e: Exception) {
             Log.e("AUTH", "loginWithOtp error", e)
@@ -248,10 +219,7 @@ class AuthRepository(
         return@withContext try {
             val token = pm.authToken ?: return@withContext AuthOutcome.Error("No token found")
 
-            // Use the app version from BuildConfig
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
-
-            // Get FCM token to keep it fresh on backend
             val fcmToken = pm.fcmToken
 
             val res = api.verifyToken(appVersion, fcmToken)
@@ -260,20 +228,18 @@ class AuthRepository(
             when (res.code()) {
                 426 -> {
                     val msg = extractMessage(res)
-                    Log.d("AUTH", "⚠️ Update required during token verification: $msg")
+                    Log.d("AUTH", "Update required during token verification: $msg")
                     AuthOutcome.UpdateRequired(msg)
                 }
                 else -> {
-                    // Handle VerifyTokenResponse directly (not BasicResponse)
                     if (res.isSuccessful && res.code() == 200) {
                         val body = res.body()
-                        if (body?.status == "success") {
+                        if (body?.success == true) {
                             AuthOutcome.Success(body.message ?: "Token verified")
                         } else {
                             AuthOutcome.Error(body?.message ?: "Token verification failed")
                         }
                     } else {
-                        // Extract error message from response
                         val errorMessage = extractMessage(res)
                         AuthOutcome.Error(errorMessage)
                     }
@@ -294,7 +260,7 @@ class AuthRepository(
             val res = api.sendChangeDeviceOtp(mobileNumber = phone.toLong())
             Log.d("NET", "sendChangeDeviceOtp -> code=${res.code()}")
 
-            toOutcome(res, requireToken = false)
+            toAuthOutcome(res)
         } catch (e: Exception) {
             Log.e("AUTH", "sendChangeDeviceOtp error", e)
             AuthOutcome.Error(e.message ?: "Failed to send change device OTP")
@@ -303,7 +269,6 @@ class AuthRepository(
 
     /**
      * Request device change
-     * NOTE: This endpoint returns DeviceChangeResponse (with "detail" field), not BasicResponse
      */
     suspend fun requestChangeDevice(
         phone: String,
@@ -333,11 +298,10 @@ class AuthRepository(
             )
             Log.d("NET", "requestChangeDevice -> code=${res.code()}")
 
-            // Handle DeviceChangeResponse (has "detail" field, not "message")
             if (res.isSuccessful && res.code() == 200) {
                 val body = res.body()
                 val msg = body?.detail ?: "Device change request submitted successfully"
-                Log.d("AUTH", "✅ Device change request successful: $msg")
+                Log.d("AUTH", "Device change request successful: $msg")
                 AuthOutcome.Success(msg)
             } else {
                 val errorMessage = try {
@@ -347,13 +311,12 @@ class AuthRepository(
                     } else {
                         val gson = Gson()
                         val map = gson.fromJson(errBody, Map::class.java)
-                        // Try "detail" field first (DeviceChangeResponse), then "message"
                         map["detail"]?.toString() ?: map["message"]?.toString() ?: res.message()
                     }
                 } catch (e: Exception) {
                     res.message()
                 }
-                Log.e("AUTH", "❌ Device change request failed: $errorMessage")
+                Log.e("AUTH", "Device change request failed: $errorMessage")
                 AuthOutcome.Error(errorMessage)
             }
         } catch (e: Exception) {
@@ -364,13 +327,12 @@ class AuthRepository(
 
     /**
      * Logout user and optionally clear push notification tokens
-     * @param clearPushToken If true, clears FCM tokens from backend
      */
     suspend fun logout(clearPushToken: Boolean = true): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val deviceId = androidId()
 
-            Log.d("AUTH", "🚪 Logging out - deviceId: $deviceId, clearPushToken: $clearPushToken")
+            Log.d("AUTH", "Logging out - deviceId: $deviceId, clearPushToken: $clearPushToken")
 
             val res = api.logout(
                 deviceId = deviceId,
@@ -383,9 +345,8 @@ class AuthRepository(
                 val body = res.body()
                 val msg = body?.message ?: "Logged out successfully"
 
-                // Clear local preferences
                 pm.clearAll()
-                Log.d("AUTH", "✅ Local preferences cleared")
+                Log.d("AUTH", "Local preferences cleared")
 
                 AuthOutcome.Success(msg)
             } else {
@@ -393,44 +354,152 @@ class AuthRepository(
             }
         } catch (e: Exception) {
             Log.e("AUTH", "logout error", e)
-            // Even if API call fails, clear local preferences
             pm.clearAll()
             AuthOutcome.Error(e.message ?: "Logout failed")
         }
     }
 
     /**
-     * Convert API response to AuthOutcome
+     * Send forgot password OTP
      */
-    private fun toOutcome(res: Response<BasicResponse>, requireToken: Boolean): AuthOutcome {
+    suspend fun forgotPassword(phone: String): AuthOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("AUTH", "forgotPassword - phone: $phone")
+            val res = api.forgotPassword(number = phone.toLong())
+            Log.d("NET", "forgotPassword -> code=${res.code()}")
+            toAuthOutcome(res)
+        } catch (e: Exception) {
+            Log.e("AUTH", "forgotPassword error", e)
+            AuthOutcome.Error(e.message ?: "Failed to send reset OTP")
+        }
+    }
+
+    /**
+     * Verify reset OTP and receive reset token
+     */
+    suspend fun verifyResetOtp(phone: String, otp: String): ResetOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("AUTH", "verifyResetOtp - phone: $phone")
+            val res = api.verifyResetOtp(number = phone.toLong(), otp = otp)
+            Log.d("NET", "verifyResetOtp -> code=${res.code()}")
+            toResetOtpOutcome(res)
+        } catch (e: Exception) {
+            Log.e("AUTH", "verifyResetOtp error", e)
+            ResetOutcome.Error(e.message ?: "OTP verification failed")
+        }
+    }
+
+    /**
+     * Reset password using reset token
+     */
+    suspend fun resetPassword(
+        resetToken: String,
+        newPassword: String,
+        confirmPassword: String
+    ): AuthOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("AUTH", "resetPassword")
+            val res = api.resetPassword(
+                resetToken = resetToken,
+                newPassword = newPassword,
+                confirmPassword = confirmPassword
+            )
+            Log.d("NET", "resetPassword -> code=${res.code()}")
+            toAuthOutcome(res)
+        } catch (e: Exception) {
+            Log.e("AUTH", "resetPassword error", e)
+            AuthOutcome.Error(e.message ?: "Password reset failed")
+        }
+    }
+
+    /**
+     * Convert AuthResponse (send-login, send-change-device-otp) to AuthOutcome
+     */
+    private fun toAuthOutcome(res: Response<AuthResponse>): AuthOutcome {
+        return if (res.isSuccessful && res.code() == 200) {
+            val body = res.body()
+            if (body?.success == true) {
+                AuthOutcome.Success(body.message ?: "Success")
+            } else {
+                AuthOutcome.Error(body?.message ?: "Request failed")
+            }
+        } else {
+            AuthOutcome.Error(extractMessage(res))
+        }
+    }
+
+    /**
+     * Convert ResetOtpResponse to ResetOutcome
+     */
+    private fun toResetOtpOutcome(res: Response<ResetOtpResponse>): ResetOutcome {
+        return if (res.isSuccessful && res.code() == 200) {
+            val body = res.body()
+            if (body?.success == true && body.data != null) {
+                ResetOutcome.TokenReceived(
+                    resetToken = body.data.reset_token,
+                    message = body.message ?: "OTP verified"
+                )
+            } else {
+                ResetOutcome.Error(body?.message ?: "OTP verification failed")
+            }
+        } else {
+            ResetOutcome.Error(extractMessage(res))
+        }
+    }
+
+    /**
+     * Convert LoginResponse (verify-login) to AuthOutcome and save user data
+     */
+    private fun toLoginOutcome(res: Response<LoginResponse>): AuthOutcome {
         return if (res.isSuccessful && res.code() == 200) {
             val body = res.body()
             val msg = body?.message ?: "Success"
 
-            if (requireToken && body?.token.isNullOrBlank()) {
+            if (body?.success != true) {
+                return AuthOutcome.Error(body?.message ?: "Login failed")
+            }
+
+            val data = body.data
+            if (data?.token.isNullOrBlank()) {
                 return AuthOutcome.Error("Token missing in response")
             }
 
-            // Save authentication data during login
-            if (requireToken && !body?.token.isNullOrBlank()) {
-                val deviceId = androidId()
+            val deviceId = androidId()
 
-                // Save token
-                pm.authToken = body?.token
-                Log.d("AUTH", "✅ Token saved")
+            // Save token & device
+            pm.authToken = data?.token
+            pm.deviceId = deviceId
+            Log.d("AUTH", "Token and device ID saved")
 
-                // Save device ID
-                pm.deviceId = deviceId
-                Log.d("AUTH", "✅ Device ID saved: $deviceId")
+            // Save employee info
+            data?.mobile_number?.let { pm.mobileNumber = it }
+            data?.full_name?.let { pm.fullName = it }
+            data?.profile_url?.let { pm.profileUrl = it }
+            data?.branch_name?.let { pm.branchName = it }
+            data?.department_name?.let { pm.departmentName = it }
+            data?.shift_name?.let { pm.shiftName = it }
 
-                // Save profile and company info if available
-                body.profile_url?.let { pm.profileUrl = it }
-                body.full_name?.let { pm.fullName = it }
-                body.company_name?.let { pm.companyName = it }
-                body.company_logo_url?.let { pm.companyLogoUrl = it }
+            // Save social media
+            data?.facebook?.let { pm.facebook = it }
+            data?.linkedin?.let { pm.linkedin = it }
+            data?.x?.let { pm.x = it }
+            data?.instagram?.let { pm.instagram = it }
+            data?.snapchat?.let { pm.snapchat = it }
 
-                Log.d("AUTH", "✅ Login successful - all data saved")
-            }
+            // Save company info
+            data?.company_name?.let { pm.companyName = it }
+            data?.company_address?.let { pm.companyAddress = it }
+            data?.company_email?.let { pm.companyEmail = it }
+            data?.company_contact?.let { pm.companyContact = it }
+            data?.company_website?.let { pm.companyWebsite = it }
+            data?.company_logo_url?.let { pm.companyLogoUrl = it }
+
+            // Save support info
+            data?.hr_email?.let { pm.hrEmail = it }
+            data?.technical_support_number?.let { pm.technicalSupportNumber = it }
+            data?.technical_support_email?.let { pm.technicalSupportEmail = it }
+
+            Log.d("AUTH", "Login successful - all data saved")
 
             AuthOutcome.Success(msg)
         } else {

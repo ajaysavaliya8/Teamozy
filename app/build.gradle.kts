@@ -16,8 +16,8 @@ android {
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.2.0"
+        versionCode = 22
+        versionName = "1.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -38,6 +38,7 @@ android {
             }
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -103,9 +104,9 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.0")
 
     // Room database for local storage
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 

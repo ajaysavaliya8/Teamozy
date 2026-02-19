@@ -314,7 +314,7 @@ private fun CalendarGrid(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        CalendarLegend()
+        CalendarLegend(days = days)
     }
 }
 
@@ -328,33 +328,12 @@ private fun CalendarDayItem(
         return
     }
 
-    val hasAttendance = day.status.isNotEmpty() && day.status != "NO_DATA"
+    val parsedColor = remember(day.color) { parseHexColor(day.color) }
+    val hasColor = parsedColor != Color.Transparent
 
-    val backgroundColor = when {
-        day.status == "PRESENT" -> Color(0xFF4CAF50)
-        day.status == "ABSENT" || day.status == "LEAVE" -> Color(0xFFF44336)
-        day.status == "PENDING" -> Color(0xFFFFEB3B)
-        day.hasIrregularity -> Color(0xFFFF9800)
-        day.color == "green" -> Color(0xFF4CAF50)
-        day.color == "red" -> Color(0xFFF44336)
-        day.color == "yellow" -> Color(0xFFFFEB3B)
-        day.color == "orange" -> Color(0xFFFF9800)
-        else -> Color.Transparent
-    }
-
-    val borderColor = when {
-        day.status == "PRESENT" -> Color(0xFF388E3C)
-        day.status == "ABSENT" || day.status == "LEAVE" -> Color(0xFFD32F2F)
-        day.status == "PENDING" -> Color(0xFFFBC02D)
-        day.hasIrregularity -> Color(0xFFE65100)
-        day.color == "green" -> Color(0xFF388E3C)
-        day.color == "red" -> Color(0xFFD32F2F)
-        day.color == "yellow" -> Color(0xFFFBC02D)
-        day.color == "orange" -> Color(0xFFE65100)
-        else -> Color(0xFFE0E0E0)
-    }
-
-    val textColor = if (hasAttendance) Color.White else MaterialTheme.colorScheme.onSurface
+    val backgroundColor = if (hasColor) parsedColor.copy(alpha = 0.15f) else Color.Transparent
+    val borderColor = if (hasColor) parsedColor.copy(alpha = 0.4f) else Color(0xFFE0E0E0)
+    val textColor = Color.Black
 
     Box(
         modifier = Modifier
@@ -372,7 +351,7 @@ private fun CalendarDayItem(
             Text(
                 text = day.day.toString(),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (hasAttendance) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (hasColor) FontWeight.Bold else FontWeight.Normal,
                 color = textColor
             )
 
@@ -389,8 +368,20 @@ private fun CalendarDayItem(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CalendarLegend() {
+private fun CalendarLegend(days: List<CalendarDay>) {
+    // Build legend dynamically from actual calendar data
+    val legendItems = remember(days) {
+        days.filter { it.day > 0 && it.color.isNotBlank() }
+            .map { it.status.replace("_", " ").lowercase()
+                .replaceFirstChar { c -> c.uppercase() } to it.color }
+            .distinctBy { it.second }
+            .sortedBy { it.first }
+    }
+
+    if (legendItems.isEmpty()) return
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -398,26 +389,15 @@ private fun CalendarLegend() {
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Column(
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "Legend",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                LegendItem(color = Color(0xFF4CAF50), label = "Present")
-                LegendItem(color = Color(0xFFF44336), label = "Absent/Leave")
-                LegendItem(color = Color(0xFFFFEB3B), label = "Pending")
-                LegendItem(color = Color(0xFFFF9800), label = "Issues")
+            legendItems.forEach { (label, colorCode) ->
+                LegendItem(color = parseHexColor(colorCode), label = label)
             }
         }
     }
@@ -465,3 +445,13 @@ private fun EmptyCalendarState() {
         }
     }
 }
+
+private fun parseHexColor(hex: String): Color {
+    return try {
+        val colorInt = android.graphics.Color.parseColor(hex)
+        Color(colorInt)
+    } catch (e: Exception) {
+        Color.Transparent
+    }
+}
+

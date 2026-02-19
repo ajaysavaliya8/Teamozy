@@ -64,18 +64,25 @@ class CircularRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
-                        Log.d("CIRCULAR", "Successfully fetched ${responseBody.data.circulars.size} circulars")
+                    if (responseBody?.success == true) {
+                        val circulars = responseBody.data?.map { it.toDomain() } ?: emptyList()
+                        Log.d("CIRCULAR", "Successfully fetched ${circulars.size} circulars")
 
-                        val circulars = responseBody.data.circulars.map { it.toDomain() }
-                        val pagination = responseBody.data.pagination.toDomain()
+                        val pagination = responseBody.pagination?.toDomain() ?: PaginationInfo(
+                            currentPage = page,
+                            pageSize = pageSize,
+                            totalCount = responseBody.total ?: circulars.size,
+                            totalPages = if ((responseBody.total ?: 0) > 0) {
+                                ((responseBody.total ?: 0) + pageSize - 1) / pageSize
+                            } else 1
+                        )
 
                         CircularListOutcome.Success(
                             circulars = circulars,
                             pagination = pagination
                         )
                     } else {
-                        CircularListOutcome.Error("Failed to fetch circulars")
+                        CircularListOutcome.Error(responseBody?.message ?: "Failed to fetch circulars")
                     }
                 }
 
@@ -116,14 +123,14 @@ class CircularRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true && responseBody.data != null) {
                         Log.d("CIRCULAR", "Successfully fetched circular detail")
 
                         val circularDetail = responseBody.data.toDomain()
 
                         CircularDetailOutcome.Success(circular = circularDetail)
                     } else {
-                        CircularDetailOutcome.Error("Failed to fetch circular detail")
+                        CircularDetailOutcome.Error(responseBody?.message ?: "Failed to fetch circular detail")
                     }
                 }
 
@@ -169,14 +176,14 @@ class CircularRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true && responseBody.data != null) {
                         Log.d("CIRCULAR", "Successfully fetched circular stats")
 
                         val stats = responseBody.data.toDomain()
 
                         CircularStatsOutcome.Success(stats = stats)
                     } else {
-                        CircularStatsOutcome.Error("Failed to fetch statistics")
+                        CircularStatsOutcome.Error(responseBody?.message ?: "Failed to fetch statistics")
                     }
                 }
 

@@ -9,11 +9,40 @@ import okhttp3.ResponseBody
 // ========================================
 
 data class BasicResponse(
-    val status: String,           // "success" | "error" | "reject"
-    val message: String? = null,
-    val token: String? = null,    // present on verify-login success
+    val success: Boolean,
+    val message: String? = null
+)
 
-    // ===== Employee Information =====
+// Response for: POST /send-login, POST /send-change-device-otp
+data class AuthResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val error_code: String? = null
+)
+
+// Response for: POST /verify-reset-otp (returns reset_token)
+data class ResetOtpResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val error_code: String? = null,
+    val data: ResetOtpData? = null
+)
+
+data class ResetOtpData(
+    val reset_token: String,
+    val expires_in_minutes: Int
+)
+
+// Response for: POST /verify-login (login data nested in "data")
+data class LoginResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val error_code: String? = null,
+    val data: LoginData? = null
+)
+
+data class LoginData(
+    val token: String? = null,
     val mobile_number: Long? = null,
     val full_name: String? = null,
     val profile_url: String? = null,
@@ -21,14 +50,15 @@ data class BasicResponse(
     val department_name: String? = null,
     val shift_name: String? = null,
 
-    // ===== Social Media Links =====
+    // Social Media
     val facebook: String? = null,
     val linkedin: String? = null,
-    val x: String? = null,  // Twitter/X
+    val x: String? = null,
     val instagram: String? = null,
     val snapchat: String? = null,
+    val tiktok: String? = null,
 
-    // ===== Company Information =====
+    // Company Information
     val company_name: String? = null,
     val company_address: String? = null,
     val company_email: String? = null,
@@ -36,7 +66,7 @@ data class BasicResponse(
     val company_website: String? = null,
     val company_logo_url: String? = null,
 
-    // ===== Support Information =====
+    // Support Information
     val hr_email: String? = null,
     val technical_support_number: String? = null,
     val technical_support_email: String? = null
@@ -58,66 +88,102 @@ data class PushNotificationStatus(
 // ========================================
 
 data class CheckStatusResponse(
-    val status: String,
+    val success: Boolean,
     val message: String? = null,
     val data: CheckStatusData? = null
 )
 
 data class CheckStatusData(
     val current_state: String,
-    val last_check_in_time: String? = null,
     val message: String,
-    val attendance_status: String? = null,
     val is_complete: Boolean? = null,
+    val attendance_status: String? = null,
+    val active_sessions_count: Int? = null,
+    val last_check_in_time: String? = null,
+    val attendance_date: String? = null,
     val check_out_time: String? = null
 )
 
 data class CheckInResponse(
-    val status: String,
+    val success: Boolean,
     val message: String? = null,
+    val data: CheckInData? = null
+)
+
+data class CheckInData(
+    val t_token: String? = null,
     val face_verification_required: Boolean? = null,
     val minimum_quality_score: Float? = null,
-    val t_token: String? = null,
     val face_vector: String? = null,
     val is_late: Boolean? = null,
+    val late_minutes: Int? = null,
     val is_out_of_range: Boolean? = null,
     val late_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
-    val pending_message: PendingMessage? = null
+    val pending_message: PendingMessage? = null,
+    val shift_info: CheckInShiftInfo? = null
+)
+
+data class CheckInShiftInfo(
+    val shift_start: String? = null,
+    val shift_end: String? = null,
+    val crosses_midnight: Boolean? = null,
+    val grace_minutes: Int? = null
 )
 
 data class CheckInSignatureResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
+    val data: CheckInSignatureData? = null
+)
+
+data class CheckInSignatureData(
     val attendance_record_id: Int? = null,
+    val session_id: Int? = null,
     val check_in_time: String? = null,
-    val check_out_time: String? = null
+    val check_out_time: String? = null,
+    val is_new_record: Boolean? = null,
+    val first_location_tracked: Boolean? = null,
+    val location_history_id: Int? = null
 )
 
 data class CheckOutResponse(
-    val status: String,
+    val success: Boolean,
     val message: String? = null,
+    val data: CheckOutData? = null
+)
+
+data class CheckOutData(
+    val t_token: String? = null,
     val face_verification_required: Boolean? = null,
     val minimum_quality_score: Float? = null,
-    val t_token: String? = null,
     val face_vector: String? = null,
-    val work_hours: Float? = null,
     val is_early: Boolean? = null,
+    val early_minutes: Int? = null,
     val is_out_of_range: Boolean? = null,
     val early_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
-    val work_report_require: Boolean? = null
+    val work_report_require: Boolean? = null,
+    val work_minutes: Int? = null
 )
 
 data class CheckOutSignatureResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
+    val data: CheckOutSignatureData? = null
+)
+
+data class CheckOutSignatureData(
+    val attendance_record_id: Int? = null,
+    val session_id: Int? = null,
     val check_out_time: String? = null,
-    val work_hours: Float? = null,
     val work_minutes: Int? = null,
     val attendance_status: String? = null,
-    val early_leave_minutes: Int? = null,
-    val location_violation: Boolean? = null
+    val is_complete: Boolean? = null,
+    val work_report_id: Int? = null,
+    val attachments_count: Int? = null,
+    val last_location_tracked: Boolean? = null,
+    val location_history_id: Int? = null
 )
 
 // ========================================
@@ -125,7 +191,8 @@ data class CheckOutSignatureResponse(
 // ========================================
 
 data class MonthlyTimesheetResponse(
-    val status: String,
+    val success: Boolean,
+    val message: String? = null,
     val data: MonthlyTimesheetData
 )
 
@@ -144,7 +211,7 @@ data class CalendarDayDto(
     val color: String,
     val is_complete: Boolean,
     val has_irregularity: Boolean,
-    val punch_count: Int,
+    val check_count: Int,
     val shift_name: String? = null,
     val is_correction_request_pending: Boolean = false
 ) {
@@ -155,7 +222,7 @@ data class CalendarDayDto(
         color = color,
         isComplete = is_complete,
         hasIrregularity = has_irregularity,
-        punchCount = punch_count,
+        checkCount = check_count,
         shiftName = shift_name,
         isCorrectionRequestPending = is_correction_request_pending
     )
@@ -176,7 +243,8 @@ data class MonthSummaryDto(
 }
 
 data class DayTimesheetResponse(
-    val status: String,
+    val success: Boolean,
+    val message: String? = null,
     val data: DayTimesheetData
 )
 
@@ -188,7 +256,7 @@ data class DayTimesheetData(
     val status: DayStatusDto? = null,
     val shift: ShiftInfoDto? = null,
     val hours: HoursInfoDto? = null,
-    val punches: List<PunchRecordDto>? = null,
+    val checks: List<PunchRecordDto>? = null,
     val is_complete: Boolean? = null,
     val correction_request: DayCorrectionRequestDto? = null,
     val allow_correction: Boolean = true,
@@ -202,7 +270,7 @@ data class DayTimesheetData(
         status = status?.toDomain(),
         shift = shift?.toDomain(),
         hours = hours?.toDomain(),
-        punches = punches?.map { it.toDomain() },
+        checks = checks?.map { it.toDomain() },
         isComplete = is_complete,
         correctionRequest = correction_request?.toDomain(),
         allowCorrection = allow_correction,
@@ -292,7 +360,8 @@ data class DayCorrectionRequestDto(
 
 // Correction Request Options
 data class CorrectionRequestOptionsResponse(
-    val status: String,
+    val success: Boolean,
+    val message: String? = null,
     val data: CorrectionRequestOptionsDataDto
 )
 
@@ -342,19 +411,20 @@ data class LeaveTypeOptionDto(
 
 // Submit Correction Response (simple success/message)
 data class SubmitCorrectionRequestResponse(
-    val status: String,
+    val success: Boolean,
     val message: String
 )
 
 // Withdraw Correction Response
 data class WithdrawCorrectionRequestResponse(
-    val status: String,
+    val success: Boolean,
     val message: String
 )
 
 // Correction Request List Response (paginated)
 data class CorrectionRequestListResponse(
-    val status: String,
+    val success: Boolean,
+    val message: String? = null,
     val data: CorrectionRequestListData
 )
 
@@ -383,7 +453,8 @@ data class CorrectionRequestListItemDto(
 
 // Correction Request Detail Response (with timeline)
 data class CorrectionRequestDetailResponse(
-    val status: String,
+    val success: Boolean,
+    val message: String? = null,
     val data: CorrectionRequestDetailDto
 )
 
@@ -438,7 +509,7 @@ data class CalendarDay(
     val color: String,
     val isComplete: Boolean,
     val hasIrregularity: Boolean,
-    val punchCount: Int,
+    val checkCount: Int,
     val shiftName: String? = null,
     val isCorrectionRequestPending: Boolean = false
 )
@@ -495,7 +566,7 @@ data class DayTimesheet(
     val status: DayStatus? = null,
     val shift: ShiftInfo? = null,
     val hours: HoursInfo? = null,
-    val punches: List<PunchRecord>? = null,
+    val checks: List<PunchRecord>? = null,
     val isComplete: Boolean? = null,
     val correctionRequest: DayCorrectionRequest? = null,
     val allowCorrection: Boolean = true,
@@ -582,8 +653,9 @@ data class LeaveTypeOption(
 // ========================================
 
 data class VerifyTokenResponse(
-    val status: String,
-    val message: String
+    val success: Boolean,
+    val message: String? = null,
+    val error_code: String? = null
 )
 
 data class FaceVerifyResponse(
@@ -593,37 +665,59 @@ data class FaceVerifyResponse(
 )
 
 data class FaceRecognitionDataResponse(
-    val status: String? = null,
-    val message: String,
+    val success: Boolean,
+    val message: String? = null,
+    val data: FaceRecognitionData? = null
+)
+
+data class FaceRecognitionData(
     val face_vector: String? = null,
     val minimum_face_recognition_quality_score: Float? = null,
     val require_face_checkin: Boolean? = null,
     val require_face_break: Boolean? = null
 )
 
+data class FaceRegistrationResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val data: FaceRegistrationData? = null
+)
+
+data class FaceRegistrationData(
+    val image_path: String? = null
+)
+
 data class PendingFaceRegistrationResponse(
-    val status: String,
-    val pending: Boolean,
-    val message: String
+    val success: Boolean,
+    val message: String? = null,
+    val data: PendingFaceRegistrationData? = null
+)
+
+data class PendingFaceRegistrationData(
+    val pending: Boolean
 )
 
 data class SocialMediaUpdateResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
-    val social_media: SocialMediaData? = null
+    val data: SocialMediaData? = null
 )
 
 data class SocialMediaData(
-    val facebook: String?,
-    val linkedin: String?,
-    val x: String?,
-    val instagram: String?,
-    val snapchat: String?
+    val facebook_url: String?,
+    val linkedin_url: String?,
+    val x_url: String?,
+    val instagram_url: String?,
+    val snapchat_url: String?
 )
 
 data class ProfilePictureUpdateResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
+    val data: ProfilePictureData? = null
+)
+
+data class ProfilePictureData(
     val profile_url: String? = null,
     val filename: String? = null
 )
@@ -649,19 +743,17 @@ data class WorkReport(
 )
 
 data class WorkReportListResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
-    val month: Int,
-    val year: Int,
-    val total_reports: Int,
-    val reports: List<WorkReportDto>
+    val data: List<WorkReportDto>? = null,
+    val total: Int? = null
 )
 
 data class WorkReportDto(
     val id: Int,
     val report_date: String,
     val work_description: String,
-    val attachments: String,
+    val attachments: String? = null,
     val report_status: String,
     val branch_name: String?,
     val submitted_at: String?,
@@ -672,11 +764,20 @@ data class WorkReportDto(
     val created_at: String,
     val updated_at: String
 ) {
+    private fun parseAttachments(): List<String> {
+        if (attachments.isNullOrBlank() || attachments == "[]") return emptyList()
+        return try {
+            com.google.gson.Gson().fromJson(attachments, Array<String>::class.java).toList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     fun toDomain() = WorkReport(
         id = id,
         reportDate = report_date,
         workDescription = work_description,
-        attachments = parseAttachments(attachments),
+        attachments = parseAttachments(),
         reportStatus = report_status,
         branchName = branch_name,
         submittedAt = submitted_at,
@@ -687,28 +788,12 @@ data class WorkReportDto(
         createdAt = created_at,
         updatedAt = updated_at
     )
-
-    private fun parseAttachments(attachmentsJson: String): List<String> {
-        return try {
-            if (attachmentsJson.isBlank() || attachmentsJson == "[]") {
-                emptyList()
-            } else {
-                val gson = com.google.gson.Gson()
-                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
-                gson.fromJson(attachmentsJson, type) ?: emptyList()
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
 }
 
 data class CreateWorkReportResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
-    val work_report: CreatedWorkReportDto?,
-    val reports_today: Int?,
-    val remaining_reports_today: Int?
+    val data: CreatedWorkReportDto? = null
 )
 
 data class CreatedWorkReportDto(
@@ -717,7 +802,9 @@ data class CreatedWorkReportDto(
     val work_description: String,
     val attachments_count: Int,
     val report_status: String,
-    val submitted_at: String
+    val submitted_at: String,
+    val reports_today: Int? = null,
+    val remaining_reports_today: Int? = null
 )
 
 // ========================================
@@ -753,13 +840,11 @@ data class PaginationInfo(
 )
 
 data class CircularListResponse(
-    val status: String,
-    val data: CircularListData
-)
-
-data class CircularListData(
-    val circulars: List<CircularDto>,
-    val pagination: PaginationDto
+    val success: Boolean,
+    val message: String? = null,
+    val data: List<CircularDto>? = null,
+    val total: Int? = null,
+    val pagination: PaginationDto? = null
 )
 
 data class CircularDto(
@@ -768,58 +853,51 @@ data class CircularDto(
     val description: String,
     val circular_type: String,
     val priority: String,
-    val attachments: String?,  // API returns as JSON string, not array
+    val attachments: String? = null,
     val effective_date: String?,
     val expiry_date: String?,
     val published_date: String?
 ) {
+    private fun parseAttachments(): List<String> {
+        if (attachments.isNullOrBlank() || attachments == "[]") return emptyList()
+        return try {
+            com.google.gson.Gson().fromJson(attachments, Array<String>::class.java).toList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     fun toDomain() = Circular(
         id = id,
         title = title,
         description = description,
         circularType = circular_type,
         priority = priority,
-        attachments = parseAttachments(attachments),
+        attachments = parseAttachments(),
         effectiveDate = effective_date,
         expiryDate = expiry_date,
         publishedDate = published_date
     )
-
-    private fun parseAttachments(attachmentsJson: String?): List<String> {
-        if (attachmentsJson.isNullOrBlank() || attachmentsJson == "[]") {
-            return emptyList()
-        }
-        return try {
-            if (attachmentsJson.startsWith("[")) {
-                val gson = com.google.gson.Gson()
-                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
-                gson.fromJson(attachmentsJson, type) ?: emptyList()
-            } else {
-                listOf(attachmentsJson)
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
 }
 
 data class PaginationDto(
     val current_page: Int,
     val page_size: Int,
-    val total_count: Int,
+    val total_count: Int? = null,
     val total_pages: Int
 ) {
     fun toDomain() = PaginationInfo(
         currentPage = current_page,
         pageSize = page_size,
-        totalCount = total_count,
+        totalCount = total_count ?: 0,
         totalPages = total_pages
     )
 }
 
 data class CircularDetailResponse(
-    val status: String,
-    val data: CircularDetailDto
+    val success: Boolean,
+    val message: String? = null,
+    val data: CircularDetailDto? = null
 )
 
 // CircularDetailDto is same structure as CircularDto in the new API
@@ -829,44 +907,37 @@ data class CircularDetailDto(
     val description: String,
     val circular_type: String,
     val priority: String,
-    val attachments: String?,  // API returns as JSON string, not array
+    val attachments: String? = null,
     val effective_date: String?,
     val expiry_date: String?,
     val published_date: String?
 ) {
+    private fun parseAttachments(): List<String> {
+        if (attachments.isNullOrBlank() || attachments == "[]") return emptyList()
+        return try {
+            com.google.gson.Gson().fromJson(attachments, Array<String>::class.java).toList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     fun toDomain() = Circular(
         id = id,
         title = title,
         description = description,
         circularType = circular_type,
         priority = priority,
-        attachments = parseAttachments(attachments),
+        attachments = parseAttachments(),
         effectiveDate = effective_date,
         expiryDate = expiry_date,
         publishedDate = published_date
     )
-
-    private fun parseAttachments(attachmentsJson: String?): List<String> {
-        if (attachmentsJson.isNullOrBlank() || attachmentsJson == "[]") {
-            return emptyList()
-        }
-        return try {
-            if (attachmentsJson.startsWith("[")) {
-                val gson = com.google.gson.Gson()
-                val type = object : com.google.gson.reflect.TypeToken<List<String>>() {}.type
-                gson.fromJson(attachmentsJson, type) ?: emptyList()
-            } else {
-                listOf(attachmentsJson)
-            }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
 }
 
 data class CircularStatsResponse(
-    val status: String,
-    val data: CircularStatsDto
+    val success: Boolean,
+    val message: String? = null,
+    val data: CircularStatsDto? = null
 )
 
 data class CircularStatsDto(
@@ -1350,16 +1421,9 @@ enum class WorkflowStatus(val value: String) {
 // ========================================
 
 data class LogoutResponse(
-    val status: String,
-    val message: String,
-    val logout_time: String? = null,
-    val device_id: String? = null,
-    val push_notifications: LogoutPushNotifications? = null
-)
-
-data class LogoutPushNotifications(
-    val cleared: Boolean,
-    val message: String? = null
+    val success: Boolean,
+    val message: String? = null,
+    val error_code: String? = null
 )
 
 data class PendingMessage(
@@ -1469,8 +1533,12 @@ data class NotificationActionResponse(
 // ========================================
 
 data class LocationReverifyResponse(
-    val status: String,
+    val success: Boolean,
     val message: String? = null,
+    val data: LocationReverifyData? = null
+)
+
+data class LocationReverifyData(
     val t_token: String? = null,
     val is_out_of_range: Boolean? = null
 )

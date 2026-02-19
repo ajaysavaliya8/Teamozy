@@ -28,7 +28,7 @@ interface ApiService {
     suspend fun sendLogin(
         @Query("mobile_number") mobileNumber: Long,
         @Query("device_id") deviceId: String
-    ): Response<BasicResponse>
+    ): Response<AuthResponse>
 
     @FormUrlEncoded
     @POST("verify-login")
@@ -42,7 +42,7 @@ interface ApiService {
         @Field("device_manufacturer") deviceManufacturer: String? = null,
         @Field("device_model") deviceModel: String? = null,
         @Field("device_os_version") deviceOsVersion: String? = null
-    ): Response<BasicResponse>
+    ): Response<LoginResponse>
 
     @GET("verify-token")
     suspend fun verifyToken(
@@ -50,11 +50,27 @@ interface ApiService {
         @Query("fcm_token") fcmToken: String? = null
     ): Response<VerifyTokenResponse>
 
+    @POST("forgot-password")
+    suspend fun forgotPassword(@Query("number") number: Long): Response<AuthResponse>
+
+    @POST("verify-reset-otp")
+    suspend fun verifyResetOtp(
+        @Query("number") number: Long,
+        @Query("otp") otp: String
+    ): Response<ResetOtpResponse>
+
+    @POST("reset-password")
+    suspend fun resetPassword(
+        @Query("reset_token") resetToken: String,
+        @Query("new_password") newPassword: String,
+        @Query("confirm_password") confirmPassword: String
+    ): Response<AuthResponse>
+
     @FormUrlEncoded
     @POST("send-change-device-otp")
     suspend fun sendChangeDeviceOtp(
         @Field("mobile_number") mobileNumber: Long
-    ): Response<BasicResponse>
+    ): Response<AuthResponse>
 
     @FormUrlEncoded
     @POST("request-change-device")
@@ -161,7 +177,10 @@ interface ApiService {
         @Part("face_vector") faceVector: RequestBody,
         @Part("priority") priority: RequestBody,
         @Part("reason_for_change") reasonForChange: RequestBody? = null
-    ): Response<BasicResponse>
+    ): Response<FaceRegistrationResponse>
+
+    @GET("employees/face-recognition/pending-request")
+    suspend fun getPendingFaceRegistration(): Response<PendingFaceRegistrationResponse>
 
     // ========================================
     // PROFILE ENDPOINTS
@@ -170,11 +189,11 @@ interface ApiService {
     @FormUrlEncoded
     @PUT("profile/update-social-media")
     suspend fun updateSocialMedia(
-        @Field("facebook") facebook: String? = null,
-        @Field("linkedin") linkedin: String? = null,
-        @Field("x") x: String? = null,
-        @Field("instagram") instagram: String? = null,
-        @Field("snapchat") snapchat: String? = null
+        @Field("facebook_url") facebookUrl: String? = null,
+        @Field("linkedin_url") linkedinUrl: String? = null,
+        @Field("x_url") xUrl: String? = null,
+        @Field("instagram_url") instagramUrl: String? = null,
+        @Field("snapchat_url") snapchatUrl: String? = null
     ): Response<SocialMediaUpdateResponse>
 
     @Multipart
@@ -192,14 +211,23 @@ interface ApiService {
     @FormUrlEncoded
     @PUT("contact-info")
     suspend fun updateContactInfo(
-        @Field("country_code") countryCode: Int? = null,
-        @Field("alternate_phone_number") alternatePhoneNumber: Long? = null,
-        @Field("emergency_phone_number") emergencyPhoneNumber: Long? = null,
-        @Field("whatsapp_number") whatsappNumber: Long? = null,
-        @Field("company_phone_number") companyPhoneNumber: Long? = null,
-        @Field("current_address") currentAddress: String? = null,
-        @Field("permanent_address") permanentAddress: String? = null
-    ): Response<ContactInfoResponse>
+        @Field("alternate_mobile") alternateMobile: String? = null,
+        @Field("whatsapp_number") whatsappNumber: String? = null,
+        @Field("emergency_contact_name") emergencyContactName: String? = null,
+        @Field("emergency_contact_relationship") emergencyContactRelationship: String? = null,
+        @Field("emergency_contact_number") emergencyContactNumber: String? = null,
+        @Field("current_address_line") currentAddressLine: String? = null,
+        @Field("current_city") currentCity: String? = null,
+        @Field("current_state") currentState: String? = null,
+        @Field("current_country") currentCountry: String? = null,
+        @Field("current_postal_code") currentPostalCode: String? = null,
+        @Field("same_as_current") sameAsCurrent: Boolean? = null,
+        @Field("permanent_address_line") permanentAddressLine: String? = null,
+        @Field("permanent_city") permanentCity: String? = null,
+        @Field("permanent_state") permanentState: String? = null,
+        @Field("permanent_country") permanentCountry: String? = null,
+        @Field("permanent_postal_code") permanentPostalCode: String? = null
+    ): Response<BasicResponse>
 
     @GET("personal-info")
     suspend fun getPersonalInfo(): Response<PersonalInfoResponse>
@@ -209,25 +237,17 @@ interface ApiService {
     suspend fun updatePersonalInfo(
         @Field("blood_group") bloodGroup: String? = null,
         @Field("marital_status") maritalStatus: String? = null,
-        @Field("no_of_family_members") noOfFamilyMembers: Int? = null,
-        @Field("languages") languages: List<String>? = null
-    ): Response<PersonalInfoResponse>
+        @Field("spouse_name") spouseName: String? = null,
+        @Field("no_of_children") noOfChildren: Int? = null,
+        @Field("languages") languages: List<String>? = null,
+        @Field("religion") religion: String? = null
+    ): Response<BasicResponse>
 
     @GET("employment-details")
     suspend fun getEmploymentDetails(): Response<EmploymentDetailResponse>
 
     @GET("banking-info")
     suspend fun getBankingInfo(): Response<BankingInfoResponse>
-
-    @FormUrlEncoded
-    @PUT("banking-info")
-    suspend fun updateBankingInfo(
-        @Field("account_holder_name") accountHolderName: String? = null,
-        @Field("bank_name") bankName: String? = null,
-        @Field("bank_account_number") bankAccountNumber: String? = null,
-        @Field("account_type") accountType: String? = null,
-        @Field("ifsc_code") ifscCode: String? = null
-    ): Response<BankingInfoResponse>
 
     @GET("employment-identity")
     suspend fun getEmploymentIdentity(): Response<EmploymentIdentityResponse>

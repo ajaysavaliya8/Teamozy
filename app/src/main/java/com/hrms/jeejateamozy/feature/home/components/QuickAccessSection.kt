@@ -70,14 +70,15 @@ fun QuickAccessSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             quickAccessItems.forEach { (item, onClick) ->
                 QuickAccessCard(
                     icon = item.icon,
                     title = item.title,
                     iconColor = item.color,
-                    onClick = onClick
+                    onClick = onClick,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -103,7 +104,6 @@ private fun QuickAccessCard(
 ) {
     Card(
         modifier = modifier
-            .width(85.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(

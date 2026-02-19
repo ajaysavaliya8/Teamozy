@@ -61,7 +61,7 @@ sealed class CheckOutOutcome {
         val tToken: String,
         val faceVector: FloatArray?,
         val minimumQualityScore: Float,
-        val workHours: Float,
+        val workMinutes: Int,
         val isEarly: Boolean,
         val isOutOfRange: Boolean,
         val earlyReasonRequired: Boolean,
@@ -72,7 +72,7 @@ sealed class CheckOutOutcome {
 
     data class RequiresReasons(
         val tToken: String,
-        val workHours: Float,
+        val workMinutes: Int,
         val isEarly: Boolean,
         val isOutOfRange: Boolean,
         val earlyReasonRequired: Boolean,
@@ -199,16 +199,17 @@ class AttendanceRepository(private val context: Context) {
             when {
                 res.isSuccessful && res.code() == 200 -> {
                     val body = res.body()
+                    val data = body?.data
 
-                    if (body != null && body.t_token != null) {
-                        val faceVerificationRequired = body.face_verification_required ?: false
-                        val minimumQualityScore = body.minimum_quality_score ?: 0.57f
-                        val isLate = body.is_late ?: false
-                        val isOutOfRange = body.is_out_of_range ?: false
-                        val lateReasonRequired = body.late_reason_required ?: false
-                        val outOfRangeReasonRequired = body.out_of_range_reason_required ?: false
+                    if (body != null && data?.t_token != null) {
+                        val faceVerificationRequired = data.face_verification_required ?: false
+                        val minimumQualityScore = data.minimum_quality_score ?: 0.57f
+                        val isLate = data.is_late ?: false
+                        val isOutOfRange = data.is_out_of_range ?: false
+                        val lateReasonRequired = data.late_reason_required ?: false
+                        val outOfRangeReasonRequired = data.out_of_range_reason_required ?: false
                         val message = body.message ?: "Ready for check-in"
-                        val pendingMessage = body.pending_message
+                        val pendingMessage = data.pending_message
 
                         Log.d("NET", "Check-in initial success:")
                         Log.d("NET", "  face_verification_required: $faceVerificationRequired")
@@ -219,19 +220,19 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
                         Log.d("NET", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}, Type=${pendingMessage.type}" else "null"}")
 
-                        val faceVector = body.face_vector?.let { faceVectorString ->
+                        val faceVector = data.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
                         }
 
                         if (faceVerificationRequired) {
-                            Log.d("NET", "  face_vector present: ${body.face_vector != null}")
+                            Log.d("NET", "  face_vector present: ${data.face_vector != null}")
                             Log.d("NET", "  face_vector parsed: ${faceVector != null}")
                             if (faceVector != null) {
                                 Log.d("NET", "  face_vector size: ${faceVector.size}")
                             }
 
                             CheckInOutcome.RequiresFaceVerification(
-                                tToken = body.t_token,
+                                tToken = data.t_token,
                                 faceVector = faceVector,
                                 minimumQualityScore = minimumQualityScore,
                                 isLate = isLate,
@@ -243,7 +244,7 @@ class AttendanceRepository(private val context: Context) {
                             )
                         } else {
                             CheckInOutcome.RequiresReasons(
-                                tToken = body.t_token,
+                                tToken = data.t_token,
                                 isLate = isLate,
                                 isOutOfRange = isOutOfRange,
                                 lateReasonRequired = lateReasonRequired,
@@ -323,16 +324,16 @@ class AttendanceRepository(private val context: Context) {
                 res.isSuccessful && res.code() == 200 -> {
                     val body = res.body()
 
-                    if (body != null) {
+                    if (body != null && body.success) {
                         Log.d("NET", "Check-in signature success: ${body.message}")
                         SignatureOutcome.Success(
                             message = body.message,
-                            attendanceRecordId = body.attendance_record_id,
-                            checkInTime = body.check_in_time,
-                            checkOutTime = body.check_out_time
+                            attendanceRecordId = body.data?.attendance_record_id,
+                            checkInTime = body.data?.check_in_time,
+                            checkOutTime = body.data?.check_out_time
                         )
                     } else {
-                        SignatureOutcome.Error("Invalid response from server")
+                        SignatureOutcome.Error(body?.message ?: "Invalid response from server")
                     }
                 }
 
@@ -379,41 +380,42 @@ class AttendanceRepository(private val context: Context) {
             when {
                 res.isSuccessful && res.code() == 200 -> {
                     val body = res.body()
+                    val data = body?.data
 
-                    if (body != null && body.t_token != null) {
-                        val faceVerificationRequired = body.face_verification_required ?: false
-                        val minimumQualityScore = body.minimum_quality_score ?: 0.57f
-                        val workHours = body.work_hours ?: 0f
-                        val isEarly = body.is_early ?: false
-                        val isOutOfRange = body.is_out_of_range ?: false
-                        val earlyReasonRequired = body.early_reason_required ?: false
-                        val outOfRangeReasonRequired = body.out_of_range_reason_required ?: false
-                        val workReportRequired = body.work_report_require ?: false
+                    if (body != null && data?.t_token != null) {
+                        val faceVerificationRequired = data.face_verification_required ?: false
+                        val minimumQualityScore = data.minimum_quality_score ?: 0.57f
+                        val workMinutes = data.work_minutes ?: 0
+                        val isEarly = data.is_early ?: false
+                        val isOutOfRange = data.is_out_of_range ?: false
+                        val earlyReasonRequired = data.early_reason_required ?: false
+                        val outOfRangeReasonRequired = data.out_of_range_reason_required ?: false
+                        val workReportRequired = data.work_report_require ?: false
                         val message = body.message ?: "Ready for check-out"
 
                         Log.d("NET", "Check-out initial success:")
                         Log.d("NET", "  face_verification_required: $faceVerificationRequired")
                         Log.d("NET", "  minimum_quality_score: $minimumQualityScore")
-                        Log.d("NET", "  work_hours: $workHours")
+                        Log.d("NET", "  work_minutes: $workMinutes")
                         Log.d("NET", "  is_early: $isEarly")
                         Log.d("NET", "  is_out_of_range: $isOutOfRange")
                         Log.d("NET", "  early_reason_required: $earlyReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
                         Log.d("NET", "  work_report_require: $workReportRequired")
 
-                        val faceVector = body.face_vector?.let { faceVectorString ->
+                        val faceVector = data.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
                         }
 
                         if (faceVerificationRequired) {
-                            Log.d("NET", "  face_vector present: ${body.face_vector != null}")
+                            Log.d("NET", "  face_vector present: ${data.face_vector != null}")
                             Log.d("NET", "  face_vector parsed: ${faceVector != null}")
 
                             CheckOutOutcome.RequiresFaceVerification(
-                                tToken = body.t_token,
+                                tToken = data.t_token,
                                 faceVector = faceVector,
                                 minimumQualityScore = minimumQualityScore,
-                                workHours = workHours,
+                                workMinutes = workMinutes,
                                 isEarly = isEarly,
                                 isOutOfRange = isOutOfRange,
                                 earlyReasonRequired = earlyReasonRequired,
@@ -423,8 +425,8 @@ class AttendanceRepository(private val context: Context) {
                             )
                         } else {
                             CheckOutOutcome.RequiresReasons(
-                                tToken = body.t_token,
-                                workHours = workHours,
+                                tToken = data.t_token,
+                                workMinutes = workMinutes,
                                 isEarly = isEarly,
                                 isOutOfRange = isOutOfRange,
                                 earlyReasonRequired = earlyReasonRequired,
@@ -559,15 +561,15 @@ class AttendanceRepository(private val context: Context) {
                 res.isSuccessful && res.code() == 200 -> {
                     val body = res.body()
 
-                    if (body != null) {
+                    if (body != null && body.success) {
                         Log.d("NET", "Check-out signature success: ${body.message}")
                         SignatureOutcome.Success(
                             message = body.message,
-                            attendanceRecordId = null,
-                            checkInTime = body.check_out_time
+                            attendanceRecordId = body.data?.attendance_record_id,
+                            checkInTime = body.data?.check_out_time
                         )
                     } else {
-                        SignatureOutcome.Error("Invalid response from server")
+                        SignatureOutcome.Error(body?.message ?: "Invalid response from server")
                     }
                 }
 
@@ -615,12 +617,12 @@ class AttendanceRepository(private val context: Context) {
             when {
                 res.isSuccessful && res.code() == 200 -> {
                     val body = res.body()
-                    if (body != null && body.status == "success") {
+                    if (body != null && body.success) {
                         Log.d("NET", "Location reverify success: ${body.message}")
                         LocationReverifyOutcome.Success(
-                            newTToken = body.t_token,
+                            newTToken = body.data?.t_token,
                             message = body.message ?: "Location verified",
-                            isOutOfRange = body.is_out_of_range ?: false
+                            isOutOfRange = body.data?.is_out_of_range ?: false
                         )
                     } else {
                         LocationReverifyOutcome.Error(body?.message ?: "Location reverification failed")
@@ -628,8 +630,7 @@ class AttendanceRepository(private val context: Context) {
                 }
 
                 res.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
-                    LocationReverifyOutcome.Error("Unauthorized. Please login again.")
+                    LocationReverifyOutcome.Error(extractError(res))
                 }
 
                 else -> LocationReverifyOutcome.Error(extractError(res))

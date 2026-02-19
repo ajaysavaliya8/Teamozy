@@ -23,9 +23,6 @@ sealed class ProfilePictureOutcome {
     data class Error(val message: String) : ProfilePictureOutcome()
 }
 
-/**
- * ✅ UPDATED: Now using NetworkErrorHandler
- */
 class ProfileRepository(private val context: Context) {
 
     private val api = NetworkModule.apiService
@@ -39,17 +36,14 @@ class ProfileRepository(private val context: Context) {
         return@withContext try {
             Log.d("PROFILE", "Updating profile picture from URI: $imageUri")
 
-            // Read and compress image
             val compressedFile = compressImage(imageUri)
             if (compressedFile == null) {
                 return@withContext ProfilePictureOutcome.Error("Failed to process image")
             }
 
-            // Create multipart body
             val requestFile = compressedFile.asRequestBody("image/jpeg".toMediaTypeOrNull())
             val body = MultipartBody.Part.createFormData("profile_image", compressedFile.name, requestFile)
 
-            // Make API call
             val response = api.updateProfilePicture(body)
 
             Log.d("PROFILE", "Update profile picture response code: ${response.code()}")
@@ -57,19 +51,17 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
-                        // Update PreferencesManager with new profile URL
-                        responseBody.profile_url?.let { url ->
+                    if (responseBody?.success == true) {
+                        responseBody.data?.profile_url?.let { url ->
                             pm.profileUrl = url
                             Log.d("PROFILE", "Profile URL updated: $url")
                         }
 
-                        // Clean up temporary file
                         compressedFile.delete()
 
                         ProfilePictureOutcome.Success(
                             message = responseBody.message ?: "Profile picture updated successfully",
-                            profileUrl = responseBody.profile_url
+                            profileUrl = responseBody.data?.profile_url
                         )
                     } else {
                         compressedFile.delete()
@@ -115,8 +107,7 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
-                        // Clear profile URL from PreferencesManager
+                    if (responseBody?.success == true) {
                         pm.profileUrl = null
                         Log.d("PROFILE", "Profile URL cleared")
 
@@ -162,7 +153,7 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("PROFILE", "Contact info retrieved successfully")
                         ContactInfoOutcome.Success(
                             message = responseBody.message,
@@ -197,25 +188,43 @@ class ProfileRepository(private val context: Context) {
      * Update contact information
      */
     suspend fun updateContactInfo(
-        countryCode: Int?,
-        alternatePhone: Long?,
-        emergencyPhone: Long?,
-        whatsappNumber: Long?,
-        companyPhone: Long?,
-        currentAddress: String?,
-        permanentAddress: String?
+        alternateMobile: String?,
+        whatsappNumber: String?,
+        emergencyContactName: String?,
+        emergencyContactRelationship: String?,
+        emergencyContactNumber: String?,
+        currentAddressLine: String?,
+        currentCity: String?,
+        currentState: String?,
+        currentCountry: String?,
+        currentPostalCode: String?,
+        sameAsCurrent: Boolean?,
+        permanentAddressLine: String?,
+        permanentCity: String?,
+        permanentState: String?,
+        permanentCountry: String?,
+        permanentPostalCode: String?
     ): ContactInfoOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("PROFILE", "Updating contact information")
 
             val response = api.updateContactInfo(
-                countryCode = countryCode,
-                alternatePhoneNumber = alternatePhone,
-                emergencyPhoneNumber = emergencyPhone,
+                alternateMobile = alternateMobile,
                 whatsappNumber = whatsappNumber,
-                companyPhoneNumber = companyPhone,
-                currentAddress = currentAddress,
-                permanentAddress = permanentAddress
+                emergencyContactName = emergencyContactName,
+                emergencyContactRelationship = emergencyContactRelationship,
+                emergencyContactNumber = emergencyContactNumber,
+                currentAddressLine = currentAddressLine,
+                currentCity = currentCity,
+                currentState = currentState,
+                currentCountry = currentCountry,
+                currentPostalCode = currentPostalCode,
+                sameAsCurrent = sameAsCurrent,
+                permanentAddressLine = permanentAddressLine,
+                permanentCity = permanentCity,
+                permanentState = permanentState,
+                permanentCountry = permanentCountry,
+                permanentPostalCode = permanentPostalCode
             )
 
             Log.d("PROFILE", "Update contact info response code: ${response.code()}")
@@ -223,11 +232,10 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("PROFILE", "Contact info updated successfully")
                         ContactInfoOutcome.Success(
-                            message = responseBody.message,
-                            contactInfo = responseBody.data
+                            message = responseBody.message ?: "Contact information updated successfully"
                         )
                     } else {
                         ContactInfoOutcome.Error(responseBody?.message ?: "Failed to update contact information")
@@ -270,7 +278,7 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("PROFILE", "Personal info retrieved successfully")
                         PersonalInfoOutcome.Success(
                             message = responseBody.message,
@@ -303,13 +311,15 @@ class ProfileRepository(private val context: Context) {
 
     /**
      * Update personal information
-     * Only these fields are editable: blood_group, marital_status, no_of_family_members, languages
+     * Editable fields: blood_group, marital_status, spouse_name, no_of_children, languages, religion
      */
     suspend fun updatePersonalInfo(
         bloodGroup: String?,
         maritalStatus: String?,
-        noOfFamilyMembers: Int?,
-        languages: List<String>?
+        spouseName: String?,
+        noOfChildren: Int?,
+        languages: List<String>?,
+        religion: String?
     ): PersonalInfoOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("PROFILE", "Updating personal information")
@@ -317,8 +327,10 @@ class ProfileRepository(private val context: Context) {
             val response = api.updatePersonalInfo(
                 bloodGroup = bloodGroup,
                 maritalStatus = maritalStatus,
-                noOfFamilyMembers = noOfFamilyMembers,
-                languages = languages
+                spouseName = spouseName,
+                noOfChildren = noOfChildren,
+                languages = languages,
+                religion = religion
             )
 
             Log.d("PROFILE", "Update personal info response code: ${response.code()}")
@@ -326,11 +338,10 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("PROFILE", "Personal info updated successfully")
                         PersonalInfoOutcome.Success(
-                            message = responseBody.message,
-                            personalInfo = responseBody.data
+                            message = responseBody.message ?: "Personal information updated successfully"
                         )
                     } else {
                         PersonalInfoOutcome.Error(responseBody?.message ?: "Failed to update personal information")
@@ -373,7 +384,7 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("PROFILE", "Employment details retrieved successfully")
                         EmploymentDetailOutcome.Success(
                             message = responseBody.message,
@@ -415,7 +426,7 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("PROFILE", "Banking info retrieved successfully")
                         BankingInfoOutcome.Success(
                             message = responseBody.message,
@@ -446,69 +457,6 @@ class ProfileRepository(private val context: Context) {
         }
     }
 
-    /**
-     * Update banking information
-     * All 5 fields are editable: account_holder_name, bank_name, bank_account_number, account_type, ifsc_code
-     */
-    suspend fun updateBankingInfo(
-        accountHolderName: String?,
-        bankName: String?,
-        bankAccountNumber: String?,
-        accountType: String?,
-        ifscCode: String?
-    ): BankingInfoOutcome = withContext(Dispatchers.IO) {
-        return@withContext try {
-            Log.d("PROFILE", "Updating banking information")
-
-            val response = api.updateBankingInfo(
-                accountHolderName = accountHolderName,
-                bankName = bankName,
-                bankAccountNumber = bankAccountNumber,
-                accountType = accountType,
-                ifscCode = ifscCode
-            )
-
-            Log.d("PROFILE", "Update banking info response code: ${response.code()}")
-
-            when {
-                response.isSuccessful && response.code() == 200 -> {
-                    val responseBody = response.body()
-                    if (responseBody?.status == "success") {
-                        Log.d("PROFILE", "Banking info updated successfully")
-                        BankingInfoOutcome.Success(
-                            message = responseBody.message,
-                            bankingInfo = responseBody.data
-                        )
-                    } else {
-                        BankingInfoOutcome.Error(responseBody?.message ?: "Failed to update banking information")
-                    }
-                }
-
-                response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
-                    BankingInfoOutcome.Error("Unauthorized. Please login again.")
-                }
-
-                response.code() == 400 -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Invalid banking information")
-                    BankingInfoOutcome.Error(errorMsg)
-                }
-
-                response.code() == 404 -> {
-                    BankingInfoOutcome.Error("Banking information not found")
-                }
-
-                else -> {
-                    val errorMsg = NetworkErrorHandler.extract(response, "Failed to update banking information")
-                    BankingInfoOutcome.Error(errorMsg)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("PROFILE", "Error updating banking info", e)
-            BankingInfoOutcome.Error(e.message ?: "Network error occurred")
-        }
-    }
-
     suspend fun getEmploymentIdentity(): EmploymentIdentityOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("PROFILE", "Fetching employment identity information")
@@ -520,7 +468,7 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("PROFILE", "Employment identity retrieved successfully")
                         EmploymentIdentityOutcome.Success(
                             message = responseBody.message,
@@ -566,7 +514,7 @@ class ProfileRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("PROFILE", "Shift details retrieved successfully")
                         ShiftDetailsOutcome.Success(
                             message = responseBody.message,
@@ -615,7 +563,6 @@ class ProfileRepository(private val context: Context) {
                 return null
             }
 
-            // Calculate new dimensions (max 1024px on longest side)
             val maxSize = 1024
             val ratio = if (originalBitmap.width > originalBitmap.height) {
                 maxSize.toFloat() / originalBitmap.width
@@ -626,20 +573,16 @@ class ProfileRepository(private val context: Context) {
             val newWidth = (originalBitmap.width * ratio).toInt()
             val newHeight = (originalBitmap.height * ratio).toInt()
 
-            // Resize bitmap
             val resizedBitmap = Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
 
-            // Compress to JPEG
             val outputStream = ByteArrayOutputStream()
             resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
 
-            // Save to temporary file
             val tempFile = File(context.cacheDir, "profile_${System.currentTimeMillis()}.jpg")
             val fos = FileOutputStream(tempFile)
             fos.write(outputStream.toByteArray())
             fos.close()
 
-            // Clean up bitmaps
             originalBitmap.recycle()
             resizedBitmap.recycle()
 

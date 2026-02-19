@@ -70,11 +70,13 @@ class AttendanceHistoryViewModel(
                 when (val outcome = repo.getMonthlyTimesheet(year = year, month = month)) {
                     is MonthlyTimesheetOutcome.Success -> {
                         val timesheet = outcome.timesheet
+                        Log.d("TIMESHEET", "VM: Success - ${timesheet.calendarDays.size} raw days, month=${timesheet.monthName}")
                         val calendarWithPadding = addPaddingDays(
                             days = timesheet.calendarDays,
                             year = year,
                             month = month
                         )
+                        Log.d("TIMESHEET", "VM: After padding - ${calendarWithPadding.size} total days")
 
                         _historyUiState.update {
                             it.copy(
@@ -90,6 +92,7 @@ class AttendanceHistoryViewModel(
                     }
 
                     is MonthlyTimesheetOutcome.Error -> {
+                        Log.e("TIMESHEET", "VM: Error - ${outcome.message}")
                         _historyUiState.update {
                             it.copy(isLoading = false, errorMessage = outcome.message)
                         }
@@ -283,7 +286,7 @@ class AttendanceHistoryViewModel(
                 color = "transparent",
                 isComplete = false,
                 hasIrregularity = false,
-                punchCount = 0
+                checkCount = 0
             )
         }
 
@@ -299,7 +302,7 @@ class AttendanceHistoryViewModel(
                     color = "transparent",
                     isComplete = false,
                     hasIrregularity = false,
-                    punchCount = 0
+                    checkCount = 0
                 )
             }
             return fullCalendar + endPadding

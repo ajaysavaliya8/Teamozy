@@ -107,14 +107,6 @@ fun HomePage(
         }
     }
 
-    // Initial refresh
-    LaunchedEffect(Unit) {
-        vm.refreshStatus()
-        // Fetch notification unread count for badge
-        Log.d(TAG, "🔔 Fetching notification unread count...")
-        notificationRepo.refreshUnreadCount()
-    }
-
     // Refresh when bulk check-in/checkout FCM arrives
     LaunchedEffect(Unit) {
         NotificationEventBus.attendanceRefreshEvent.collect {
@@ -179,18 +171,13 @@ fun HomePage(
             )
         }
     ) { padding ->
+        // Scrollable Content
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(bottom = paddingValues.calculateBottomPadding())
+                .verticalScroll(rememberScrollState())
         ) {
-            // Scrollable Content
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-            ) {
                 // Greeting Section
                 GreetingSection(
                     userName = prefs.userName,
@@ -204,6 +191,7 @@ fun HomePage(
                     elapsedSeconds = elapsedSeconds,
                     isLoading = ui.isLoading,
                     isFaceVerifyBusy = faceVerifyBusy,
+                    loadingMessage = ui.loadingMessage,
                     checkOutTime = ui.checkOutTime,
                     onCheckInClick = {
                         Log.d(TAG, "CHECK IN BUTTON CLICKED")
@@ -235,9 +223,8 @@ fun HomePage(
                     }
                 )
 
-                // Bottom padding for better scroll experience
-                Spacer(Modifier.height(24.dp))
-            }
+            // Bottom padding to scroll above the navigation bar
+            Spacer(Modifier.height(paddingValues.calculateBottomPadding() + 16.dp))
         }
     }
 
@@ -253,7 +240,7 @@ fun HomePage(
                 Log.d(TAG, "❌ Face verification CANCELLED by user")
                 faceVerifyBusy = false
                 faceVerifyError = null
-                vm.onFaceVerificationCancelled()
+                vm.onFaceVerificationCancelled(context)
             },
             onCaptured = { },
             onBitmapCaptured = { bitmap ->
@@ -327,7 +314,7 @@ fun HomePage(
             isOutOfRange = isOutOfRange,
             lateOrEarlyReasonRequired = lateOrEarlyReasonRequired,
             outOfRangeReasonRequired = outOfRangeReasonRequired,
-            onDismiss = { vm.onReasonDialogDismissed() },
+            onDismiss = { vm.onReasonDialogDismissed(context) },
             onSubmit = { lateOrEarlyReason, outOfRangeReason ->
                 vm.onReasonSubmitted(lateOrEarlyReason, outOfRangeReason, context)
             },
@@ -340,7 +327,7 @@ fun HomePage(
     // Work Report Bottom Sheet
     if (ui.showWorkReportDialog) {
         WorkReportBottomSheet(
-            onDismiss = { vm.onWorkReportDialogDismissed() },
+            onDismiss = { vm.onWorkReportDialogDismissed(context) },
             onSubmit = { workReport, fileUri ->
                 vm.onWorkReportSubmitted(workReport, fileUri, context)
             }
@@ -353,7 +340,7 @@ fun HomePage(
             PendingMessageDialog(
                 message = message,
                 onDismiss = {
-                    vm.onPendingMessageDismissed()
+                    vm.onPendingMessageDismissed(context)
                 },
                 onAcknowledge = { acknowledgmentNote ->
                     vm.onPendingMessageAcknowledged(acknowledgmentNote, context)

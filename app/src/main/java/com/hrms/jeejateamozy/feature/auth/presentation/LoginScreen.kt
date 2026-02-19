@@ -80,6 +80,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     val otpFR = remember { FocusRequester() }
     val pwdFR = remember { FocusRequester() }
 
+    // Forgot password state
+    var showForgotPassword by rememberSaveable { mutableStateOf(false) }
+
     // State
     var phone by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -166,6 +169,16 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             onDismiss = null // Cannot be dismissed - user must update
         )
         // Don't render the rest of the UI when update is required
+        return
+    }
+
+    // Show forgot password screen
+    if (showForgotPassword) {
+        ForgotPasswordScreen(
+            initialPhone = phone,
+            onBack = { showForgotPassword = false },
+            onResetSuccess = { showForgotPassword = false }
+        )
         return
     }
 
@@ -453,30 +466,43 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                 }
                             }
                         } else {
-                            Button(
-                                enabled = phone.length == 10 && password.isNotBlank() && !loading,
-                                onClick = {
-                                    focus.clearFocus()
-                                    keyboard?.hide()
-                                    scope.launch {
-                                        loading = true; error = null
-                                        val outcome = useCase.loginWithPassword(phone, password)
-                                        loading = false
-                                        handleAuthOutcome(outcome) { onLoginSuccess() }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Button(
+                                    enabled = phone.length == 10 && password.isNotBlank() && !loading,
+                                    onClick = {
+                                        focus.clearFocus()
+                                        keyboard?.hide()
+                                        scope.launch {
+                                            loading = true; error = null
+                                            val outcome = useCase.loginWithPassword(phone, password)
+                                            loading = false
+                                            handleAuthOutcome(outcome) { onLoginSuccess() }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                                ) {
+                                    if (loading) {
+                                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
+                                        Spacer(Modifier.width(10.dp))
+                                        Text("Signing in…")
+                                    } else {
+                                        Text("Sign In", fontWeight = FontWeight.SemiBold)
                                     }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
-                            ) {
-                                if (loading) {
-                                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
-                                    Spacer(Modifier.width(10.dp))
-                                    Text("Signing in…")
-                                } else {
-                                    Text("Sign In", fontWeight = FontWeight.SemiBold)
+                                }
+                                TextButton(
+                                    onClick = { showForgotPassword = true },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text(
+                                        "Forgot Password?",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF6366F1),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                         }

@@ -4,7 +4,7 @@ package com.hrms.jeejateamozy.feature.profile.data
  * Banking Info Response
  */
 data class BankingInfoResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
     val data: BankingInfoData? = null
 )
@@ -14,7 +14,10 @@ data class BankingInfoData(
     val bank_name: String?,
     val bank_account_number: String?,
     val account_type: String?,
-    val ifsc_code: String?
+    val ifsc_code: String?,
+    val branch_name: String?,
+    val upi_id: String?,
+    val bank_verified: Boolean?
 )
 
 /**

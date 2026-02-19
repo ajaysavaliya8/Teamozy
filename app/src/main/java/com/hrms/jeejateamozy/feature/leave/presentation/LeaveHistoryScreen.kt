@@ -327,7 +327,7 @@ private fun EnhancedLeaveApplicationCard(
 
                 // Date Range and Days
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -339,7 +339,10 @@ private fun EnhancedLeaveApplicationCard(
                     Text(
                         text = formatDateRange(application.startDate, application.endDate),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     Text(
                         text = "•",
@@ -348,7 +351,9 @@ private fun EnhancedLeaveApplicationCard(
                     Text(
                         text = "${application.numDays} day${if (application.numDays > 1) "s" else ""}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }

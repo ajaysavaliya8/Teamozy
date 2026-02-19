@@ -51,6 +51,8 @@ import com.hrms.jeejateamozy.di.attendanceHistoryModule
 import com.hrms.jeejateamozy.di.locationModule
 import com.hrms.jeejateamozy.di.notificationModule
 import com.hrms.jeejateamozy.feature.notification.utils.NotificationHelper
+import com.hrms.jeejateamozy.core.state.AppEvent
+import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.navigation.DeepLink
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
@@ -90,13 +92,7 @@ class MainActivity : ComponentActivity() {
         // Initialize NetworkModule with context for auth interceptor
         NetworkModule.initialize(applicationContext)
 
-        // ============================================
-        // INITIALIZE FIREBASE & NOTIFICATION CHANNELS
-        // ============================================
-        initializeFirebase()
-        NotificationHelper.createNotificationChannels(this)
-
-        // Handle notification deep link
+        // Handle notification deep link (fast, no I/O)
         handleNotificationIntent(intent)
 
         // Start Koin here (since there's no Application class now)
@@ -129,6 +125,12 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+
+        // Defer Firebase & notification channel init to after UI is shown
+        lifecycleScope.launch {
+            initializeFirebase()
+            NotificationHelper.createNotificationChannels(this@MainActivity)
         }
     }
 
@@ -273,6 +275,19 @@ private fun AppRoot(
         }
     }
 
+    // Global listener: logout on 401 or "device not registered" 403
+    LaunchedEffect(Unit) {
+        AppStateManager.events.collect { event ->
+            when (event) {
+                is AppEvent.Unauthorized -> {
+                    Log.d("MainActivity", "Global unauthorized event - logging out")
+                    prefs.clearAll()
+                    current = AppScreen.LOGIN
+                }
+            }
+        }
+    }
+
     when (current) {
         AppScreen.SPLASH -> InlineSplash(
             authRepository = authRepo,
@@ -330,9 +345,7 @@ private fun InlineSplash(
     }
 
     LaunchedEffect(Unit) {
-        delay(1000)
         status = "Verifying session..."
-        delay(500)
 
         when (val outcome = authRepository.verifyToken()) {
             is AuthOutcome.Success -> {

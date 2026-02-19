@@ -4,17 +4,18 @@ package com.hrms.jeejateamozy.feature.profile.data
  * Employment Detail Response
  */
 data class EmploymentDetailResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
     val data: EmploymentDetailData? = null
 )
 
 data class EmploymentDetailData(
     val joining_date: String?,
-    val probation_period_date: String?,
-    val training_completion_date: String?,
-    val job_location: String?,
+    val probation_end_date: String?,
+    val confirmation_date: String?,
+    val work_location: String?,
     val employment_type: String?,
+    val work_mode: String?,
     val designation_name: String?,
     val branch_name: String?,
     val department_name: String?,

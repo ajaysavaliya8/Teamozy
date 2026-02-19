@@ -63,16 +63,16 @@ class WorkReportRepository(private val context: Context) {
                 when {
                     response.isSuccessful && response.code() == 200 -> {
                         val responseBody = response.body()
-                        if (responseBody?.status == "success") {
-                            Log.d("WORK_REPORT", "Successfully fetched ${responseBody.total_reports} reports")
+                        if (responseBody?.success == true) {
+                            Log.d("WORK_REPORT", "Successfully fetched ${responseBody.total ?: 0} reports")
 
-                            val reports = responseBody.reports.map { it.toDomain() }
+                            val reports = responseBody.data?.map { it.toDomain() } ?: emptyList()
 
                             WorkReportListOutcome.Success(
                                 message = responseBody.message,
-                                month = responseBody.month,
-                                year = responseBody.year,
-                                totalReports = responseBody.total_reports,
+                                month = month,
+                                year = year,
+                                totalReports = responseBody.total ?: reports.size,
                                 reports = reports
                             )
                         } else {
@@ -196,14 +196,14 @@ class WorkReportRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 201 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d("WORK_REPORT", "Work report created successfully")
 
                         CreateWorkReportOutcome.Success(
                             message = responseBody.message,
-                            workReportId = responseBody.work_report?.id,
-                            reportsToday = responseBody.reports_today,
-                            remainingReportsToday = responseBody.remaining_reports_today
+                            workReportId = responseBody.data?.id,
+                            reportsToday = responseBody.data?.reports_today,
+                            remainingReportsToday = responseBody.data?.remaining_reports_today
                         )
                     } else {
                         CreateWorkReportOutcome.Error(

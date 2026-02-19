@@ -233,7 +233,7 @@ private fun DayDetailContent(
             }
 
             // Punch Records
-            timesheet.punches?.let { punches ->
+            timesheet.checks?.let { punches ->
                 if (punches.isNotEmpty()) {
                     item {
                         Text(
@@ -355,13 +355,7 @@ private fun NoAttendanceView(
 
 @Composable
 private fun StatusCard(text: String, color: String, isComplete: Boolean) {
-    val statusColor = when (color) {
-        "green" -> Color(0xFF4CAF50)
-        "red" -> Color(0xFFF44336)
-        "orange" -> Color(0xFFFF9800)
-        "blue" -> Color(0xFF2196F3)
-        else -> Color(0xFF9E9E9E)
-    }
+    val statusColor = parseHexColor(color)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -505,9 +499,9 @@ private fun PunchRecordCard(punch: PunchRecord) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = if (punch.type == "PUNCH IN") Icons.Default.Login else Icons.Default.Logout,
+                    imageVector = if (punch.type == "CHECK IN") Icons.Default.Login else Icons.Default.Logout,
                     contentDescription = punch.type,
-                    tint = if (punch.type == "PUNCH IN") Color(0xFF4CAF50) else Color(0xFFF44336)
+                    tint = if (punch.type == "CHECK IN") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                 )
                 Column {
                     Text(
@@ -581,5 +575,14 @@ private fun ErrorView(message: String) {
                 color = MaterialTheme.colorScheme.error
             )
         }
+    }
+}
+
+private fun parseHexColor(hex: String): Color {
+    return try {
+        val colorInt = android.graphics.Color.parseColor(hex)
+        Color(colorInt)
+    } catch (e: Exception) {
+        Color(0xFF9E9E9E)
     }
 }

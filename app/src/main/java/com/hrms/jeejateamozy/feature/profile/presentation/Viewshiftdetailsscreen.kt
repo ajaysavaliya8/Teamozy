@@ -2,7 +2,6 @@
 
 package com.hrms.jeejateamozy.feature.profile.presentation
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,19 +12,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.feature.profile.data.DaySchedule
+import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsData
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
 import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsOutcome
 
 /**
  * ViewShiftDetailsScreen - Display shift details (READ ONLY)
- * Shows shift timings, break schedules, policies, and weekly schedule
+ * Shows shift overview, attendance policies, shift settings, and weekly schedule
  */
 @Composable
 fun ViewShiftDetailsScreen(
@@ -34,28 +32,8 @@ fun ViewShiftDetailsScreen(
     val context = LocalContext.current
     val profileRepository = remember { ProfileRepository(context) }
 
-    // State variables
-    var shiftName by remember { mutableStateOf("") }
-    var shiftCode by remember { mutableStateOf("") }
-    var multiplePunchAllowed by remember { mutableStateOf(false) }
-    var faceRecognitionEnabled by remember { mutableStateOf(false) }
-    var fingerprintEnabled by remember { mutableStateOf(false) }
-    var weekOffDays by remember { mutableStateOf<List<String>>(emptyList()) }
-    var lateInMaxMinutes by remember { mutableStateOf<Int?>(null) }
-    var earlyOutMaxMinutes by remember { mutableStateOf<Int?>(null) }
-    var allowShortLeave by remember { mutableStateOf(false) }
-    var shortLeaveMinutes by remember { mutableStateOf<Int?>(null) }
-    var breakType by remember { mutableStateOf("") }
-    var breakTimingType by remember { mutableStateOf("") }
-
-    var mondaySchedule by remember { mutableStateOf<DaySchedule?>(null) }
-    var tuesdaySchedule by remember { mutableStateOf<DaySchedule?>(null) }
-    var wednesdaySchedule by remember { mutableStateOf<DaySchedule?>(null) }
-    var thursdaySchedule by remember { mutableStateOf<DaySchedule?>(null) }
-    var fridaySchedule by remember { mutableStateOf<DaySchedule?>(null) }
-    var saturdaySchedule by remember { mutableStateOf<DaySchedule?>(null) }
-    var sundaySchedule by remember { mutableStateOf<DaySchedule?>(null) }
-
+    // Single state variable for all shift data
+    var shiftData by remember { mutableStateOf<ShiftDetailsData?>(null) }
     var isFetching by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -64,29 +42,7 @@ fun ViewShiftDetailsScreen(
         isFetching = true
         when (val result = profileRepository.getShiftDetails()) {
             is ShiftDetailsOutcome.Success -> {
-                result.shiftDetails?.let { data ->
-                    shiftName = data.shift_name ?: ""
-                    shiftCode = data.code ?: ""
-                    multiplePunchAllowed = data.multiple_punch_allowed ?: false
-                    faceRecognitionEnabled = data.face_recognition_enabled ?: false
-                    fingerprintEnabled = data.fingerprint_recognition_enabled ?: false
-                    weekOffDays = data.week_off_days ?: emptyList()
-                    lateInMaxMinutes = data.late_in_max_minutes
-                    earlyOutMaxMinutes = data.early_out_max_minutes
-                    allowShortLeave = data.allow_short_leave ?: false
-                    shortLeaveMinutes = data.short_leave_minutes_in_shift_time
-                    breakType = data.break_type ?: ""
-                    breakTimingType = data.break_timing_type ?: ""
-
-                    // Weekly schedule
-                    mondaySchedule = data.weekly_schedule?.monday
-                    tuesdaySchedule = data.weekly_schedule?.tuesday
-                    wednesdaySchedule = data.weekly_schedule?.wednesday
-                    thursdaySchedule = data.weekly_schedule?.thursday
-                    fridaySchedule = data.weekly_schedule?.friday
-                    saturdaySchedule = data.weekly_schedule?.saturday
-                    sundaySchedule = data.weekly_schedule?.sunday
-                }
+                shiftData = result.shiftDetails
                 isFetching = false
             }
             is ShiftDetailsOutcome.Error -> {
@@ -173,6 +129,7 @@ fun ViewShiftDetailsScreen(
                     }
                 }
                 else -> {
+                    val data = shiftData
                     // Content State
                     Column(
                         modifier = Modifier
@@ -210,46 +167,22 @@ fun ViewShiftDetailsScreen(
                         Spacer(Modifier.height(20.dp))
 
                         // Shift Overview Card
-                        ShiftOverviewCard(
-                            shiftName = shiftName,
-                            shiftCode = shiftCode,
-                            weekOffDays = weekOffDays
-                        )
+                        ShiftOverviewCard(data)
 
                         Spacer(Modifier.height(16.dp))
 
-                        // Policies Card
-                        PoliciesCard(
-                            lateInMaxMinutes = lateInMaxMinutes,
-                            earlyOutMaxMinutes = earlyOutMaxMinutes,
-                            allowShortLeave = allowShortLeave,
-                            shortLeaveMinutes = shortLeaveMinutes
-                        )
+                        // Attendance Policies Card
+                        AttendancePoliciesCard(data)
 
                         Spacer(Modifier.height(16.dp))
 
-                        // Settings Card
-                        SettingsCard(
-                            multiplePunchAllowed = multiplePunchAllowed,
-                            faceRecognitionEnabled = faceRecognitionEnabled,
-                            fingerprintEnabled = fingerprintEnabled,
-                            breakType = breakType,
-                            breakTimingType = breakTimingType
-                        )
+                        // Shift Settings Card
+                        ShiftSettingsCard(data)
 
                         Spacer(Modifier.height(16.dp))
 
                         // Weekly Schedule Card
-                        WeeklyScheduleCard(
-                            monday = mondaySchedule,
-                            tuesday = tuesdaySchedule,
-                            wednesday = wednesdaySchedule,
-                            thursday = thursdaySchedule,
-                            friday = fridaySchedule,
-                            saturday = saturdaySchedule,
-                            sunday = sundaySchedule,
-                            weekOffDays = weekOffDays
-                        )
+                        WeeklyScheduleCard(data?.weekly_schedule)
 
                         // Extra bottom padding
                         Spacer(Modifier.height(100.dp))
@@ -264,11 +197,7 @@ fun ViewShiftDetailsScreen(
  * Shift Overview Card
  */
 @Composable
-private fun ShiftOverviewCard(
-    shiftName: String,
-    shiftCode: String,
-    weekOffDays: List<String>
-) {
+private fun ShiftOverviewCard(data: ShiftDetailsData?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -300,12 +229,29 @@ private fun ShiftOverviewCard(
             Divider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(16.dp))
 
-            InfoRow(label = "Shift Name", value = shiftName.ifEmpty { "Not Available" })
+            InfoRow(
+                label = "Shift Name",
+                value = data?.shift_name?.ifEmpty { "Not Available" } ?: "Not Available"
+            )
             Spacer(Modifier.height(12.dp))
-            InfoRow(label = "Shift Code", value = shiftCode.ifEmpty { "Not Available" })
+            InfoRow(
+                label = "Shift Code",
+                value = data?.code?.ifEmpty { "Not Available" } ?: "Not Available"
+            )
+            Spacer(Modifier.height(12.dp))
+            InfoRow(
+                label = "Shift Type",
+                value = data?.shift_type?.ifEmpty { "Not Available" } ?: "Not Available"
+            )
+            Spacer(Modifier.height(12.dp))
+            InfoRow(
+                label = "Attendance Calculation",
+                value = data?.attendance_calc_mode?.ifEmpty { "Not Available" } ?: "Not Available"
+            )
             Spacer(Modifier.height(12.dp))
 
             // Week Off Days
+            val weekOffDays = data?.week_off_days ?: emptyList()
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Week Off Days",
@@ -350,15 +296,12 @@ private fun ShiftOverviewCard(
 }
 
 /**
- * Policies Card
+ * Attendance Policies Card (from policy object)
  */
 @Composable
-private fun PoliciesCard(
-    lateInMaxMinutes: Int?,
-    earlyOutMaxMinutes: Int?,
-    allowShortLeave: Boolean,
-    shortLeaveMinutes: Int?
-) {
+private fun AttendancePoliciesCard(data: ShiftDetailsData?) {
+    val policy = data?.policy
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -390,37 +333,140 @@ private fun PoliciesCard(
             Divider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(16.dp))
 
-            InfoRow(
-                label = "Late In Allowed",
-                value = if (lateInMaxMinutes != null) "$lateInMaxMinutes minutes" else "Not set"
-            )
-            Spacer(Modifier.height(12.dp))
-            InfoRow(
-                label = "Early Out Allowed",
-                value = if (earlyOutMaxMinutes != null) "$earlyOutMaxMinutes minutes" else "Not set"
-            )
-            Spacer(Modifier.height(12.dp))
-            InfoRow(
-                label = "Short Leave",
-                value = if (allowShortLeave) {
-                    if (shortLeaveMinutes != null) "Allowed ($shortLeaveMinutes min)" else "Allowed"
-                } else "Not Allowed"
-            )
+            if (policy == null) {
+                Text(
+                    text = "No policy information available",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                // Late In Section
+                Text(
+                    text = "Late In",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                InfoRow(
+                    label = "Grace Minutes",
+                    value = policy.late_in_grace_minutes?.let { "$it min" } ?: "Not set"
+                )
+                Spacer(Modifier.height(8.dp))
+                InfoRow(
+                    label = "Max Allowed",
+                    value = policy.late_in_max_minutes?.let { "$it min" } ?: "Not set"
+                )
+                Spacer(Modifier.height(8.dp))
+                InfoRow(
+                    label = "Deduction Type",
+                    value = policy.late_in_deduction_type?.ifEmpty { "Not set" } ?: "Not set"
+                )
+                Spacer(Modifier.height(4.dp))
+                ToggleRow(
+                    label = "Cover with Overtime",
+                    enabled = policy.late_in_cover_with_overtime ?: false
+                )
+
+                Spacer(Modifier.height(16.dp))
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(Modifier.height(16.dp))
+
+                // Early Out Section
+                Text(
+                    text = "Early Out",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                InfoRow(
+                    label = "Grace Minutes",
+                    value = policy.early_out_grace_minutes?.let { "$it min" } ?: "Not set"
+                )
+                Spacer(Modifier.height(8.dp))
+                InfoRow(
+                    label = "Max Allowed",
+                    value = policy.early_out_max_minutes?.let { "$it min" } ?: "Not set"
+                )
+                Spacer(Modifier.height(8.dp))
+                InfoRow(
+                    label = "Deduction Type",
+                    value = policy.early_out_deduction_type?.ifEmpty { "Not set" } ?: "Not set"
+                )
+                Spacer(Modifier.height(4.dp))
+                ToggleRow(
+                    label = "Cover with Early Arrival",
+                    enabled = policy.early_out_cover_with_early_arrival ?: false
+                )
+
+                Spacer(Modifier.height(16.dp))
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(Modifier.height(16.dp))
+
+                // Overtime Section
+                Text(
+                    text = "Overtime",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                ToggleRow(
+                    label = "Overtime",
+                    enabled = policy.overtime_enabled ?: false
+                )
+                if (policy.overtime_enabled == true) {
+                    Spacer(Modifier.height(8.dp))
+                    InfoRow(
+                        label = "Threshold",
+                        value = policy.overtime_threshold_minutes?.let { "$it min" } ?: "Not set"
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    InfoRow(
+                        label = "Max Per Day",
+                        value = policy.max_overtime_hours_per_day?.let { "$it hrs" } ?: "Not set"
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(Modifier.height(16.dp))
+
+                // Short Leave Section
+                Text(
+                    text = "Short Leave",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                ToggleRow(
+                    label = "Short Leave",
+                    enabled = policy.short_leave_enabled ?: false
+                )
+                if (policy.short_leave_enabled == true) {
+                    Spacer(Modifier.height(8.dp))
+                    InfoRow(
+                        label = "Max Duration",
+                        value = policy.short_leave_max_minutes?.let { "$it min" } ?: "Not set"
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    InfoRow(
+                        label = "Monthly Limit",
+                        value = policy.short_leave_monthly_limit?.toString() ?: "Not set"
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * Settings Card
+ * Shift Settings Card
  */
 @Composable
-private fun SettingsCard(
-    multiplePunchAllowed: Boolean,
-    faceRecognitionEnabled: Boolean,
-    fingerprintEnabled: Boolean,
-    breakType: String,
-    breakTimingType: String
-) {
+private fun ShiftSettingsCard(data: ShiftDetailsData?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -452,15 +498,29 @@ private fun SettingsCard(
             Divider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(16.dp))
 
-            ToggleRow(label = "Multiple Punch", enabled = multiplePunchAllowed)
+            ToggleRow(label = "Multiple Check-in", enabled = data?.multiple_check_allowed ?: false)
+            if (data?.multiple_check_allowed == true && data.max_checks_per_day != null) {
+                Spacer(Modifier.height(8.dp))
+                InfoRow(
+                    label = "Max Checks Per Day",
+                    value = data.max_checks_per_day.toString()
+                )
+            }
             Spacer(Modifier.height(12.dp))
-            ToggleRow(label = "Face Recognition", enabled = faceRecognitionEnabled)
+            ToggleRow(label = "Face Recognition", enabled = data?.face_recognition_enabled ?: false)
             Spacer(Modifier.height(12.dp))
-            ToggleRow(label = "Fingerprint", enabled = fingerprintEnabled)
+            ToggleRow(label = "Fingerprint", enabled = data?.fingerprint_enabled ?: false)
             Spacer(Modifier.height(12.dp))
-            InfoRow(label = "Break Type", value = breakType.ifEmpty { "Not set" })
+            ToggleRow(label = "GPS Tracking", enabled = data?.gps_tracking_enabled ?: false)
             Spacer(Modifier.height(12.dp))
-            InfoRow(label = "Break Timing", value = breakTimingType.ifEmpty { "Not set" })
+            ToggleRow(label = "Geofence Required", enabled = data?.geofence_required ?: false)
+            Spacer(Modifier.height(12.dp))
+            InfoRow(
+                label = "Break Type",
+                value = data?.break_type?.ifEmpty { "Not set" } ?: "Not set"
+            )
+            Spacer(Modifier.height(12.dp))
+            ToggleRow(label = "Break Check Required", enabled = data?.break_check_required ?: false)
         }
     }
 }
@@ -469,16 +529,10 @@ private fun SettingsCard(
  * Weekly Schedule Card
  */
 @Composable
-private fun WeeklyScheduleCard(
-    monday: DaySchedule?,
-    tuesday: DaySchedule?,
-    wednesday: DaySchedule?,
-    thursday: DaySchedule?,
-    friday: DaySchedule?,
-    saturday: DaySchedule?,
-    sunday: DaySchedule?,
-    weekOffDays: List<String>
-) {
+private fun WeeklyScheduleCard(weeklySchedule: Map<String, DaySchedule>?) {
+    // Ordered days of the week
+    val dayOrder = listOf("sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday")
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -510,19 +564,25 @@ private fun WeeklyScheduleCard(
             Divider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(16.dp))
 
-            DayScheduleRow("Monday", monday, weekOffDays.contains("Monday"))
-            Spacer(Modifier.height(12.dp))
-            DayScheduleRow("Tuesday", tuesday, weekOffDays.contains("Tuesday"))
-            Spacer(Modifier.height(12.dp))
-            DayScheduleRow("Wednesday", wednesday, weekOffDays.contains("Wednesday"))
-            Spacer(Modifier.height(12.dp))
-            DayScheduleRow("Thursday", thursday, weekOffDays.contains("Thursday"))
-            Spacer(Modifier.height(12.dp))
-            DayScheduleRow("Friday", friday, weekOffDays.contains("Friday"))
-            Spacer(Modifier.height(12.dp))
-            DayScheduleRow("Saturday", saturday, weekOffDays.contains("Saturday"))
-            Spacer(Modifier.height(12.dp))
-            DayScheduleRow("Sunday", sunday, weekOffDays.contains("Sunday"))
+            if (weeklySchedule.isNullOrEmpty()) {
+                Text(
+                    text = "No schedule information available",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                dayOrder.forEachIndexed { index, dayKey ->
+                    val schedule = weeklySchedule[dayKey]
+                    val displayName = dayKey.replaceFirstChar { it.uppercase() }
+                    DayScheduleRow(
+                        dayName = displayName,
+                        schedule = schedule
+                    )
+                    if (index < dayOrder.lastIndex) {
+                        Spacer(Modifier.height(12.dp))
+                    }
+                }
+            }
         }
     }
 }
@@ -531,7 +591,7 @@ private fun WeeklyScheduleCard(
  * Day Schedule Row
  */
 @Composable
-private fun DayScheduleRow(dayName: String, schedule: DaySchedule?, isWeekOff: Boolean) {
+private fun DayScheduleRow(dayName: String, schedule: DaySchedule?) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = dayName,
@@ -541,7 +601,13 @@ private fun DayScheduleRow(dayName: String, schedule: DaySchedule?, isWeekOff: B
         )
         Spacer(Modifier.height(6.dp))
 
-        if (isWeekOff) {
+        if (schedule == null) {
+            Text(
+                text = "No schedule",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (schedule.is_working_day == false) {
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
@@ -556,39 +622,36 @@ private fun DayScheduleRow(dayName: String, schedule: DaySchedule?, isWeekOff: B
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
-        } else if (schedule != null) {
+        } else {
             Column {
+                // Shift times
                 if (schedule.shift_start_time != null && schedule.shift_end_time != null) {
                     Text(
-                        text = "🕐 ${formatTime(schedule.shift_start_time)} - ${formatTime(schedule.shift_end_time)}",
+                        text = "${formatTime(schedule.shift_start_time)} - ${formatTime(schedule.shift_end_time)}",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-                if (schedule.lunch_start_time != null && schedule.lunch_end_time != null) {
+
+                // Full day and half day hours
+                if (schedule.min_full_day_hours != null) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "🍽️ Lunch: ${formatTime(schedule.lunch_start_time)} - ${formatTime(schedule.lunch_end_time)}",
+                        text = "Full Day: ${schedule.min_full_day_hours} hrs",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (schedule.tea_start_time != null && schedule.tea_end_time != null) {
-                    Spacer(Modifier.height(4.dp))
+                if (schedule.min_half_day_hours != null) {
+                    Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "☕ Tea: ${formatTime(schedule.tea_start_time)} - ${formatTime(schedule.tea_end_time)}",
+                        text = "Half Day: ${schedule.min_half_day_hours} hrs",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-        } else {
-            Text(
-                text = "No schedule",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

@@ -4,7 +4,7 @@ package com.hrms.jeejateamozy.feature.profile.data
  * Employment Identity Response
  */
 data class EmploymentIdentityResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
     val data: EmploymentIdentityData? = null
 )
@@ -12,8 +12,8 @@ data class EmploymentIdentityResponse(
 data class EmploymentIdentityData(
     val aadhaar_number: String?,
     val pan_number: String?,
-    val aadhar_front_image_url: String?,
-    val aadhar_back_image_url: String?,
+    val aadhaar_front_image_url: String?,
+    val aadhaar_back_image_url: String?,
     val pan_card_image_url: String?
 )
 

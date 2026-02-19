@@ -61,7 +61,7 @@ class CorrectionRequestRepository(private val context: Context) {
                 when {
                     response.isSuccessful && response.code() == 200 -> {
                         val responseBody = response.body()
-                        if (responseBody?.status == "success") {
+                        if (responseBody?.success == true) {
                             CorrectionRequestOptionsOutcome.Success(
                                 options = responseBody.data.toDomain()
                             )
@@ -166,7 +166,7 @@ class CorrectionRequestRepository(private val context: Context) {
             when {
                 response.isSuccessful && (response.code() == 200 || response.code() == 201) -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         SubmitCorrectionRequestOutcome.Success(
                             message = responseBody.message
                         )
@@ -204,7 +204,7 @@ class CorrectionRequestRepository(private val context: Context) {
                 when {
                     response.isSuccessful && response.code() == 200 -> {
                         val responseBody = response.body()
-                        if (responseBody?.status == "success") {
+                        if (responseBody?.success == true) {
                             WithdrawCorrectionRequestOutcome.Success(
                                 message = responseBody.message
                             )
@@ -247,7 +247,7 @@ class CorrectionRequestRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         CorrectionRequestListOutcome.Success(
                             requests = responseBody.data.requests.map { it.toDomain() },
                             pagination = responseBody.data.pagination.toDomain()
@@ -278,7 +278,7 @@ class CorrectionRequestRepository(private val context: Context) {
                 when {
                     response.isSuccessful && response.code() == 200 -> {
                         val responseBody = response.body()
-                        if (responseBody?.status == "success") {
+                        if (responseBody?.success == true) {
                             CorrectionRequestDetailOutcome.Success(
                                 detail = responseBody.data.toDomain()
                             )

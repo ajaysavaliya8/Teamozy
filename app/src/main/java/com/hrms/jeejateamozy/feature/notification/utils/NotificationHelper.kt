@@ -80,11 +80,10 @@ object NotificationHelper {
         try {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Create intent - use screen from extras if provided, otherwise open notifications
-            val screen = extras["screen"] ?: DeepLink.SCREEN_NOTIFICATIONS
+            // Create intent - only navigate to a screen if "screen" is explicitly provided
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(EXTRA_SCREEN, screen)
+                extras["screen"]?.let { putExtra(EXTRA_SCREEN, it) }
                 putExtra(EXTRA_NOTIFICATION_TYPE, type)
                 putExtra("title", title)
                 putExtra("message", message)

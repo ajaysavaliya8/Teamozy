@@ -207,14 +207,14 @@ fun EditSocialMediaScreen(
 
                         try {
                             val res = NetworkModule.apiService.updateSocialMedia(
-                                facebook = facebook.ifBlank { null },
-                                linkedin = linkedin.ifBlank { null },
-                                x = x.ifBlank { null },
-                                instagram = instagram.ifBlank { null },
-                                snapchat = snapchat.ifBlank { null }
+                                facebookUrl = facebook.ifBlank { null },
+                                linkedinUrl = linkedin.ifBlank { null },
+                                xUrl = x.ifBlank { null },
+                                instagramUrl = instagram.ifBlank { null },
+                                snapchatUrl = snapchat.ifBlank { null }
                             )
 
-                            if (res.isSuccessful && res.body()?.status == "success") {
+                            if (res.isSuccessful && res.body()?.success == true) {
                                 // persist locally
                                 prefs.facebook = facebook.ifBlank { null }
                                 prefs.linkedin = linkedin.ifBlank { null }

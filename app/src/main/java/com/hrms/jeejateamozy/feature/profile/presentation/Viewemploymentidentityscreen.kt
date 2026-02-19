@@ -57,8 +57,8 @@ fun ViewEmploymentIdentityScreen(
                 result.identityInfo?.let { data ->
                     aadhaarNumber = data.aadhaar_number ?: ""
                     panNumber = data.pan_number ?: ""
-                    aadharFrontImageUrl = data.aadhar_front_image_url
-                    aadharBackImageUrl = data.aadhar_back_image_url
+                    aadharFrontImageUrl = data.aadhaar_front_image_url
+                    aadharBackImageUrl = data.aadhaar_back_image_url
                     panCardImageUrl = data.pan_card_image_url
                 }
                 isFetching = false

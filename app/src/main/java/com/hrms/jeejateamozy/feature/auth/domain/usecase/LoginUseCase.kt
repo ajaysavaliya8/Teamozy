@@ -2,6 +2,7 @@ package com.hrms.jeejateamozy.feature.auth.domain.usecase
 
 import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
+import com.hrms.jeejateamozy.feature.auth.data.ResetOutcome
 
 class LoginUseCase(private val repo: AuthRepository) {
     suspend fun sendOtp(phone: String): AuthOutcome = repo.sendOtp(phone)
@@ -22,4 +23,13 @@ class LoginUseCase(private val repo: AuthRepository) {
      */
     suspend fun requestChangeDevice(mobileNumber: String, otp: String): AuthOutcome =
         repo.requestChangeDevice(mobileNumber, otp)
+
+    suspend fun forgotPassword(phone: String): AuthOutcome =
+        repo.forgotPassword(phone)
+
+    suspend fun verifyResetOtp(phone: String, otp: String): ResetOutcome =
+        repo.verifyResetOtp(phone, otp)
+
+    suspend fun resetPassword(resetToken: String, newPassword: String, confirmPassword: String): AuthOutcome =
+        repo.resetPassword(resetToken, newPassword, confirmPassword)
 }

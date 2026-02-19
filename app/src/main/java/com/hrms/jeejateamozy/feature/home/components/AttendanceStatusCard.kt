@@ -41,6 +41,7 @@ fun AttendanceStatusCard(
     elapsedSeconds: Int,
     isLoading: Boolean,
     isFaceVerifyBusy: Boolean,
+    loadingMessage: String? = null,
     checkOutTime: String? = null,
     onCheckInClick: () -> Unit,
     onCheckOutClick: () -> Unit,
@@ -301,7 +302,7 @@ fun AttendanceStatusCard(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (isFaceVerifyBusy) "Verifying face..." else "Processing...",
+                        text = if (isFaceVerifyBusy) "Verifying face..." else (loadingMessage ?: "Processing..."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

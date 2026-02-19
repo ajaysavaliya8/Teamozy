@@ -92,7 +92,7 @@ object NetworkModule {
 
     private val unauthorizedInterceptor = Interceptor { chain ->
         val res = chain.proceed(chain.request())
-        if (res.code == 401) {
+        if (res.code == 401 || res.code == 403) {
             AppStateManager.emitUnauthorized()
         }
         res
