@@ -180,6 +180,7 @@ class EmbeddingExtractor private constructor(
                     telemetry?.onExtractionComplete(dt, false)
                     logW("Face rejected: ${outcome.reason}")
                     throw IllegalStateException(outcome.reason.userMessage())
+
                 }
                 is FaceDetectOutcome.Failure -> {
                     val dt = System.currentTimeMillis() - t0

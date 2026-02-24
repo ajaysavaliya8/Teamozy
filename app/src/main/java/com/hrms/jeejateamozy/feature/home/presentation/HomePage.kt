@@ -2,15 +2,26 @@
 package com.hrms.jeejateamozy.feature.home.presentation
 
 import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
@@ -58,6 +69,9 @@ fun HomePage(
     // Notification count from server (for badge)
     val notificationRepo: NotificationRepository = koinInject()
     val notificationCount by notificationRepo.serverUnreadCountFlow.collectAsState()
+
+    // Error dialog state
+    var errorDialogMessage by remember { mutableStateOf<String?>(null) }
 
     // Face verification state
     var faceVerifyBusy by remember { mutableStateOf(false) }
@@ -137,10 +151,69 @@ fun HomePage(
         vm.events.collect { event ->
             when (event) {
                 is AttendanceEvent.ShowError -> {
-                    snack.showSnackbar(event.message, duration = SnackbarDuration.Short)
+                    errorDialogMessage = event.message
                 }
                 is AttendanceEvent.ShowSuccess -> {
                     snack.showSnackbar(event.message, duration = SnackbarDuration.Short)
+                }
+            }
+        }
+    }
+
+    // Error dialog (iOS style)
+    errorDialogMessage?.let { message ->
+        Dialog(
+            onDismissRequest = { errorDialogMessage = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 48.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xF2F2F2F2)),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(20.dp))
+
+                Text(
+                    text = "Attention",
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.Black,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    text = message,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.Black.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 21.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                HorizontalDivider(color = Color.Black.copy(alpha = 0.12f), thickness = 0.5.dp)
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { errorDialogMessage = null }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "OK",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF007AFF)
+                    )
                 }
             }
         }

@@ -55,7 +55,8 @@ object NetworkModule {
                     url.contains("/files/profile/") ||
                     url.contains("/files/adhar/") ||
                     url.contains("/files/pan/") ||
-                    url.contains("/files/company_logo/")
+                    url.contains("/files/company_logo/") ||
+                    url.contains("/message-attachment/")
 
             val newRequest = if (isFileUrl && !token.isNullOrBlank()) {
                 // ✅ For file URLs: Add token as query parameter (backend requirement)

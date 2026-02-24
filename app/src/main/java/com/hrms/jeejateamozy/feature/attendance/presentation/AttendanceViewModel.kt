@@ -116,6 +116,9 @@ class AttendanceViewModel(
                         checkOutTime = outcome.checkOutTime,
                         checkInTToken = null,
                         checkOutTToken = null,
+                        checkInLatitude = null,
+                        checkInLongitude = null,
+                        checkInAccuracy = null,
                         showFaceVerification = false,
                         showReasonDialog = false,
                         showWorkReportDialog = false,
@@ -203,7 +206,12 @@ class AttendanceViewModel(
                         emitError("Fake GPS detected. Please disable mock location apps.")
                         return@launch
                     }
-                    _ui.value = _ui.value.copy(loadingMessage = null)
+                    _ui.value = _ui.value.copy(
+                        loadingMessage = null,
+                        checkInLatitude = locResult.latitude,
+                        checkInLongitude = locResult.longitude,
+                        checkInAccuracy = locResult.accuracy
+                    )
                     performCheckIn(locResult.latitude, locResult.longitude, context)
                 }
                 is LocationResult.Error -> {
@@ -306,6 +314,10 @@ class AttendanceViewModel(
         when (val outcome = repo.checkOut(latitude, longitude)) {
             is CheckOutOutcome.RequiresFaceVerification -> {
                 Log.d(TAG, "✅ Check-out requires face verification")
+
+                val pendingMessage = outcome.pendingMessage
+                Log.d(TAG, "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}" else "null"}")
+
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     checkOutTToken = outcome.tToken,
@@ -318,12 +330,18 @@ class AttendanceViewModel(
                     checkOutWorkReportRequired = outcome.workReportRequired,
                     checkOutMessage = outcome.message,
                     checkOutFaceVector = outcome.faceVector,
-                    showFaceVerification = true
+                    pendingMessage = pendingMessage,
+                    showPendingMessageDialog = pendingMessage != null,
+                    showFaceVerification = pendingMessage == null
                 )
             }
 
             is CheckOutOutcome.RequiresReasons -> {
                 Log.d(TAG, "✅ Check-out requires reasons")
+
+                val pendingMessage = outcome.pendingMessage
+                Log.d(TAG, "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}" else "null"}")
+
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     checkOutTToken = outcome.tToken,
@@ -334,12 +352,14 @@ class AttendanceViewModel(
                     checkOutOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkOutWorkReportRequired = outcome.workReportRequired,
                     checkOutMessage = outcome.message,
-                    showReasonDialog = outcome.earlyReasonRequired || outcome.outOfRangeReasonRequired,
-                    showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired,
+                    pendingMessage = pendingMessage,
+                    showPendingMessageDialog = pendingMessage != null,
+                    showReasonDialog = pendingMessage == null && (outcome.earlyReasonRequired || outcome.outOfRangeReasonRequired),
+                    showWorkReportDialog = pendingMessage == null && outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired,
                     reverifyError = null
                 )
 
-                if (!outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired && !outcome.workReportRequired) {
+                if (pendingMessage == null && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired && !outcome.workReportRequired) {
                     completeCheckOut(null, null, null, null, context)
                 }
             }
@@ -366,51 +386,101 @@ class AttendanceViewModel(
     fun onPendingMessageAcknowledged(acknowledgmentNote: String?, context: Context) {
         Log.d(TAG, "✅ Message acknowledged, note: ${acknowledgmentNote?.take(50)}")
 
+        val isCheckIn = _ui.value.checkInTToken != null
+
         _ui.value = _ui.value.copy(
             showPendingMessageDialog = false,
             acknowledgmentNote = acknowledgmentNote
         )
 
-        val hasLateOrOutOfRangeReasons = _ui.value.checkInLateReasonRequired || _ui.value.checkInOutOfRangeReasonRequired
-        val hasFaceVerification = _ui.value.checkInFaceVector != null
+        if (isCheckIn) {
+            val hasFaceVerification = _ui.value.checkInFaceVector != null
+            val hasReasons = _ui.value.checkInLateReasonRequired || _ui.value.checkInOutOfRangeReasonRequired
 
-        when {
-            hasFaceVerification -> {
-                _ui.value = _ui.value.copy(showFaceVerification = true)
+            when {
+                hasFaceVerification -> {
+                    _ui.value = _ui.value.copy(showFaceVerification = true)
+                }
+                hasReasons -> {
+                    _ui.value = _ui.value.copy(showReasonDialog = true, reverifyError = null)
+                }
+                else -> {
+                    completeCheckIn(null, null, context)
+                }
             }
-            hasLateOrOutOfRangeReasons -> {
-                _ui.value = _ui.value.copy(showReasonDialog = true, reverifyError = null)
-            }
-            else -> {
-                completeCheckIn(null, null, context)
+        } else {
+            // Check-out flow
+            val hasFaceVerification = _ui.value.checkOutFaceVector != null
+            val hasReasons = _ui.value.checkOutEarlyReasonRequired || _ui.value.checkOutOutOfRangeReasonRequired
+            val hasWorkReport = _ui.value.checkOutWorkReportRequired
+
+            when {
+                hasFaceVerification -> {
+                    _ui.value = _ui.value.copy(showFaceVerification = true)
+                }
+                hasReasons -> {
+                    _ui.value = _ui.value.copy(showReasonDialog = true, reverifyError = null)
+                }
+                hasWorkReport -> {
+                    _ui.value = _ui.value.copy(showWorkReportDialog = true)
+                }
+                else -> {
+                    completeCheckOut(null, null, null, null, context)
+                }
             }
         }
     }
 
     fun onPendingMessageDismissed(context: Context? = null) {
-        Log.d(TAG, "❌ Message cancelled - stopping check-in process")
+        val isCheckIn = _ui.value.checkInTToken != null
+        Log.d(TAG, "❌ Message cancelled - stopping ${if (isCheckIn) "check-in" else "check-out"} process")
 
         // Re-warm GPS so the next attempt is fast
         context?.let { try { LocationHelper(it).warmUpGps() } catch (_: Exception) {} }
 
-        _ui.value = _ui.value.copy(
-            isLoading = false,
-            showPendingMessageDialog = false,
-            pendingMessage = null,
-            acknowledgmentNote = null,
-            checkInTToken = null,
-            checkInFaceVector = null,
-            checkInMessage = null,
-            checkInMinimumQualityScore = null,
-            checkInIsLate = false,
-            checkInIsOutOfRange = false,
-            checkInLateReasonRequired = false,
-            checkInOutOfRangeReasonRequired = false,
-            showFaceVerification = false,
-            showReasonDialog = false
-        )
-
-        emitError("Check-in cancelled")
+        if (isCheckIn) {
+            _ui.value = _ui.value.copy(
+                isLoading = false,
+                showPendingMessageDialog = false,
+                pendingMessage = null,
+                acknowledgmentNote = null,
+                checkInTToken = null,
+                checkInFaceVector = null,
+                checkInMessage = null,
+                checkInMinimumQualityScore = null,
+                checkInIsLate = false,
+                checkInIsOutOfRange = false,
+                checkInLateReasonRequired = false,
+                checkInOutOfRangeReasonRequired = false,
+                checkInLatitude = null,
+                checkInLongitude = null,
+                checkInAccuracy = null,
+                showFaceVerification = false,
+                showReasonDialog = false
+            )
+            emitError("Check-in cancelled")
+        } else {
+            _ui.value = _ui.value.copy(
+                isLoading = false,
+                showPendingMessageDialog = false,
+                pendingMessage = null,
+                acknowledgmentNote = null,
+                checkOutTToken = null,
+                checkOutFaceVector = null,
+                checkOutMessage = null,
+                checkOutMinimumQualityScore = null,
+                checkOutWorkMinutes = null,
+                checkOutIsEarly = false,
+                checkOutIsOutOfRange = false,
+                checkOutEarlyReasonRequired = false,
+                checkOutOutOfRangeReasonRequired = false,
+                checkOutWorkReportRequired = false,
+                showFaceVerification = false,
+                showReasonDialog = false,
+                showWorkReportDialog = false
+            )
+            emitError("Check-out cancelled")
+        }
     }
 
     fun onFaceVerificationCancelled(context: Context? = null) {
@@ -435,6 +505,9 @@ class AttendanceViewModel(
                 checkInIsOutOfRange = false,
                 checkInLateReasonRequired = false,
                 checkInOutOfRangeReasonRequired = false,
+                checkInLatitude = null,
+                checkInLongitude = null,
+                checkInAccuracy = null,
                 pendingMessage = null,
                 acknowledgmentNote = null,
                 faceVerificationQualityScore = null,
@@ -456,6 +529,8 @@ class AttendanceViewModel(
                 checkOutEarlyReasonRequired = false,
                 checkOutOutOfRangeReasonRequired = false,
                 checkOutWorkReportRequired = false,
+                pendingMessage = null,
+                acknowledgmentNote = null,
                 faceVerificationQualityScore = null,
                 faceVerificationSuccess = false,
                 tempEarlyReason = null,
@@ -580,10 +655,9 @@ class AttendanceViewModel(
      *
      * Flow:
      * 1. Clear all existing pending locations from database (fresh start)
-     * 2. Capture CURRENT LIVE location (not from database)
-     * 3. Send this live location as "first location"
-     * 4. Complete check-in signature
-     * 5. START LocationTrackingService
+     * 2. Build location data from the GPS captured in startCheckIn() (no re-fetch)
+     * 3. Complete check-in signature with first location
+     * 4. START LocationTrackingService
      */
     fun completeCheckIn(
         lateReason: String?,
@@ -624,24 +698,18 @@ class AttendanceViewModel(
                 }
 
                 // ==========================================
-                // STEP 2: Capture CURRENT LIVE location
+                // STEP 2: Build location data from GPS already captured in startCheckIn()
                 // ==========================================
-                _ui.value = _ui.value.copy(loadingMessage = "Capturing location...")
-
-                Log.d(TAG, "📍 Capturing live location for check-in...")
-                val liveLocationHelper = LiveLocationHelper(context)
-                val locationResult = liveLocationHelper.captureLiveLocation()
+                val lat = _ui.value.checkInLatitude
+                val lng = _ui.value.checkInLongitude
+                val accuracy = _ui.value.checkInAccuracy
 
                 var firstLocation: LocationData? = null
-                when (locationResult) {
-                    is LiveLocationResult.Success -> {
-                        firstLocation = locationResult.locationData
-                        Log.d(TAG, "✅ Live location captured: lat=${firstLocation.latitude}, lng=${firstLocation.longitude}")
-                    }
-                    is LiveLocationResult.Error -> {
-                        Log.w(TAG, "⚠️ Failed to capture live location: ${locationResult.message}")
-                        // Continue without first location - non-blocking
-                    }
+                if (lat != null && lng != null) {
+                    firstLocation = LiveLocationHelper(context).buildLocationData(lat, lng, accuracy)
+                    Log.d(TAG, "✅ Using initial location: lat=$lat, lng=$lng, accuracy=$accuracy")
+                } else {
+                    Log.w(TAG, "⚠️ No initial location available")
                 }
 
                 // ==========================================
@@ -704,6 +772,9 @@ class AttendanceViewModel(
                             checkInTToken = null,
                             checkInFaceVector = null,
                             checkInMessage = null,
+                            checkInLatitude = null,
+                            checkInLongitude = null,
+                            checkInAccuracy = null,
                             faceVerificationQualityScore = null,
                             faceVerificationSuccess = false,
                             pendingMessage = null,
@@ -721,6 +792,9 @@ class AttendanceViewModel(
                             checkInTToken = null,
                             checkInFaceVector = null,
                             checkInMessage = null,
+                            checkInLatitude = null,
+                            checkInLongitude = null,
+                            checkInAccuracy = null,
                             pendingMessage = null,
                             acknowledgmentNote = null
                         )
@@ -848,6 +922,9 @@ class AttendanceViewModel(
 
                 _ui.value = _ui.value.copy(loadingMessage = "Completing check-out...")
 
+                val acknowledgmentNote = _ui.value.acknowledgmentNote
+                Log.d(TAG, "Completing check-out with acknowledgment: ${acknowledgmentNote?.take(50)}")
+
                 when (val outcome = repo.checkOutSignature(
                     tToken = tToken,
                     faceRecognitionQualityScore = _ui.value.faceVerificationQualityScore,
@@ -856,7 +933,8 @@ class AttendanceViewModel(
                     outOfRangeReason = outOfRangeReason,
                     workReport = workReport,
                     workReportFileUri = workReportFileUri,
-                    lastLocation = lastLocation
+                    lastLocation = lastLocation,
+                    acknowledgmentNote = acknowledgmentNote
                 )) {
                     is SignatureOutcome.Success -> {
                         Log.d(TAG, "✅ Check-out signature SUCCESS")
@@ -895,6 +973,8 @@ class AttendanceViewModel(
                             faceVerificationSuccess = false,
                             tempEarlyReason = null,
                             tempOutOfRangeReason = null,
+                            pendingMessage = null,
+                            acknowledgmentNote = null,
                             isComplete = true
                         )
 
@@ -910,7 +990,9 @@ class AttendanceViewModel(
                             checkOutFaceVector = null,
                             checkOutMessage = null,
                             tempEarlyReason = null,
-                            tempOutOfRangeReason = null
+                            tempOutOfRangeReason = null,
+                            pendingMessage = null,
+                            acknowledgmentNote = null
                         )
                         emitError(outcome.message)
                         delay(500)
@@ -982,6 +1064,9 @@ data class AttendanceUiState(
     val checkInOutOfRangeReasonRequired: Boolean = false,
     val checkInMessage: String? = null,
     val checkInFaceVector: FloatArray? = null,
+    val checkInLatitude: Double? = null,
+    val checkInLongitude: Double? = null,
+    val checkInAccuracy: Float? = null,
 
     val checkOutTToken: String? = null,
     val checkOutMinimumQualityScore: Float? = null,
