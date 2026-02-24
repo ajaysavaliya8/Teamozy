@@ -20,14 +20,11 @@ class TrackingWorker(
         private const val WORK_NAME = "location_tracking_worker"
 
         fun schedule(context: Context) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
-
+            // No network constraint — this worker only checks if the service
+            // is alive and restarts it. Must run even in airplane mode / Doze.
             val request = PeriodicWorkRequestBuilder<TrackingWorker>(
                 15, TimeUnit.MINUTES
             )
-                .setConstraints(constraints)
                 .setBackoffCriteria(
                     BackoffPolicy.LINEAR,
                     15, TimeUnit.MINUTES

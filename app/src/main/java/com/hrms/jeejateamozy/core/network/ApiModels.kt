@@ -44,6 +44,7 @@ data class LoginResponse(
 data class LoginData(
     val token: String? = null,
     val mobile_number: Long? = null,
+    val name: String? = null,
     val full_name: String? = null,
     val profile_url: String? = null,
     val branch_name: String? = null,
@@ -118,6 +119,7 @@ data class CheckInData(
     val is_late: Boolean? = null,
     val late_minutes: Int? = null,
     val is_out_of_range: Boolean? = null,
+    val is_check_in_valid_location: Boolean? = null,
     val late_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
     val pending_message: PendingMessage? = null,
@@ -161,10 +163,12 @@ data class CheckOutData(
     val is_early: Boolean? = null,
     val early_minutes: Int? = null,
     val is_out_of_range: Boolean? = null,
+    val is_check_out_valid_location: Boolean? = null,
     val early_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
     val work_report_require: Boolean? = null,
-    val work_minutes: Int? = null
+    val work_minutes: Int? = null,
+    val pending_message: PendingMessage? = null
 )
 
 data class CheckOutSignatureResponse(
@@ -655,7 +659,8 @@ data class LeaveTypeOption(
 data class VerifyTokenResponse(
     val success: Boolean,
     val message: String? = null,
-    val error_code: String? = null
+    val error_code: String? = null,
+    val data: LoginData? = null
 )
 
 data class FaceVerifyResponse(
@@ -1431,14 +1436,21 @@ data class PendingMessage(
     @SerializedName("message_type")
     val type: String?,
     val title: String,
-    @SerializedName("content")
+    @SerializedName(value = "body", alternate = ["content"])
     val body: String,
-    @SerializedName("has_attachments")
-    val has_attachment: Boolean,
-    val attachment_url: String?,
-    @SerializedName("require_acknowledgment")
-    val requires_acknowledgment: Boolean
-)
+    @SerializedName(value = "has_attachment", alternate = ["has_attachments"])
+    val has_attachment: Boolean = false,
+    val attachment_id: Int? = null,
+    val attachment_url: String? = null,
+    @SerializedName(value = "requires_acknowledgment", alternate = ["require_acknowledgment"])
+    val requires_acknowledgment: Boolean = false
+) {
+    /** Resolve attachment URL from direct URL (old backend) or attachment_id (new backend) */
+    fun resolveAttachmentUrl(baseUrl: String): String? {
+        if (!has_attachment) return null
+        return attachment_url ?: attachment_id?.let { "${baseUrl}message-attachment/$it" }
+    }
+}
 
 // ========================================
 // ENUMS

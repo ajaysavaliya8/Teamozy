@@ -84,14 +84,22 @@ class LocationTrackingService : Service() {
         // Broadcast action for UI refresh (when stop_tracking is received)
         const val ACTION_REFRESH_CHECK_STATUS = "com.hrms.jeejateamozy.ACTION_REFRESH_CHECK_STATUS"
 
-        // Timing - Production values
-        private const val LOCATION_INTERVAL_MS = 60_000L      // 60 seconds
-        private const val LOCATION_FASTEST_MS = 30_000L       // 30 seconds minimum
+        // Timing - Production values (battery-optimized)
+        private const val LOCATION_INTERVAL_MS = 120_000L     // 2 minutes
+        private const val LOCATION_FASTEST_MS = 60_000L       // 1 minute minimum
         private const val SYNC_INTERVAL_MS = 300_000L         // 5 minutes
         private const val SYNC_THRESHOLD_COUNT = 50            // Sync when 50+ locations pending
 
         // Accuracy filter - discard junk readings
         private const val MAX_TRACKING_ACCURACY_METERS = 100f
+
+        // Drift filter - ignore readings that are within GPS noise range of the last saved location
+        // If distance < max(accuracy, MIN_DISPLACEMENT_METERS), treat as stationary drift
+        private const val MIN_DISPLACEMENT_METERS = 10f
+
+        // Force-save interval - even if stationary, save at least once every N minutes
+        // so server knows the device is still alive and tracking
+        private const val FORCE_SAVE_INTERVAL_MS = 300_000L  // 5 minutes
 
         // GPS disabled check interval
         private const val GPS_CHECK_INTERVAL_MS = 30_000L     // Check every 30 seconds when GPS is disabled
@@ -170,6 +178,10 @@ class LocationTrackingService : Service() {
     private var isTracking = false
     private var wakeLock: PowerManager.WakeLock? = null
 
+    // Drift filter state
+    private var lastSavedLocation: android.location.Location? = null
+    private var lastSaveTimeMs: Long = 0L
+
     // ==========================================
     // SERVICE LIFECYCLE
     // ==========================================
@@ -212,6 +224,22 @@ class LocationTrackingService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Called when user swipes app from recent tasks.
+     * Reschedule keep-alives so the service restarts automatically.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d(TAG, "📍 App swiped from recents — rescheduling keep-alives")
+
+        val stateManager = TrackingStateManager(this)
+        if (stateManager.shouldTrackingBeActive()) {
+            // Reschedule alarms so the service comes back alive
+            TrackingAlarmReceiver.schedule(this)
+            TrackingWorker.schedule(this)
+        }
+    }
 
     override fun onDestroy() {
         Log.d(TAG, "📍 Service onDestroy()")
@@ -448,6 +476,23 @@ class LocationTrackingService : Service() {
                         return
                     }
 
+                    // Drift filter: skip if phone hasn't really moved
+                    val now = System.currentTimeMillis()
+                    val timeSinceLastSave = now - lastSaveTimeMs
+                    val prev = lastSavedLocation
+
+                    if (prev != null && timeSinceLastSave < FORCE_SAVE_INTERVAL_MS) {
+                        val distance = prev.distanceTo(location)
+                        // Use the larger of: minimum displacement OR current accuracy
+                        // If distance is within that range, it's GPS noise, not real movement
+                        val threshold = maxOf(MIN_DISPLACEMENT_METERS, location.accuracy)
+
+                        if (distance < threshold) {
+                            Log.d(TAG, "📍 Drift filter: skipping (moved ${String.format("%.1f", distance)}m < ${String.format("%.0f", threshold)}m threshold)")
+                            return
+                        }
+                    }
+
                     serviceScope.launch {
                         saveLocation(location)
                     }
@@ -461,10 +506,11 @@ class LocationTrackingService : Service() {
         Log.d(TAG, "🔄 Starting location updates - interval=${LOCATION_INTERVAL_MS}ms")
 
         val locationRequest = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY,
+            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
             LOCATION_INTERVAL_MS
         )
             .setMinUpdateIntervalMillis(LOCATION_FASTEST_MS)
+            .setMinUpdateDistanceMeters(MIN_DISPLACEMENT_METERS)  // Hardware-level drift filter
             .setWaitForAccurateLocation(false)
             .build()
 
@@ -518,6 +564,10 @@ class LocationTrackingService : Service() {
             val success = locationRepository.storeLocation(entity)
 
             if (success) {
+                // Update drift filter state
+                lastSavedLocation = location
+                lastSaveTimeMs = System.currentTimeMillis()
+
                 val pendingCount = locationRepository.getPendingCount()
                 Log.d(TAG, "📍 Location saved - $pendingCount pending")
 
@@ -729,7 +779,6 @@ class LocationTrackingService : Service() {
     // WAKE LOCK (with safe error handling)
     // ==========================================
 
-    @SuppressLint("WakelockTimeout")
     private fun acquireWakeLock() {
         try {
             if (wakeLock == null) {
@@ -738,8 +787,8 @@ class LocationTrackingService : Service() {
                     PowerManager.PARTIAL_WAKE_LOCK,
                     "Teamozy:LocationTracking"
                 )
-                wakeLock?.acquire()
-                Log.d(TAG, "🔋 Wake lock acquired")
+                wakeLock?.acquire(12 * 60 * 60 * 1000L) // 12-hour max timeout (auto-release safety)
+                Log.d(TAG, "🔋 Wake lock acquired (12h timeout)")
             }
         } catch (e: SecurityException) {
             Log.e(TAG, "⚠️ WAKE_LOCK permission not granted - continuing without wake lock", e)

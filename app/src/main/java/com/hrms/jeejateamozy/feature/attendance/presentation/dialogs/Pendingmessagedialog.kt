@@ -1,50 +1,56 @@
 package com.hrms.jeejateamozy.feature.attendance.presentation.dialogs
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil.compose.AsyncImage
+import coil.ImageLoader
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.PendingMessage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 
-/**
- * Message type styling configuration
- */
-private data class MessageTypeStyle(
-    val label: String,
-    val icon: ImageVector,
-    val iconColor: Color,
-    val backgroundColor: Color,
-    val textColor: Color
-)
+// Accent colors per message type
+private fun accentColor(type: String?): Color = when (type?.uppercase()) {
+    "REMINDER" -> Color(0xFF6366F1)
+    "NOTICE"   -> Color(0xFF0EA5E9)
+    "WARNING"  -> Color(0xFFD97706)
+    "CRITICAL" -> Color(0xFFDC2626)
+    else       -> Color(0xFF6366F1)
+}
+
+private fun typeLabel(type: String?): String = when (type?.uppercase()) {
+    "REMINDER" -> "Reminder"
+    "NOTICE"   -> "Notice"
+    "WARNING"  -> "Warning"
+    "CRITICAL" -> "Critical"
+    else       -> "Message"
+}
 
 /**
- * Pending Message Dialog - Compact Version
- * Displays messages from management to employees during check-in
+ * Pending Message Dialog — clean iOS-style alert
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PendingMessageDialog(
     message: PendingMessage,
@@ -54,12 +60,12 @@ fun PendingMessageDialog(
     val context = LocalContext.current
     val preferencesManager = remember { PreferencesManager.getInstance(context) }
     var acknowledgmentNote by remember { mutableStateOf("") }
-    val messageStyle = getMessageTypeStyle(message.type)
+    val accent = accentColor(message.type)
 
     Dialog(
         onDismissRequest = {
             if (!message.requires_acknowledgment) {
-                onDismiss()
+                onAcknowledge(null)
             }
         },
         properties = DialogProperties(
@@ -68,235 +74,249 @@ fun PendingMessageDialog(
             usePlatformDefaultWidth = false
         )
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .padding(16.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.85f),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 20.dp
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // Compact Header
+            Column(modifier = Modifier.fillMaxWidth()) {
+
+                // ── Thin colored top accent bar ──
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(messageStyle.backgroundColor)
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = messageStyle.icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = messageStyle.iconColor
-                        )
-                        Text(
-                            text = messageStyle.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = messageStyle.textColor,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
+                        .height(3.dp)
+                        .background(accent)
+                )
 
-                // Content - Reduced padding
+                // ── Scrollable content ──
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(top = 20.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Type label
+                    Text(
+                        text = typeLabel(message.type).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = accent,
+                        letterSpacing = 1.2.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     // Title
                     Text(
                         text = message.title,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     // Body
                     Text(
                         text = message.body,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 20.sp
+                        textAlign = TextAlign.Center,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Image display
-                    if (message.has_attachment && message.attachment_url != null) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            AsyncImage(
+                    // ── Attachment ──
+                    val attachmentUrl = remember(message) {
+                        message.resolveAttachmentUrl(NetworkModule.BASE_URL)
+                    }
+                    if (message.has_attachment && attachmentUrl != null) {
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        val imageLoader = remember {
+                            ImageLoader.Builder(context)
+                                .okHttpClient(NetworkModule.okHttp)
+                                .build()
+                        }
+                        var imageLoadFailed by remember { mutableStateOf(false) }
+
+                        if (!imageLoadFailed) {
+                            SubcomposeAsyncImage(
                                 model = ImageRequest.Builder(context)
-                                    .data(message.attachment_url)
-                                    .addHeader("Authorization", "Bearer ${preferencesManager.authToken.orEmpty()}")
+                                    .data(attachmentUrl)
                                     .crossfade(true)
                                     .build(),
-                                contentDescription = "Attachment Image",
+                                imageLoader = imageLoader,
+                                contentDescription = "Attachment",
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 150.dp, max = 400.dp)
-                                    .clip(RoundedCornerShape(12.dp)),
+                                    .heightIn(min = 80.dp, max = 300.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
                                 contentScale = ContentScale.Fit,
-                                alignment = Alignment.Center
+                                alignment = Alignment.Center,
+                                loading = {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(80.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp,
+                                            color = accent
+                                        )
+                                    }
+                                },
+                                error = { imageLoadFailed = true }
                             )
                         }
                     }
 
-                    // Acknowledgment input
+                    // ── Acknowledgment section ──
                     if (message.requires_acknowledgment) {
-                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Text(
                             text = "Acknowledgment Required",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = accent
                         )
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedTextField(
                             value = acknowledgmentNote,
                             onValueChange = { acknowledgmentNote = it },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Enter your acknowledgment") },
                             placeholder = {
                                 Text(
-                                    text = "e.g., I have read and understood this message",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    text = "Type your acknowledgment here...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                                 )
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                focusedBorderColor = accent,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                                unfocusedContainerColor = Color.Transparent
                             ),
+                            textStyle = MaterialTheme.typography.bodyMedium,
                             minLines = 2,
                             maxLines = 4
                         )
+                    }
+                }
 
+                // ── iOS-style action buttons ──
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+
+                if (!message.requires_acknowledgment) {
+                    // Single OK button
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple()
+                            ) { onAcknowledge(null) }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            text = "Please confirm that you have read and understood this message",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "OK",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = accent
                         )
                     }
-
-                    // Action buttons
+                } else {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
                     ) {
-                        if (!message.requires_acknowledgment) {
-                            Button(
-                                onClick = { onDismiss() },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(vertical = 14.dp)
-                            ) {
-                                Text(
-                                    text = "OK",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        } else {
-                            OutlinedButton(
-                                onClick = {
-                                    if (message.type?.uppercase() != "CRITICAL") {
-                                        onDismiss()
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                enabled = message.type?.uppercase() != "CRITICAL",
-                                contentPadding = PaddingValues(vertical = 14.dp)
-                            ) {
-                                Text(
-                                    text = "Cancel",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
+                        val isCritical = message.type?.uppercase() == "CRITICAL"
 
-                            Button(
-                                onClick = {
-                                    if (acknowledgmentNote.isNotBlank()) {
-                                        onAcknowledge(acknowledgmentNote.trim())
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                enabled = acknowledgmentNote.isNotBlank(),
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(vertical = 14.dp)
-                            ) {
-                                Text(
-                                    text = "Acknowledge",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Bold
+                        // Cancel
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (!isCritical) Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = ripple()
+                                    ) { onDismiss() }
+                                    else Modifier
                                 )
-                            }
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Cancel",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isCritical)
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Vertical divider
+                        Box(
+                            modifier = Modifier
+                                .width(0.5.dp)
+                                .fillMaxHeight()
+                                .background(
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                )
+                        )
+
+                        // Acknowledge
+                        val ackEnabled = acknowledgmentNote.isNotBlank()
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (ackEnabled) Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = ripple()
+                                    ) { onAcknowledge(acknowledgmentNote.trim()) }
+                                    else Modifier
+                                )
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Acknowledge",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (ackEnabled) accent
+                                else accent.copy(alpha = 0.3f)
+                            )
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun getMessageTypeStyle(type: String?): MessageTypeStyle {
-    val colorScheme = MaterialTheme.colorScheme
-
-    return when (type?.uppercase()) {
-        "REMINDER" -> MessageTypeStyle(
-            label = "REMINDER",
-            icon = Icons.Outlined.Notifications,
-            iconColor = colorScheme.primary,
-            backgroundColor = colorScheme.primaryContainer.copy(alpha = 0.3f),
-            textColor = colorScheme.onPrimaryContainer
-        )
-        "NOTICE" -> MessageTypeStyle(
-            label = "NOTICE",
-            icon = Icons.Outlined.Info,
-            iconColor = colorScheme.tertiary,
-            backgroundColor = colorScheme.tertiaryContainer.copy(alpha = 0.3f),
-            textColor = colorScheme.onTertiaryContainer
-        )
-        "WARNING" -> MessageTypeStyle(
-            label = "WARNING",
-            icon = Icons.Outlined.Warning,
-            iconColor = Color(0xFFFFA726),
-            backgroundColor = Color(0xFFFFF3E0),
-            textColor = Color(0xFFE65100)
-        )
-        "CRITICAL" -> MessageTypeStyle(
-            label = "⚠️ CRITICAL",
-            icon = Icons.Filled.ErrorOutline,
-            iconColor = colorScheme.error,
-            backgroundColor = colorScheme.errorContainer.copy(alpha = 0.3f),
-            textColor = colorScheme.onErrorContainer
-        )
-        else -> MessageTypeStyle(
-            label = "MESSAGE",
-            icon = Icons.Outlined.Mail,
-            iconColor = colorScheme.primary,
-            backgroundColor = colorScheme.surfaceVariant,
-            textColor = colorScheme.onSurfaceVariant
-        )
     }
 }
