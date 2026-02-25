@@ -43,8 +43,8 @@ data class LoginResponse(
 
 data class LoginData(
     val token: String? = null,
-    val mobile_number: Long? = null,
     val name: String? = null,
+    val mobile_number: Long? = null,
     val full_name: String? = null,
     val profile_url: String? = null,
     val branch_name: String? = null,
@@ -119,7 +119,6 @@ data class CheckInData(
     val is_late: Boolean? = null,
     val late_minutes: Int? = null,
     val is_out_of_range: Boolean? = null,
-    val is_check_in_valid_location: Boolean? = null,
     val late_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
     val pending_message: PendingMessage? = null,
@@ -163,12 +162,10 @@ data class CheckOutData(
     val is_early: Boolean? = null,
     val early_minutes: Int? = null,
     val is_out_of_range: Boolean? = null,
-    val is_check_out_valid_location: Boolean? = null,
     val early_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
     val work_report_require: Boolean? = null,
-    val work_minutes: Int? = null,
-    val pending_message: PendingMessage? = null
+    val work_minutes: Int? = null
 )
 
 data class CheckOutSignatureResponse(
@@ -1436,21 +1433,14 @@ data class PendingMessage(
     @SerializedName("message_type")
     val type: String?,
     val title: String,
-    @SerializedName(value = "body", alternate = ["content"])
+    @SerializedName("content")
     val body: String,
-    @SerializedName(value = "has_attachment", alternate = ["has_attachments"])
-    val has_attachment: Boolean = false,
-    val attachment_id: Int? = null,
-    val attachment_url: String? = null,
-    @SerializedName(value = "requires_acknowledgment", alternate = ["require_acknowledgment"])
-    val requires_acknowledgment: Boolean = false
-) {
-    /** Resolve attachment URL from direct URL (old backend) or attachment_id (new backend) */
-    fun resolveAttachmentUrl(baseUrl: String): String? {
-        if (!has_attachment) return null
-        return attachment_url ?: attachment_id?.let { "${baseUrl}message-attachment/$it" }
-    }
-}
+    @SerializedName("has_attachments")
+    val has_attachment: Boolean,
+    val attachment_url: String?,
+    @SerializedName("require_acknowledgment")
+    val requires_acknowledgment: Boolean
+)
 
 // ========================================
 // ENUMS
@@ -1529,7 +1519,9 @@ data class ServerNotification(
     val leaveId: Int? = null,
     @SerializedName("application_id")
     val applicationId: Int? = null,
-    val date: String? = null
+    val date: String? = null,
+    @SerializedName("post_shift_data")
+    val postShiftData: String? = null
 )
 
 /**
@@ -1538,6 +1530,52 @@ data class ServerNotification(
 data class NotificationActionResponse(
     val success: Boolean,
     val message: String? = null
+)
+
+// ========================================
+// POST-SHIFT CHECK MODELS
+// ========================================
+
+data class PostShiftAction(
+    val id: String,
+    val label: String
+)
+
+data class PostShiftCheckPayload(
+    val attendanceRecordId: Int,
+    val attendanceDate: String? = null,
+    val employeeId: Int? = null,
+    val shiftEndTime: String? = null,
+    val actions: List<PostShiftAction> = emptyList(),
+    val title: String,
+    val message: String,
+    val receivedAtMillis: Long = System.currentTimeMillis()
+)
+
+data class PostShiftRequestBody(
+    @SerializedName("attendance_record_id") val attendanceRecordId: Int,
+    val working: Boolean
+)
+
+data class PostShiftResponseResult(
+    val success: Boolean,
+    val message: String? = null
+)
+
+data class PostShiftStatusResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val data: PostShiftStatusData? = null
+)
+
+data class PostShiftStatusData(
+    val attendance_record_id: Int,
+    val attendance_date: String? = null,
+    val employee_id: Int? = null,
+    val shift_end_time: String? = null,
+    val title: String? = null,
+    val message: String? = null,
+    val actions: List<PostShiftAction>? = null
 )
 
 // ========================================

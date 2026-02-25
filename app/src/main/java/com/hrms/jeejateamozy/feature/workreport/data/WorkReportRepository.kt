@@ -143,6 +143,7 @@ class WorkReportRepository(private val context: Context) {
 
             // Process attachments
             val attachmentParts = mutableListOf<MultipartBody.Part>()
+            val tempFiles = mutableListOf<File>()
 
             for ((index, uri) in attachmentUris.withIndex()) {
                 try {
@@ -151,10 +152,13 @@ class WorkReportRepository(private val context: Context) {
                     // Validate file size (max 10MB)
                     if (file.length() > 10 * 1024 * 1024) {
                         file.delete()
+                        tempFiles.forEach { it.delete() }
                         return@withContext CreateWorkReportOutcome.Error(
                             "File ${file.name} is too large. Maximum size is 10MB per file."
                         )
                     }
+
+                    tempFiles.add(file)
 
                     // Determine media type
                     val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
@@ -169,6 +173,7 @@ class WorkReportRepository(private val context: Context) {
                     Log.d("WORK_REPORT", "Prepared attachment $index: ${file.name} (${file.length()} bytes)")
                 } catch (e: Exception) {
                     Log.e("WORK_REPORT", "Error processing attachment $index", e)
+                    tempFiles.forEach { it.delete() }
                     return@withContext CreateWorkReportOutcome.Error(
                         "Failed to process attachment: ${e.message}"
                     )
@@ -176,18 +181,19 @@ class WorkReportRepository(private val context: Context) {
             }
 
             // Make API call
-            val response = api.createWorkReport(
-                workDescription = workDescriptionPart,
-                attachments = if (attachmentParts.isNotEmpty()) attachmentParts else null
-            )
-
-            // Clean up temp files
-            attachmentParts.forEach { part ->
-                try {
-                    // Extract file from part and delete
-                    // This is a best effort cleanup
-                } catch (e: Exception) {
-                    Log.w("WORK_REPORT", "Failed to cleanup temp file", e)
+            val response = try {
+                api.createWorkReport(
+                    workDescription = workDescriptionPart,
+                    attachments = if (attachmentParts.isNotEmpty()) attachmentParts else null
+                )
+            } finally {
+                // Clean up temp files after upload completes (success or failure)
+                tempFiles.forEach { file ->
+                    try {
+                        file.delete()
+                    } catch (e: Exception) {
+                        Log.w("WORK_REPORT", "Failed to cleanup temp file: ${file.name}", e)
+                    }
                 }
             }
 

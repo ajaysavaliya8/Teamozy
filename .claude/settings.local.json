@@ -29,9 +29,7 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(cmd /c:*)",
-      "Bash(set \"JAVA_HOME=C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\")",
-      "Bash(JAVA_HOME=\"C:/Program Files/Android/Android Studio/jbr\" ./gradlew:*)",
-      "Bash(JAVA_HOME=\"C:/Program Files/Android/Android Studio/jbr\" ./gradlew compileDebugKotlin:*)"
+      "Bash(find:*)"
     ]
   }
 }

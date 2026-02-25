@@ -176,7 +176,8 @@ class MainActivity : ComponentActivity() {
                         "circular_id" to it.getStringExtra("circular_id"),
                         "leave_id" to it.getStringExtra("leave_id"),
                         "application_id" to it.getStringExtra("application_id"),
-                        "date" to it.getStringExtra("date")
+                        "date" to it.getStringExtra("date"),
+                        "post_shift_data" to it.getStringExtra("post_shift_data")
                     )
                     val deepLink = DeepLink.fromFcmData(screen, extras)
                     if (deepLink != null) {

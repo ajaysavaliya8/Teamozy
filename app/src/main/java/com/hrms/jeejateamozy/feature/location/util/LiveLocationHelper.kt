@@ -230,37 +230,6 @@ class LiveLocationHelper(private val context: Context) {
         }
     }
 
-    /**
-     * Build LocationData from existing coordinates without capturing new GPS location.
-     * Collects device metadata (battery, network, etc.) without GPS delay.
-     */
-    fun buildLocationData(latitude: Double, longitude: Double, accuracy: Float?): LocationData {
-        val deviceId = getDeviceId()
-        val appVersion = BuildConfig.VERSION_NAME
-        val batteryLevel = getBatteryLevel()
-        val networkType = getNetworkType()
-        val wifiInfo = getWifiInfoSafe()
-        val recordedAt = getCurrentISOTimestamp()
-
-        return LocationData(
-            recordedAt = recordedAt,
-            latitude = latitude,
-            longitude = longitude,
-            locationAccuracy = accuracy,
-            altitude = null,
-            verticalAccuracy = null,
-            speed = null,
-            heading = null,
-            deviceId = deviceId,
-            appVersion = appVersion,
-            networkType = networkType,
-            wifiName = wifiInfo.first,
-            wifiMacAddress = wifiInfo.second,
-            batteryLevel = batteryLevel,
-            geofenceId = null
-        )
-    }
-
     private fun getCurrentISOTimestamp(): String {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Instant.now()

@@ -41,6 +41,11 @@ sealed class DeepLink {
     data object NotificationList : DeepLink()
 
     // ==========================================
+    // POST-SHIFT CHECK
+    // ==========================================
+    data class PostShiftCheck(val postShiftData: String? = null) : DeepLink()
+
+    // ==========================================
     // PROFILE CHILD SCREENS
     // ==========================================
     data object EditSocialMedia : DeepLink()
@@ -71,6 +76,7 @@ sealed class DeepLink {
         const val SCREEN_EDIT_BANKING = "edit_banking"
         const val SCREEN_VIEW_IDENTITY = "view_identity"
         const val SCREEN_VIEW_SHIFT = "view_shift"
+        const val SCREEN_POST_SHIFT_CHECK = "post_shift_check"
 
         /**
          * Parse deep link from FCM data payload
@@ -108,6 +114,7 @@ sealed class DeepLink {
                 SCREEN_EDIT_BANKING -> EditBankingInfo
                 SCREEN_VIEW_IDENTITY -> ViewEmploymentIdentity
                 SCREEN_VIEW_SHIFT -> ViewShiftDetails
+                SCREEN_POST_SHIFT_CHECK -> PostShiftCheck(extras["post_shift_data"])
                 else -> null
             }
         }

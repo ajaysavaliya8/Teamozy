@@ -160,15 +160,8 @@ interface ApiService {
         @Part("last_location_wifi_name") lastLocationWifiName: RequestBody? = null,
         @Part("last_location_wifi_mac_address") lastLocationWifiMacAddress: RequestBody? = null,
         @Part("last_location_battery_level") lastLocationBatteryLevel: RequestBody? = null,
-        @Part("acknowledgment_note") acknowledgmentNote: RequestBody? = null,
         @Query("token") token: String
     ): Response<CheckOutSignatureResponse>
-
-    @Streaming
-    @GET("message-attachment/{message_id}")
-    suspend fun getMessageAttachment(
-        @Path("message_id") messageId: Int
-    ): Response<ResponseBody>
 
     // ========================================
     // FACE RECOGNITION ENDPOINTS
@@ -488,6 +481,22 @@ interface ApiService {
         @Query("notification_ids") notificationIds: List<Int>,
         @Query("token") token: String
     ): Response<NotificationActionResponse>
+
+    // ========================================
+    // POST-SHIFT CHECK ENDPOINT
+    // ========================================
+
+    @GET("post-shift-check")
+    suspend fun getPostShiftStatus(
+        @Query("token") token: String,
+        @Query("attendance_record_id") attendanceRecordId: Int? = null
+    ): Response<PostShiftStatusResponse>
+
+    @POST("post-shift-response")
+    suspend fun postShiftResponse(
+        @Body body: PostShiftRequestBody,
+        @Query("token") token: String
+    ): Response<PostShiftResponseResult>
 
     // ========================================
     // LOCATION REVERIFY ENDPOINT

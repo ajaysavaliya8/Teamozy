@@ -5,9 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hrms.jeejateamozy.core.fcm.NotificationEventBus
 import com.hrms.jeejateamozy.core.network.ServerNotification
+import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.notification.data.NotificationRepository
 import com.hrms.jeejateamozy.feature.notification.data.NotificationResult
 import com.hrms.jeejateamozy.navigation.DeepLink
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -44,7 +46,8 @@ sealed class NotificationEvent {
  * ViewModel for Notification feature
  */
 class NotificationViewModel(
-    private val repository: NotificationRepository
+    private val repository: NotificationRepository,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
 
     companion object {
@@ -148,6 +151,33 @@ class NotificationViewModel(
      * Create DeepLink from notification
      */
     private fun createDeepLink(notification: ServerNotification): DeepLink? {
+        // Handle post_shift_check specially — server doesn't include post_shift_data in history
+        val isPostShift = notification.type == "post_shift_check" || notification.type == "post_shift_reminder"
+                || notification.screen == "post_shift_check"
+        if (isPostShift) {
+            val postShiftData = notification.postShiftData ?: run {
+                val pending = NotificationEventBus.pendingPostShiftPayload
+                if (pending != null) {
+                    Log.d(TAG, "Using in-memory pending payload for post-shift (recordId: ${pending.attendanceRecordId})")
+                    JSONObject().apply {
+                        put("attendance_record_id", pending.attendanceRecordId)
+                        put("attendance_date", pending.attendanceDate ?: "")
+                        put("employee_id", pending.employeeId ?: 0)
+                        put("shift_end_time", pending.shiftEndTime ?: "")
+                        put("title", notification.title ?: pending.title)
+                        put("message", notification.message ?: pending.message)
+                    }.toString()
+                } else {
+                    // Fallback: read from persisted SharedPreferences
+                    val saved = preferencesManager.postShiftDataJson
+                    Log.d(TAG, "In-memory pending null, persisted data: ${if (saved != null) "EXISTS" else "NULL"}")
+                    saved
+                }
+            }
+            Log.d(TAG, "Post-shift deep link created, data: ${if (postShiftData != null) "HAS_DATA" else "NULL"}")
+            return DeepLink.PostShiftCheck(postShiftData)
+        }
+
         // If screen is provided, use it
         notification.screen?.let { screen ->
             val extras = mutableMapOf<String, String?>()

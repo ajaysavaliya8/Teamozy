@@ -186,6 +186,18 @@ class PreferencesManager private constructor(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_HAS_SHOWN_BG_PERMISSION, value).apply()
 
     // ============================================
+    // POST-SHIFT CHECK
+    // ============================================
+
+    var postShiftDataJson: String?
+        get() = prefs.getString(KEY_POST_SHIFT_DATA_JSON, null)
+        set(value) = prefs.edit().putString(KEY_POST_SHIFT_DATA_JSON, value).apply()
+
+    fun clearPostShiftData() {
+        prefs.edit().remove(KEY_POST_SHIFT_DATA_JSON).apply()
+    }
+
+    // ============================================
     // UTILITY METHODS
     // ============================================
 
@@ -255,6 +267,9 @@ class PreferencesManager private constructor(context: Context) {
         // UI State Keys
         private const val KEY_HAS_SHOWN_PERMISSIONS = "has_shown_permissions"
         private const val KEY_HAS_SHOWN_BG_PERMISSION = "has_shown_bg_permission"
+
+        // Post-Shift Check Key
+        private const val KEY_POST_SHIFT_DATA_JSON = "post_shift_data_json"
 
         @Volatile
         private var INSTANCE: PreferencesManager? = null

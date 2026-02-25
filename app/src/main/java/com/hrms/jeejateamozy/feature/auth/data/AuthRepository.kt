@@ -213,8 +213,7 @@ class AuthRepository(
     }
 
     /**
-     * Verify JWT token validity.
-     * Backend returns fresh token + updated user data — save it all.
+     * Verify JWT token validity
      */
     suspend fun verifyToken(): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
@@ -236,11 +235,34 @@ class AuthRepository(
                     if (res.isSuccessful && res.code() == 200) {
                         val body = res.body()
                         if (body?.success == true) {
-                            // Save fresh token + updated user data
-                            body.data?.let { data ->
-                                saveUserData(data)
-                                Log.d("AUTH", "Token verified - user data refreshed")
-                            }
+                            // Save refreshed data from verify-token
+                            val data = body.data
+                            data?.token?.let { pm.authToken = it }
+                            data?.name?.let { pm.userName = it }
+                            data?.mobile_number?.let { pm.mobileNumber = it }
+                            data?.full_name?.let { pm.fullName = it }
+                            data?.profile_url?.let { pm.profileUrl = it }
+                            data?.branch_name?.let { pm.branchName = it }
+                            data?.department_name?.let { pm.departmentName = it }
+                            data?.shift_name?.let { pm.shiftName = it }
+                            // Social media
+                            data?.facebook?.let { pm.facebook = it }
+                            data?.linkedin?.let { pm.linkedin = it }
+                            data?.x?.let { pm.x = it }
+                            data?.instagram?.let { pm.instagram = it }
+                            data?.snapchat?.let { pm.snapchat = it }
+                            // Company info
+                            data?.company_name?.let { pm.companyName = it }
+                            data?.company_address?.let { pm.companyAddress = it }
+                            data?.company_email?.let { pm.companyEmail = it }
+                            data?.company_contact?.let { pm.companyContact = it }
+                            data?.company_website?.let { pm.companyWebsite = it }
+                            data?.company_logo_url?.let { pm.companyLogoUrl = it }
+                            // Support info
+                            data?.hr_email?.let { pm.hrEmail = it }
+                            data?.technical_support_number?.let { pm.technicalSupportNumber = it }
+                            data?.technical_support_email?.let { pm.technicalSupportEmail = it }
+                            Log.d("AUTH", "Token verified - data refreshed")
                             AuthOutcome.Success(body.message ?: "Token verified")
                         } else {
                             AuthOutcome.Error(body?.message ?: "Token verification failed")
@@ -454,44 +476,6 @@ class AuthRepository(
     }
 
     /**
-     * Save user data from LoginData to PreferencesManager.
-     * Shared between verify-login and verify-token responses.
-     */
-    private fun saveUserData(data: com.hrms.jeejateamozy.core.network.LoginData) {
-        // Save token if present
-        data.token?.let { pm.authToken = it }
-
-        // Save employee info
-        data.mobile_number?.let { pm.mobileNumber = it }
-        data.name?.let { pm.userName = it }
-        data.full_name?.let { pm.fullName = it }
-        data.profile_url?.let { pm.profileUrl = it }
-        data.branch_name?.let { pm.branchName = it }
-        data.department_name?.let { pm.departmentName = it }
-        data.shift_name?.let { pm.shiftName = it }
-
-        // Save social media
-        data.facebook?.let { pm.facebook = it }
-        data.linkedin?.let { pm.linkedin = it }
-        data.x?.let { pm.x = it }
-        data.instagram?.let { pm.instagram = it }
-        data.snapchat?.let { pm.snapchat = it }
-
-        // Save company info
-        data.company_name?.let { pm.companyName = it }
-        data.company_address?.let { pm.companyAddress = it }
-        data.company_email?.let { pm.companyEmail = it }
-        data.company_contact?.let { pm.companyContact = it }
-        data.company_website?.let { pm.companyWebsite = it }
-        data.company_logo_url?.let { pm.companyLogoUrl = it }
-
-        // Save support info
-        data.hr_email?.let { pm.hrEmail = it }
-        data.technical_support_number?.let { pm.technicalSupportNumber = it }
-        data.technical_support_email?.let { pm.technicalSupportEmail = it }
-    }
-
-    /**
      * Convert LoginResponse (verify-login) to AuthOutcome and save user data
      */
     private fun toLoginOutcome(res: Response<LoginResponse>): AuthOutcome {
@@ -508,11 +492,41 @@ class AuthRepository(
                 return AuthOutcome.Error("Token missing in response")
             }
 
-            // Save device ID
-            pm.deviceId = androidId()
+            val deviceId = androidId()
 
-            // Save all user data
-            saveUserData(data!!)
+            // Save token & device
+            pm.authToken = data?.token
+            pm.deviceId = deviceId
+            Log.d("AUTH", "Token and device ID saved")
+
+            // Save employee info
+            data?.name?.let { pm.userName = it }
+            data?.mobile_number?.let { pm.mobileNumber = it }
+            data?.full_name?.let { pm.fullName = it }
+            data?.profile_url?.let { pm.profileUrl = it }
+            data?.branch_name?.let { pm.branchName = it }
+            data?.department_name?.let { pm.departmentName = it }
+            data?.shift_name?.let { pm.shiftName = it }
+
+            // Save social media
+            data?.facebook?.let { pm.facebook = it }
+            data?.linkedin?.let { pm.linkedin = it }
+            data?.x?.let { pm.x = it }
+            data?.instagram?.let { pm.instagram = it }
+            data?.snapchat?.let { pm.snapchat = it }
+
+            // Save company info
+            data?.company_name?.let { pm.companyName = it }
+            data?.company_address?.let { pm.companyAddress = it }
+            data?.company_email?.let { pm.companyEmail = it }
+            data?.company_contact?.let { pm.companyContact = it }
+            data?.company_website?.let { pm.companyWebsite = it }
+            data?.company_logo_url?.let { pm.companyLogoUrl = it }
+
+            // Save support info
+            data?.hr_email?.let { pm.hrEmail = it }
+            data?.technical_support_number?.let { pm.technicalSupportNumber = it }
+            data?.technical_support_email?.let { pm.technicalSupportEmail = it }
 
             Log.d("AUTH", "Login successful - all data saved")
 

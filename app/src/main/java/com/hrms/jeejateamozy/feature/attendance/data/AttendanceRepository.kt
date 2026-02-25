@@ -67,8 +67,7 @@ sealed class CheckOutOutcome {
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
         val workReportRequired: Boolean,
-        val message: String,
-        val pendingMessage: PendingMessage? = null
+        val message: String
     ) : CheckOutOutcome()
 
     data class RequiresReasons(
@@ -79,8 +78,7 @@ sealed class CheckOutOutcome {
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
         val workReportRequired: Boolean,
-        val message: String,
-        val pendingMessage: PendingMessage? = null
+        val message: String
     ) : CheckOutOutcome()
 
     data class Success(val message: String) : CheckOutOutcome()
@@ -207,9 +205,7 @@ class AttendanceRepository(private val context: Context) {
                         val faceVerificationRequired = data.face_verification_required ?: false
                         val minimumQualityScore = data.minimum_quality_score ?: 0.57f
                         val isLate = data.is_late ?: false
-                        val isOutOfRange = data.is_out_of_range
-                            ?: data.is_check_in_valid_location?.let { !it }
-                            ?: false
+                        val isOutOfRange = data.is_out_of_range ?: false
                         val lateReasonRequired = data.late_reason_required ?: false
                         val outOfRangeReasonRequired = data.out_of_range_reason_required ?: false
                         val message = body.message ?: "Ready for check-in"
@@ -391,14 +387,11 @@ class AttendanceRepository(private val context: Context) {
                         val minimumQualityScore = data.minimum_quality_score ?: 0.57f
                         val workMinutes = data.work_minutes ?: 0
                         val isEarly = data.is_early ?: false
-                        val isOutOfRange = data.is_out_of_range
-                            ?: data.is_check_out_valid_location?.let { !it }
-                            ?: false
+                        val isOutOfRange = data.is_out_of_range ?: false
                         val earlyReasonRequired = data.early_reason_required ?: false
                         val outOfRangeReasonRequired = data.out_of_range_reason_required ?: false
                         val workReportRequired = data.work_report_require ?: false
                         val message = body.message ?: "Ready for check-out"
-                        val pendingMessage = data.pending_message
 
                         Log.d("NET", "Check-out initial success:")
                         Log.d("NET", "  face_verification_required: $faceVerificationRequired")
@@ -409,7 +402,6 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  early_reason_required: $earlyReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
                         Log.d("NET", "  work_report_require: $workReportRequired")
-                        Log.d("NET", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}, Type=${pendingMessage.type}" else "null"}")
 
                         val faceVector = data.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
@@ -429,8 +421,7 @@ class AttendanceRepository(private val context: Context) {
                                 earlyReasonRequired = earlyReasonRequired,
                                 outOfRangeReasonRequired = outOfRangeReasonRequired,
                                 workReportRequired = workReportRequired,
-                                message = message,
-                                pendingMessage = pendingMessage
+                                message = message
                             )
                         } else {
                             CheckOutOutcome.RequiresReasons(
@@ -441,8 +432,7 @@ class AttendanceRepository(private val context: Context) {
                                 earlyReasonRequired = earlyReasonRequired,
                                 outOfRangeReasonRequired = outOfRangeReasonRequired,
                                 workReportRequired = workReportRequired,
-                                message = message,
-                                pendingMessage = pendingMessage
+                                message = message
                             )
                         }
                     } else {
@@ -479,8 +469,7 @@ class AttendanceRepository(private val context: Context) {
         outOfRangeReason: String? = null,
         workReport: String? = null,
         workReportFileUri: Uri? = null,
-        lastLocation: LocationData? = null,
-        acknowledgmentNote: String? = null
+        lastLocation: LocationData? = null  // NEW: Last location data
     ): SignatureOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("NET", "checkOutSignature called:")
@@ -491,7 +480,6 @@ class AttendanceRepository(private val context: Context) {
             Log.d("NET", "  out_of_range_reason: ${outOfRangeReason?.take(50)}")
             Log.d("NET", "  work_report: ${workReport?.take(50)}")
             Log.d("NET", "  last_location: ${if (lastLocation != null) "lat=${lastLocation.latitude}, lng=${lastLocation.longitude}" else "null"}")
-            Log.d("NET", "  acknowledgment_note: ${acknowledgmentNote?.take(50)}")
 
             // Prepare multipart request bodies
             val tTokenBody = tToken.toRequestBody("text/plain".toMediaTypeOrNull())
@@ -515,7 +503,6 @@ class AttendanceRepository(private val context: Context) {
             val lastLocationWifiNameBody = lastLocation?.wifiName?.toRequestBody("text/plain".toMediaTypeOrNull())
             val lastLocationWifiMacAddressBody = lastLocation?.wifiMacAddress?.toRequestBody("text/plain".toMediaTypeOrNull())
             val lastLocationBatteryLevelBody = lastLocation?.batteryLevel?.toString()?.toRequestBody("text/plain".toMediaTypeOrNull())
-            val acknowledgmentNoteBody = acknowledgmentNote?.toRequestBody("text/plain".toMediaTypeOrNull())
 
             // Prepare file part if provided
             var filePart: MultipartBody.Part? = null
@@ -565,7 +552,6 @@ class AttendanceRepository(private val context: Context) {
                 lastLocationWifiName = lastLocationWifiNameBody,
                 lastLocationWifiMacAddress = lastLocationWifiMacAddressBody,
                 lastLocationBatteryLevel = lastLocationBatteryLevelBody,
-                acknowledgmentNote = acknowledgmentNoteBody,
                 token = token()
             )
 

@@ -11,13 +11,22 @@ android {
     namespace = "com.hrms.jeejateamozy"
     compileSdk = 36
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("${rootProject.projectDir}/Teamozy")
+            storePassword = "password"
+            keyAlias = "key0"
+            keyPassword = "password"
+        }
+    }
+
     defaultConfig {
 
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
         targetSdk = 36
-        versionCode = 22
-        versionName = "1.2.2"
+        versionCode = 23
+        versionName = "1.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -31,7 +40,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             // Include mapping file for Play Console
             ndk {
                 debugSymbolLevel = "FULL"

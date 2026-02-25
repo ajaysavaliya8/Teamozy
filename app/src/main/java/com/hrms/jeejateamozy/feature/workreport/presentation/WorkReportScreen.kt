@@ -23,7 +23,8 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun WorkReportScreen(
     viewModel: WorkReportViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -94,7 +95,8 @@ fun WorkReportScreen(
                 WorkReportTab.ADD_NEW -> {
                     AddNewWorkReportTab(
                         viewModel = viewModel,
-                        uiState = uiState
+                        uiState = uiState,
+                        bottomPadding = bottomPadding
                     )
                 }
                 WorkReportTab.HISTORY -> {

@@ -174,7 +174,9 @@ class WorkReportViewModel(
                                 attachmentUris = emptyList(),
                                 // Update reports today info
                                 reportsToday = result.reportsToday,
-                                remainingReportsToday = result.remainingReportsToday
+                                remainingReportsToday = result.remainingReportsToday,
+                                // Switch to history tab
+                                selectedTab = WorkReportTab.HISTORY
                             )
                         }
 

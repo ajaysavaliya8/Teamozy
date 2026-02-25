@@ -21,6 +21,3 @@ app/release/app-release.aab
 *.log
 hs_err_pid*.log
 replay_pid*.log
-
-# Windows reserved device name artifact
-nul

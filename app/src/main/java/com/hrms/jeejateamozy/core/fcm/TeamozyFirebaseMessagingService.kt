@@ -8,7 +8,10 @@ import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingWorker
 import com.hrms.jeejateamozy.feature.location.keepalive.TrackingAlarmReceiver
 import com.hrms.jeejateamozy.feature.location.service.LocationTrackingService
+import com.hrms.jeejateamozy.core.network.PostShiftAction
+import com.hrms.jeejateamozy.core.network.PostShiftCheckPayload
 import com.hrms.jeejateamozy.feature.notification.utils.NotificationHelper
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -29,6 +32,13 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         private const val TYPE_KEEP_ALIVE = "keep_alive"
         private const val TYPE_TRACKING_START = "tracking_start"
         private const val TYPE_TRACKING_STOP = "tracking_stop"
+
+        // Notification types - Post-shift check
+        private const val TYPE_POST_SHIFT_CHECK = "post_shift_check"
+        private const val TYPE_POST_SHIFT_REMINDER = "post_shift_reminder"
+
+        // Fixed notification ID for post-shift (new replaces old)
+        private const val POST_SHIFT_NOTIFICATION_ID = Int.MAX_VALUE - 1
     }
 
     override fun onNewToken(token: String) {
@@ -53,6 +63,7 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
             TYPE_HEARTBEAT, TYPE_KEEP_ALIVE -> handleHeartbeat()
             TYPE_TRACKING_START -> startTracking()
             TYPE_TRACKING_STOP -> stopTracking()
+            TYPE_POST_SHIFT_CHECK, TYPE_POST_SHIFT_REMINDER -> handlePostShiftCheck(data, message.notification)
             else -> handleNotification(data, message.notification)
         }
     }
@@ -137,6 +148,128 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
 
         // Notify the notification screen and home screen to refresh
         NotificationEventBus.notifyNewNotification()
+    }
+
+    // ============================================
+    // POST-SHIFT CHECK HANDLER
+    // ============================================
+
+    private fun handlePostShiftCheck(data: Map<String, String>, notification: RemoteMessage.Notification?) {
+        val title = data["title"] ?: notification?.title ?: "Shift Check"
+        val messageText = data["message"] ?: data["body"] ?: notification?.body ?: "Are you still working?"
+        val type = data["type"] ?: data["notification_type"] ?: TYPE_POST_SHIFT_CHECK
+
+        // Parse attendance_record_id from top-level or nested data
+        var attendanceRecordId: Int? = data["attendance_record_id"]?.toIntOrNull()
+        var attendanceDate: String? = data["attendance_date"]
+        var employeeId: Int? = data["employee_id"]?.toIntOrNull()
+        var shiftEndTime: String? = data["shift_end_time"]
+        val actions = mutableListOf<PostShiftAction>()
+
+        // Parse nested "data" JSON if present
+        val nestedData = data["data"]
+        if (!nestedData.isNullOrBlank()) {
+            try {
+                val json = JSONObject(nestedData)
+                if (attendanceRecordId == null) {
+                    attendanceRecordId = json.optInt("attendance_record_id", 0).takeIf { it > 0 }
+                }
+                if (attendanceDate == null) {
+                    attendanceDate = json.optString("attendance_date", "").ifEmpty { null }
+                }
+                if (employeeId == null) {
+                    employeeId = json.optInt("employee_id", 0).takeIf { it > 0 }
+                }
+                if (shiftEndTime == null) {
+                    shiftEndTime = json.optString("shift_end_time", "").ifEmpty { null }
+                }
+                // Parse actions array
+                val actionsArray = json.optJSONArray("actions")
+                if (actionsArray != null) {
+                    for (i in 0 until actionsArray.length()) {
+                        val actionObj = actionsArray.getJSONObject(i)
+                        actions.add(
+                            PostShiftAction(
+                                id = actionObj.optString("id", ""),
+                                label = actionObj.optString("label", "")
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse post-shift nested data", e)
+            }
+        }
+
+        if (attendanceRecordId == null || attendanceRecordId == 0) {
+            Log.e(TAG, "Post-shift check missing attendance_record_id, skipping")
+            return
+        }
+
+        // Default actions if none provided
+        if (actions.isEmpty()) {
+            actions.add(PostShiftAction("working", "Yes, Working"))
+            actions.add(PostShiftAction("done", "No, Done"))
+        }
+
+        val payload = PostShiftCheckPayload(
+            attendanceRecordId = attendanceRecordId,
+            attendanceDate = attendanceDate,
+            employeeId = employeeId,
+            shiftEndTime = shiftEndTime,
+            actions = actions,
+            title = title,
+            message = messageText
+        )
+
+        // Emit via event bus (for foreground + deferred resume)
+        NotificationEventBus.notifyPostShiftCheck(payload)
+
+        // Build post_shift_data JSON and persist to SharedPreferences
+        val postShiftDataJson = JSONObject().apply {
+            put("attendance_record_id", attendanceRecordId)
+            put("attendance_date", attendanceDate ?: "")
+            put("employee_id", employeeId ?: 0)
+            put("shift_end_time", shiftEndTime ?: "")
+            put("title", title)
+            put("message", messageText)
+            val actionsArr = JSONArray()
+            actions.forEach { action ->
+                actionsArr.put(JSONObject().apply {
+                    put("id", action.id)
+                    put("label", action.label)
+                })
+            }
+            put("actions", actionsArr)
+        }.toString()
+        PreferencesManager.getInstance(applicationContext).postShiftDataJson = postShiftDataJson
+        Log.d(TAG, "Persisted post-shift data to SharedPreferences (recordId: $attendanceRecordId)")
+
+        // If the UI collector is active (app is open), dialog shows directly — skip system tray notification
+        if (NotificationEventBus.isPostShiftCollectorActive) {
+            Log.d(TAG, "App is in foreground, dialog shown directly — skipping system notification")
+        } else {
+            // Show system notification with fixed ID (replaces previous)
+            val extras = mutableMapOf<String, String>(
+                "screen" to "post_shift_check",
+                "post_shift_data" to postShiftDataJson
+            )
+
+            NotificationHelper.showNotification(
+                context = applicationContext,
+                notificationId = POST_SHIFT_NOTIFICATION_ID,
+                title = title,
+                message = messageText,
+                type = type,
+                priority = "high",
+                extras = extras
+            )
+        }
+
+        // Also notify new notification for badge refresh
+        NotificationEventBus.notifyNewNotification()
+
+        Log.d(TAG, "Post-shift check handled - recordId: $attendanceRecordId")
     }
 
     // ============================================

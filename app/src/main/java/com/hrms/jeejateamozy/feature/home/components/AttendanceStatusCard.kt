@@ -10,14 +10,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -150,61 +148,29 @@ fun AttendanceStatusCard(
                     )
                 }
 
-                // Center Punch Button
-                if (!isCompleted) {
-                    Button(
-                        onClick = if (isCheckInNeeded) onCheckInClick else onCheckOutClick,
-                        modifier = Modifier
-                            .size(120.dp)
-                            .scale(if (!isLoading && !isFaceVerifyBusy) pulseScale else 1f)
-                            .shadow(
-                                elevation = 12.dp,
-                                shape = CircleShape,
-                                ambientColor = primaryColor.copy(alpha = 0.3f),
-                                spotColor = primaryColor.copy(alpha = 0.3f)
-                            ),
-                        enabled = !isLoading && !isFaceVerifyBusy,
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent,
-                            disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+                // Center Punch Button - always show (supports multiple check-ins)
+                Button(
+                    onClick = if (isCheckOutNeeded) onCheckOutClick else onCheckInClick,
+                    modifier = Modifier
+                        .size(120.dp)
+                        .scale(if (!isLoading && !isFaceVerifyBusy) pulseScale else 1f)
+                        .shadow(
+                            elevation = 12.dp,
+                            shape = CircleShape,
+                            ambientColor = primaryColor.copy(alpha = 0.3f),
+                            spotColor = primaryColor.copy(alpha = 0.3f)
                         ),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush = Brush.verticalGradient(gradientColors),
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = if (isCheckInNeeded) Icons.Default.Fingerprint else Icons.Default.Logout,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = if (isCheckInNeeded) "CHECK IN" else "CHECK OUT",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    // Completed state
+                    enabled = !isLoading && !isFaceVerifyBusy,
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+                    ),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
+                            .fillMaxSize()
                             .background(
                                 brush = Brush.verticalGradient(gradientColors),
                                 shape = CircleShape
@@ -215,15 +181,15 @@ fun AttendanceStatusCard(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.CheckCircle,
+                                imageVector = if (isCheckOutNeeded) Icons.Default.Logout else Icons.Default.Fingerprint,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(36.dp)
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "DONE",
-                                fontSize = 14.sp,
+                                text = if (isCheckOutNeeded) "CHECK OUT" else "CHECK IN",
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
