@@ -33,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
+import com.hrms.jeejateamozy.core.ui.LightStatusBarIcons
 import org.koin.compose.koinInject
 
 private const val TAG = "HomePage"
@@ -143,6 +144,8 @@ fun HomePage(
         }
     }
 
+    LightStatusBarIcons()
+
     Scaffold(
         snackbarHost = {
             SnackbarHost(
@@ -163,8 +166,7 @@ fun HomePage(
                     onNavigateToNotifications()  // ⭐ NEW: Navigate to notifications
                 },
                 notificationCount = notificationCount,  // ⭐ NEW: Real notification count
-                onProfileClick = onNavigateToProfile,
-                modifier = Modifier.statusBarsPadding()
+                onProfileClick = onNavigateToProfile
             )
         }
     ) { padding ->

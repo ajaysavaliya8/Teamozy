@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.ui.LightStatusBarIcons
 import com.hrms.jeejateamozy.feature.profile.data.PersonalInfoOutcome
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
 import kotlinx.coroutines.launch
@@ -107,6 +108,8 @@ fun EditPersonalInfoScreen(
         unfocusedContainerColor = MaterialTheme.colorScheme.surface,
         focusedContainerColor = MaterialTheme.colorScheme.surface
     )
+
+    LightStatusBarIcons()
 
     Scaffold(
         topBar = {

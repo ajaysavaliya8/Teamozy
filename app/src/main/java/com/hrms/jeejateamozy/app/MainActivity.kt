@@ -15,14 +15,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -116,8 +113,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
-                ConfigureSystemBars()
-
                 Surface {
                     AppRoot(
                         initialDeepLink = pendingDeepLink,
@@ -188,21 +183,6 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Error handling notification intent", e)
             }
-        }
-    }
-
-    @Composable
-    private fun ConfigureSystemBars() {
-        val view = LocalView.current
-        val primaryColor = MaterialTheme.colorScheme.primary
-
-        DisposableEffect(primaryColor) {
-            val window = window
-            window.statusBarColor = primaryColor.toArgb()
-            WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = false
-            }
-            onDispose { }
         }
     }
 

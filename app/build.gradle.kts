@@ -25,8 +25,8 @@ android {
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.2.3"
+        versionCode = 24
+        versionName = "1.2.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -139,16 +139,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.compose.material:material-icons-extended")
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
-
-    implementation("com.google.accompanist:accompanist-systemuicontroller:0.32.0")
 
     // Core dependencies from libs
     implementation(libs.androidx.core.ktx)

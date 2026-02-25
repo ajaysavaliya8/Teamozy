@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.ui.LightStatusBarIcons
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentDetailOutcome
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
 
@@ -73,6 +74,8 @@ fun ViewEmploymentDetailScreen(
         }
         isFetching = false
     }
+
+    LightStatusBarIcons()
 
     Scaffold(
         topBar = {
