@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.google.firebase.crashlytics)
 }
 
+
 android {
     namespace = "com.hrms.jeejateamozy"
     compileSdk = 36

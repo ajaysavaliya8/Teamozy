@@ -267,7 +267,7 @@ class LocationTrackingService : Service() {
         // Update notification to warn user
         updateNotification(
             title = "⚠️ GPS Disabled",
-            text = "Please enable GPS for location tracking"
+            text = "Please enable GPS for accurate attendance"
         )
 
         // Record GPS disabled event immediately
@@ -286,8 +286,8 @@ class LocationTrackingService : Service() {
 
         // Restore normal notification
         updateNotification(
-            title = "Location Tracking Active",
-            text = "Your location is being recorded during work hours"
+            title = "You're checked in",
+            text = "Tap to open Teamozy"
         )
 
         // Resume location updates (they should auto-resume, but ensure)
@@ -685,10 +685,10 @@ class LocationTrackingService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Location Tracking",
+                "Attendance Session",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Tracks your location during work hours"
+                description = "Shows when you are checked in"
                 setShowBadge(false)
             }
 
@@ -698,8 +698,8 @@ class LocationTrackingService : Service() {
     }
 
     private fun createNotification(
-        title: String = "Location Tracking Active",
-        text: String = "Your location is being recorded during work hours"
+        title: String = "You're checked in",
+        text: String = "Tap to open Teamozy"
     ): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this,

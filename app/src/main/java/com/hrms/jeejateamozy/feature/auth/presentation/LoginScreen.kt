@@ -159,6 +159,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 updateMessage = outcome.message
                 showUpdateDialog = true
             }
+            is AuthOutcome.NetworkError -> {
+                error = outcome.message
+            }
         }
     }
 

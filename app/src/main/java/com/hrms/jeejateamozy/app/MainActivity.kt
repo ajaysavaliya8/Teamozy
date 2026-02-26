@@ -313,9 +313,12 @@ private fun InlineSplash(
     preferencesManager: PreferencesManager,
     onComplete: (isAuthorized: Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     var status by remember { mutableStateOf("Initializing...") }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
+    var showNoInternetDialog by remember { mutableStateOf(false) }
+    var retryTrigger by remember { mutableIntStateOf(0) }
 
     if (showUpdateDialog) {
         AppVersionUpdateDialog(
@@ -325,7 +328,51 @@ private fun InlineSplash(
         return
     }
 
-    LaunchedEffect(Unit) {
+    if (showNoInternetDialog) {
+        AlertDialog(
+            onDismissRequest = { },
+            icon = {
+                Text("📡", style = MaterialTheme.typography.displaySmall)
+            },
+            title = {
+                Text(
+                    text = "No Internet Connection",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+                )
+            },
+            text = {
+                Text(
+                    text = "Please check your Wi-Fi or mobile data and try again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNoInternetDialog = false
+                        status = "Retrying..."
+                        retryTrigger++
+                    }
+                ) {
+                    Text("Retry")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        (context as? ComponentActivity)?.finish()
+                    }
+                ) {
+                    Text("Exit")
+                }
+            }
+        )
+    }
+
+    LaunchedEffect(retryTrigger) {
         status = "Verifying session..."
 
         when (val outcome = authRepository.verifyToken()) {
@@ -337,6 +384,11 @@ private fun InlineSplash(
                 Log.d("SplashScreen", "⚠️ Update required: ${outcome.message}")
                 updateMessage = outcome.message
                 showUpdateDialog = true
+            }
+            is AuthOutcome.NetworkError -> {
+                val hasToken = !preferencesManager.authToken.isNullOrEmpty()
+                Log.d("SplashScreen", "Network error (hasToken=$hasToken): ${outcome.message}")
+                showNoInternetDialog = true
             }
             else -> {
                 Log.d("SplashScreen", "Token invalid or missing - navigating to login")

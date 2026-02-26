@@ -24,6 +24,7 @@ import retrofit2.Response
 sealed class AuthOutcome {
     data class Success(val message: String) : AuthOutcome()
     data class Error(val message: String) : AuthOutcome()
+    data class NetworkError(val message: String) : AuthOutcome()
     data class DeviceNotRegistered(val message: String) : AuthOutcome()
     data class UpdateRequired(val message: String) : AuthOutcome()
 }
@@ -273,6 +274,14 @@ class AuthRepository(
                     }
                 }
             }
+        } catch (e: java.net.UnknownHostException) {
+            AuthOutcome.NetworkError("No internet connection")
+        } catch (e: java.net.SocketTimeoutException) {
+            AuthOutcome.NetworkError("Connection timed out")
+        } catch (e: java.net.ConnectException) {
+            AuthOutcome.NetworkError("Unable to connect to server")
+        } catch (e: java.io.IOException) {
+            AuthOutcome.NetworkError("Network unavailable")
         } catch (e: Exception) {
             AuthOutcome.Error(e.message ?: "Token verification failed")
         }
