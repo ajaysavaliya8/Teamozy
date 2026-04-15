@@ -18,36 +18,48 @@ data class DeviceChangeResponse(
     val detail: String
 )
 
+interface PublicApiService {
+    @POST("company/find-company")
+    suspend fun findCompany(@Body body: FindCompanyRequest): Response<FindCompanyResponse>
+}
+
 interface ApiService {
 
     // ========================================
     // AUTH ENDPOINTS
     // ========================================
 
+    @FormUrlEncoded
     @POST("send-login")
     suspend fun sendLogin(
-        @Query("mobile_number") mobileNumber: Long,
-        @Query("device_id") deviceId: String
+        @Field("mobile_number") mobileNumber: Long,
+        @Field("device_id") deviceId: String
     ): Response<AuthResponse>
 
     @FormUrlEncoded
     @POST("verify-login")
     suspend fun verifyLogin(
-        @Query("mobile_number") mobileNumber: Long,
-        @Query("device_id") deviceId: String,
-        @Query("password") password: String? = null,
-        @Query("otp") otp: String? = null,
-        @Query("app_version") appVersion: String? = null,
+        @Field("mobile_number") mobileNumber: Long,
+        @Field("device_id") deviceId: String,
+        @Field("password") password: String? = null,
+        @Field("otp") otp: String? = null,
+        @Field("app_version") appVersion: String? = null,
         @Field("fcm_token") fcmToken: String? = null,
         @Field("device_manufacturer") deviceManufacturer: String? = null,
         @Field("device_model") deviceModel: String? = null,
         @Field("device_os_version") deviceOsVersion: String? = null
     ): Response<LoginResponse>
 
-    @GET("verify-token")
+    @FormUrlEncoded
+    @POST("verify-token")
     suspend fun verifyToken(
-        @Query("app_version") appVersion: String,
-        @Query("fcm_token") fcmToken: String? = null
+        @Field("app_version") appVersion: String,
+        @Field("device_id") deviceId: String,
+        @Field("platform") platform: String = "ANDROID",
+        @Field("fcm_token") fcmToken: String? = null,
+        @Field("device_manufacturer") deviceManufacturer: String? = null,
+        @Field("device_model") deviceModel: String? = null,
+        @Field("device_os_version") deviceOsVersion: String? = null
     ): Response<VerifyTokenResponse>
 
     @POST("forgot-password")

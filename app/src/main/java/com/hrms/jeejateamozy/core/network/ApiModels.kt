@@ -5,6 +5,22 @@ import okhttp3.ResponseBody
 
 
 // ========================================
+// FIND COMPANY MODELS
+// ========================================
+
+data class FindCompanyRequest(
+    val mobile_number: String? = null,
+    val email: String? = null
+)
+
+data class FindCompanyResponse(
+    val success: Boolean,
+    val message: String,
+    val company_code: String? = null,
+    val error_code: String? = null
+)
+
+// ========================================
 // AUTH MODELS
 // ========================================
 

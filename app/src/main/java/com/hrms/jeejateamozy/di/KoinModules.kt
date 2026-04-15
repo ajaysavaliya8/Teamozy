@@ -24,10 +24,11 @@ import org.koin.dsl.module
 
 
 val authModule = module {
-    // Provide AuthRepository with correct parameter order: (api, pm, context)
+    // Provide AuthRepository with correct parameter order: (api, publicApi, pm, context)
     single {
         AuthRepository(
             api = NetworkModule.apiService,
+            publicApi = NetworkModule.publicApiService,
             pm = PreferencesManager.getInstance(androidContext()),
             ctx = androidContext()
         )

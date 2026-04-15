@@ -59,6 +59,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
+import com.hrms.jeejateamozy.feature.auth.data.FindCompanyOutcome
 import com.hrms.jeejateamozy.feature.auth.domain.usecase.LoginUseCase
 import com.hrms.jeejateamozy.feature.auth.presentation.dialogs.AppVersionUpdateDialog  // ⚡ NEW IMPORT
 import kotlinx.coroutines.delay
@@ -162,6 +163,20 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             is AuthOutcome.NetworkError -> {
                 error = outcome.message
             }
+        }
+    }
+
+    /**
+     * Calls find-company if not already resolved for this session.
+     * Returns true if company code is available, false if an error occurred (sets [error]).
+     */
+    suspend fun findCompanyIfNeeded(): Boolean {
+        if (repo.getCompanyCode().isNotBlank()) return true
+        val outcome = repo.findCompany(mobileNumber = phone)
+        return when (outcome) {
+            is FindCompanyOutcome.Found -> true
+            is FindCompanyOutcome.NotFound -> { error = outcome.message; false }
+            is FindCompanyOutcome.Error -> { error = outcome.message; false }
         }
     }
 
@@ -358,6 +373,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                                 keyboard?.hide()
                                                 scope.launch {
                                                     loading = true; error = null
+                                                    if (!findCompanyIfNeeded()) { loading = false; return@launch }
                                                     val outcome = useCase.loginWithPassword(phone, password)
                                                     loading = false
                                                     handleAuthOutcome(outcome) { onLoginSuccess() }
@@ -421,6 +437,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     onClick = {
                                         scope.launch {
                                             loading = true; error = null
+                                            if (!findCompanyIfNeeded()) { loading = false; return@launch }
                                             val outcome = useCase.sendOtp(phone)
                                             loading = false
                                             handleAuthOutcome(outcome) {
@@ -450,6 +467,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                         keyboard?.hide()
                                         scope.launch {
                                             loading = true; error = null
+                                            if (!findCompanyIfNeeded()) { loading = false; return@launch }
                                             val outcome = useCase.loginWithOtp(phone, otp)
                                             loading = false
                                             handleAuthOutcome(outcome) { onLoginSuccess() }
@@ -477,6 +495,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                         keyboard?.hide()
                                         scope.launch {
                                             loading = true; error = null
+                                            if (!findCompanyIfNeeded()) { loading = false; return@launch }
                                             val outcome = useCase.loginWithPassword(phone, password)
                                             loading = false
                                             handleAuthOutcome(outcome) { onLoginSuccess() }

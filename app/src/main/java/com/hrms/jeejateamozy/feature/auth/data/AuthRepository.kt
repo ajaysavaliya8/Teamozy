@@ -6,7 +6,9 @@ import android.provider.Settings
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.ApiService
 import com.hrms.jeejateamozy.core.network.AuthResponse
+import com.hrms.jeejateamozy.core.network.FindCompanyRequest
 import com.hrms.jeejateamozy.core.network.LoginResponse
+import com.hrms.jeejateamozy.core.network.PublicApiService
 import com.hrms.jeejateamozy.core.network.ResetOtpResponse
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
@@ -35,15 +37,24 @@ sealed class ResetOutcome {
     data class TokenReceived(val resetToken: String, val message: String) : ResetOutcome()
 }
 
+sealed class FindCompanyOutcome {
+    data class Found(val companyCode: String) : FindCompanyOutcome()
+    data class NotFound(val message: String) : FindCompanyOutcome()
+    data class Error(val message: String) : FindCompanyOutcome()
+}
+
 // ============================================
 // AUTH REPOSITORY
 // ============================================
 
 class AuthRepository(
     private val api: ApiService,
+    private val publicApi: PublicApiService,
     private val pm: PreferencesManager,
     private val ctx: Context
 ) {
+
+    fun getCompanyCode(): String = pm.companyCode
 
     private fun androidId(): String {
         return Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown_device"
@@ -116,6 +127,47 @@ class AuthRepository(
     }
 
     suspend fun sendOtp(phone: String): AuthOutcome = sendLoginCode(phone)
+
+    /**
+     * Find which company a user belongs to by mobile number or email.
+     * Saves company_code to preferences on success so all subsequent API
+     * calls automatically use the correct company endpoint.
+     */
+    suspend fun findCompany(
+        mobileNumber: String? = null,
+        email: String? = null
+    ): FindCompanyOutcome = withContext(Dispatchers.IO) {
+        return@withContext try {
+            Log.d("AUTH", "findCompany - mobile: $mobileNumber, email: $email")
+            val res = publicApi.findCompany(
+                FindCompanyRequest(mobile_number = mobileNumber, email = email)
+            )
+            Log.d("NET", "findCompany -> code=${res.code()}")
+            when (res.code()) {
+                200 -> {
+                    val body = res.body()
+                    if (body?.success == true && !body.company_code.isNullOrBlank()) {
+                        pm.companyCode = body.company_code
+                        Log.d("AUTH", "Company found: ${body.company_code}")
+                        FindCompanyOutcome.Found(body.company_code)
+                    } else {
+                        FindCompanyOutcome.NotFound(body?.message ?: "Company not found")
+                    }
+                }
+                404 -> {
+                    val msg = NetworkErrorHandler.extractErrorMessage(res, "No account found")
+                    FindCompanyOutcome.NotFound(msg)
+                }
+                else -> {
+                    val msg = NetworkErrorHandler.extractErrorMessage(res, "Unable to find company")
+                    FindCompanyOutcome.Error(msg)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("AUTH", "findCompany error", e)
+            FindCompanyOutcome.Error(e.message ?: "Failed to find company")
+        }
+    }
 
     /**
      * Login with password
@@ -222,9 +274,18 @@ class AuthRepository(
 
             val appVersion = com.hrms.jeejateamozy.BuildConfig.VERSION_NAME
             val fcmToken = pm.fcmToken
+            val deviceId = androidId()
 
-            val res = api.verifyToken(appVersion, fcmToken)
-            Log.d("NET", "verifyToken -> app_version=$appVersion, fcm_token=${fcmToken?.take(20)}..., code=${res.code()}")
+            val res = api.verifyToken(
+                appVersion = appVersion,
+                deviceId = deviceId,
+                platform = "ANDROID",
+                fcmToken = fcmToken,
+                deviceManufacturer = getDeviceManufacturer(),
+                deviceModel = getDeviceModel(),
+                deviceOsVersion = getDeviceOSVersion()
+            )
+            Log.d("NET", "verifyToken -> app_version=$appVersion, device=$deviceId, fcm_token=${fcmToken?.take(20)}..., code=${res.code()}")
 
             when (res.code()) {
                 426 -> {

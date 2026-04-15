@@ -106,6 +106,14 @@ class PreferencesManager private constructor(context: Context) {
         set(value) = prefs.edit().putString(KEY_SNAPCHAT, value).apply()
 
     // ============================================
+    // COMPANY CODE (from find-company)
+    // ============================================
+
+    var companyCode: String
+        get() = prefs.getString(KEY_COMPANY_CODE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_COMPANY_CODE, value).apply()
+
+    // ============================================
     // COMPANY INFORMATION
     // ============================================
 
@@ -247,6 +255,9 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_X = "x"
         private const val KEY_INSTAGRAM = "instagram"
         private const val KEY_SNAPCHAT = "snapchat"
+
+        // Company Code Key
+        private const val KEY_COMPANY_CODE = "company_code"
 
         // Company Information Keys
         private const val KEY_COMPANY_NAME = "company_name"

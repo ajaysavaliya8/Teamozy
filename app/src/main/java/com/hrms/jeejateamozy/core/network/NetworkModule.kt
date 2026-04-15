@@ -12,7 +12,9 @@ import java.util.concurrent.TimeUnit
 
 object NetworkModule {
 
-    const val BASE_URL: String = "https://teamozy.com/data/jeejafashion/m/"
+    private const val DEFAULT_COMPANY_CODE = "jeejafashion"
+    const val BASE_URL: String = "https://teamozy.com/data/$DEFAULT_COMPANY_CODE/m/"
+    private const val PUBLIC_BASE_URL: String = "https://teamozy.com/"
 
     // Must be initialized before use
     private lateinit var appContext: Context
@@ -30,6 +32,32 @@ object NetworkModule {
             .header("Accept", "application/json")
             .build()
         chain.proceed(req)
+    }
+
+    /**
+     * Normalises the company URL path segment at request time.
+     *
+     * `companyCode` (e.g. "J_F") is a short identifier returned by find-company.
+     * It is NOT the URL slug used in API paths. All app-built requests already use
+     * DEFAULT_COMPANY_CODE in their URL (via BASE_URL), so no replacement is needed
+     * for those. However, server-returned URLs (e.g. profile_url) may embed the short
+     * code — those are rewritten to the default slug so they resolve correctly.
+     */
+    private val companyCodeInterceptor = Interceptor { chain ->
+        val request = chain.request()
+        val companyCode = PreferencesManager.getInstance(appContext).companyCode
+            .takeIf { it.isNotBlank() && it != DEFAULT_COMPANY_CODE }
+            ?: return@Interceptor chain.proceed(request)
+
+        // Only act on server-provided URLs that contain the short code (e.g. profile_url)
+        val originalPath = request.url.encodedPath
+        if (!originalPath.contains("/data/$companyCode/m/")) {
+            return@Interceptor chain.proceed(request)
+        }
+
+        val newPath = originalPath.replace("/data/$companyCode/m/", "/data/$DEFAULT_COMPANY_CODE/m/")
+        val newUrl = request.url.newBuilder().encodedPath(newPath).build()
+        chain.proceed(request.newBuilder().url(newUrl).build())
     }
 
     /**
@@ -92,8 +120,19 @@ object NetworkModule {
 
     private val unauthorizedInterceptor = Interceptor { chain ->
         val res = chain.proceed(chain.request())
-        if (res.code == 401 || res.code == 403) {
+        if (res.code == 401) {
             AppStateManager.emitUnauthorized()
+        } else if (res.code == 403) {
+            // Only emit unauthorized for real auth failures.
+            // "Invalid company code" is a URL-routing issue — do NOT logout.
+            try {
+                val body = res.peekBody(512).string()
+                if (!body.contains("Invalid company code", ignoreCase = true)) {
+                    AppStateManager.emitUnauthorized()
+                }
+            } catch (_: Exception) {
+                AppStateManager.emitUnauthorized()
+            }
         }
         res
     }
@@ -102,9 +141,10 @@ object NetworkModule {
     val okHttp by lazy {
         OkHttpClient.Builder()
             .addInterceptor(headersInterceptor)
-            .addInterceptor(authInterceptor)        // ← Add Bearer token
+            .addInterceptor(companyCodeInterceptor)  // ← Swap company code dynamically
+            .addInterceptor(authInterceptor)          // ← Add Bearer token
             .addInterceptor(logging)
-            .addInterceptor(unauthorizedInterceptor) // ← Handle 401
+            .addInterceptor(unauthorizedInterceptor)  // ← Handle 401
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .writeTimeout(45, TimeUnit.SECONDS)
@@ -120,4 +160,24 @@ object NetworkModule {
     }
 
     val apiService: ApiService by lazy { retrofit.create(ApiService::class.java) }
+
+    // Public (no-auth) client for pre-login endpoints like find-company
+    private val publicOkHttp by lazy {
+        OkHttpClient.Builder()
+            .addInterceptor(headersInterceptor)
+            .addInterceptor(logging)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private val publicRetrofit: Retrofit by lazy {
+        Retrofit.Builder()
+            .baseUrl(PUBLIC_BASE_URL)
+            .client(publicOkHttp)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    val publicApiService: PublicApiService by lazy { publicRetrofit.create(PublicApiService::class.java) }
 }

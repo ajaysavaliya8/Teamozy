@@ -53,7 +53,12 @@ object NetworkErrorHandler {
             val errorBody = response.errorBody()?.string()
 
             if (errorBody.isNullOrBlank()) {
-                return null
+                return serverCodeMessage(response.code())
+            }
+
+            // HTML body = nginx/proxy error page, not an API response
+            if (errorBody.trimStart().startsWith("<")) {
+                return serverCodeMessage(response.code())
             }
 
             // Try JSONObject first (most common)
@@ -66,12 +71,21 @@ object NetworkErrorHandler {
 
             // If we got here, couldn't parse the error
             Log.w(TAG, "Could not parse error body: $errorBody")
-            null
+            serverCodeMessage(response.code())
 
         } catch (e: Exception) {
             Log.e(TAG, "Error extracting error message from response", e)
             null
         }
+    }
+
+    private fun serverCodeMessage(code: Int): String? = when (code) {
+        500 -> "Server error. Please try again later."
+        502 -> "Server is temporarily unavailable. Please try again."
+        503 -> "Service unavailable. Please try again later."
+        504 -> "Server timed out. Please try again."
+        in 500..599 -> "Server error ($code). Please try again."
+        else -> null
     }
 
     /**
