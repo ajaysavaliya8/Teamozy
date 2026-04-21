@@ -107,10 +107,15 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var deviceRequestLoading by remember { mutableStateOf(false) }
     var deviceCanResend by remember { mutableStateOf(true) }
     var deviceSecondsLeft by remember { mutableStateOf(0) }
+    var deviceDialogError by remember { mutableStateOf<String?>(null) }
 
     // ⚡ NEW: App version update dialog state
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf("") }
+
+    // Tracks the phone number for which the current cached company code was resolved.
+    // If the user edits the phone between attempts, find-company must be re-called.
+    var lastResolvedPhone by rememberSaveable { mutableStateOf("") }
 
     val snack = remember { SnackbarHostState() }
 
@@ -167,14 +172,15 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     }
 
     /**
-     * Calls find-company if not already resolved for this session.
-     * Returns true if company code is available, false if an error occurred (sets [error]).
+     * Resolves the company code for the current phone via find-company.
+     * Skips the network call only when the cached code was resolved for this exact phone.
+     * Returns true if a company code is available, false if an error occurred (sets [error]).
      */
     suspend fun findCompanyIfNeeded(): Boolean {
-        if (repo.getCompanyCode().isNotBlank()) return true
+        if (repo.getCompanyCode().isNotBlank() && lastResolvedPhone == phone) return true
         val outcome = repo.findCompany(mobileNumber = phone)
         return when (outcome) {
-            is FindCompanyOutcome.Found -> true
+            is FindCompanyOutcome.Found -> { lastResolvedPhone = phone; true }
             is FindCompanyOutcome.NotFound -> { error = outcome.message; false }
             is FindCompanyOutcome.Error -> { error = outcome.message; false }
         }
@@ -571,12 +577,16 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             mobileNumber = deviceMobileNumber,
             onMobileNumberChange = { deviceMobileNumber = it },
             otp = deviceOtp,
-            onOtpChange = { deviceOtp = it },
+            onOtpChange = {
+                deviceOtp = it
+                deviceDialogError = null
+            },
             otpSent = deviceOtpSent,
             otpLoading = deviceOtpLoading,
             requestLoading = deviceRequestLoading,
             canResend = deviceCanResend,
             secondsLeft = deviceSecondsLeft,
+            dialogError = deviceDialogError,
             onDismiss = {
                 showDeviceDialog = false
                 deviceMobileNumber = phone
@@ -586,12 +596,14 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 deviceRequestLoading = false
                 deviceCanResend = true
                 deviceSecondsLeft = 0
+                deviceDialogError = null
             },
             onSendOtp = {
                 scope.launch {
                     deviceOtpLoading = true
                     deviceCanResend = false
                     deviceSecondsLeft = 30
+                    deviceDialogError = null
 
                     when (val outcome = repo.sendChangeDeviceOtp(deviceMobileNumber)) {
                         is AuthOutcome.Success -> {
@@ -604,7 +616,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                             deviceOtpLoading = false
                             deviceCanResend = true
                             deviceSecondsLeft = 0
-                            snack.showSnackbar(outcome.message)
+                            deviceDialogError = outcome.message
                         }
                         else -> {
                             deviceOtpLoading = false
@@ -618,6 +630,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             onRequestDevice = {
                 scope.launch {
                     deviceRequestLoading = true
+                    deviceDialogError = null
                     when (val outcome = repo.requestChangeDevice(deviceMobileNumber, deviceOtp)) {
                         is AuthOutcome.Success -> {
                             deviceRequestLoading = false
@@ -629,7 +642,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         }
                         is AuthOutcome.Error -> {
                             deviceRequestLoading = false
-                            snack.showSnackbar(outcome.message)
+                            deviceDialogError = outcome.message
                         }
                         else -> {
                             deviceRequestLoading = false
@@ -654,6 +667,7 @@ private fun DeviceRegistrationDialog(
     requestLoading: Boolean,
     canResend: Boolean,
     secondsLeft: Int,
+    dialogError: String?,
     onDismiss: () -> Unit,
     onSendOtp: () -> Unit,
     onRequestDevice: () -> Unit
@@ -739,6 +753,32 @@ private fun DeviceRegistrationDialog(
                                 )
                             }
                         }
+                    }
+                }
+
+                // Inline error banner (shown above actions so it's not covered by dialog scrim/snackbar)
+                AnimatedVisibility(visible = dialogError != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFFEF2F2))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = dialogError.orEmpty(),
+                            color = Color(0xFFB91C1C),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
 

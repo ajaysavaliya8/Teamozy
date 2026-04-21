@@ -35,27 +35,29 @@ object NetworkModule {
     }
 
     /**
-     * Normalises the company URL path segment at request time.
+     * Rewrites the company URL slug at request time using the code returned by
+     * find-company and stored in PreferencesManager.
      *
-     * `companyCode` (e.g. "J_F") is a short identifier returned by find-company.
-     * It is NOT the URL slug used in API paths. All app-built requests already use
-     * DEFAULT_COMPANY_CODE in their URL (via BASE_URL), so no replacement is needed
-     * for those. However, server-returned URLs (e.g. profile_url) may embed the short
-     * code — those are rewritten to the default slug so they resolve correctly.
+     * Retrofit builds every request from BASE_URL (which contains DEFAULT_COMPANY_CODE).
+     * After find-company runs, `pm.companyCode` holds the tenant's slug — we swap
+     * `/data/$DEFAULT_COMPANY_CODE/m/` in the outgoing path for `/data/$savedCode/m/`
+     * so all endpoints (send-login, verify-login, etc.) hit the correct tenant.
+     *
+     * Pre-login (blank prefs) the default slug is kept as-is.
      */
     private val companyCodeInterceptor = Interceptor { chain ->
         val request = chain.request()
-        val companyCode = PreferencesManager.getInstance(appContext).companyCode
+        val savedCode = PreferencesManager.getInstance(appContext).companyCode
             .takeIf { it.isNotBlank() && it != DEFAULT_COMPANY_CODE }
             ?: return@Interceptor chain.proceed(request)
 
-        // Only act on server-provided URLs that contain the short code (e.g. profile_url)
         val originalPath = request.url.encodedPath
-        if (!originalPath.contains("/data/$companyCode/m/")) {
+        val defaultSegment = "/data/$DEFAULT_COMPANY_CODE/m/"
+        if (!originalPath.contains(defaultSegment)) {
             return@Interceptor chain.proceed(request)
         }
 
-        val newPath = originalPath.replace("/data/$companyCode/m/", "/data/$DEFAULT_COMPANY_CODE/m/")
+        val newPath = originalPath.replace(defaultSegment, "/data/$savedCode/m/")
         val newUrl = request.url.newBuilder().encodedPath(newPath).build()
         chain.proceed(request.newBuilder().url(newUrl).build())
     }
@@ -118,20 +120,45 @@ object NetworkModule {
         }
     }
 
+    // Endpoints hit before the user is authenticated. 401/403 from these must never
+    // trigger a session-expired flow (clearAll + redirect) — they're business errors
+    // (e.g. "Employment is not active", "Mobile not registered") on public routes.
+    private val preAuthPathSuffixes = listOf(
+        "/send-login",
+        "/verify-login",
+        "/forgot-password",
+        "/verify-reset-otp",
+        "/reset-password",
+        "/send-change-device-otp",
+        "/request-change-device",
+    )
+
     private val unauthorizedInterceptor = Interceptor { chain ->
-        val res = chain.proceed(chain.request())
-        if (res.code == 401) {
-            AppStateManager.emitUnauthorized()
-        } else if (res.code == 403) {
-            // Only emit unauthorized for real auth failures.
-            // "Invalid company code" is a URL-routing issue — do NOT logout.
-            try {
-                val body = res.peekBody(512).string()
-                if (!body.contains("Invalid company code", ignoreCase = true)) {
+        val req = chain.request()
+        val res = chain.proceed(req)
+
+        val path = req.url.encodedPath
+        val isPreAuth = preAuthPathSuffixes.any { path.endsWith(it) }
+
+        if (!isPreAuth) {
+            if (res.code == 401) {
+                AppStateManager.emitUnauthorized()
+            } else if (res.code == 403) {
+                // Distinguish true auth-middleware 403 from app-level business 403.
+                // App-level errors use the structured envelope {success, message, error_code, ...}
+                // — those should NOT log the user out (e.g. "Face recognition is not enabled",
+                // "Employment is not active"). Also preserve the existing "Invalid company code"
+                // allowance which is a URL-routing issue.
+                try {
+                    val body = res.peekBody(512).string()
+                    val isStructuredBusinessError = body.contains("\"error_code\"")
+                    val isCompanyCodeIssue = body.contains("Invalid company code", ignoreCase = true)
+                    if (!isStructuredBusinessError && !isCompanyCodeIssue) {
+                        AppStateManager.emitUnauthorized()
+                    }
+                } catch (_: Exception) {
                     AppStateManager.emitUnauthorized()
                 }
-            } catch (_: Exception) {
-                AppStateManager.emitUnauthorized()
             }
         }
         res

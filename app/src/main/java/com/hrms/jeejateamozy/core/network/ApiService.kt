@@ -15,7 +15,16 @@ import okhttp3.ResponseBody
 
 
 data class DeviceChangeResponse(
-    val detail: String
+    val success: Boolean,
+    val message: String?,
+    val data: DeviceChangeRequestData? = null,
+    val error_code: String? = null
+)
+
+data class DeviceChangeRequestData(
+    val request_id: Int,
+    val request_type: String, // NEW | CHANGE
+    val status: String        // PENDING
 )
 
 interface PublicApiService {
@@ -87,12 +96,15 @@ interface ApiService {
     @FormUrlEncoded
     @POST("request-change-device")
     suspend fun requestChangeDevice(
-        @Query("otp") otp: String,
-        @Query("mobile_number") mobileNumber: Long,
-        @Query("new_device_id") newDeviceId: String,
-        @Field("new_device_os") newDeviceOs: String,
-        @Field("new_device_model") newDeviceModel: String,
-        @Field("new_device_company_name") newDeviceCompanyName: String,
+        @Field("mobile_number") mobileNumber: Long,
+        @Field("otp") otp: String,
+        @Field("new_device_id") newDeviceId: String,
+        @Field("new_device_os") newDeviceOs: String,                      // ANDROID | IOS
+        @Field("new_device_model") newDeviceModel: String? = null,
+        @Field("new_device_manufacturer") newDeviceManufacturer: String? = null,
+        @Field("new_device_os_version") newDeviceOsVersion: String? = null,
+        @Field("new_device_type") newDeviceType: String? = null,          // MOBILE | TABLET
+        @Field("priority") priority: String? = null,                      // LOW | NORMAL | HIGH | URGENT
         @Field("reason") reason: String? = null
     ): Response<DeviceChangeResponse>
 
@@ -187,6 +199,7 @@ interface ApiService {
     suspend fun registerFaceRecognition(
         @Part face_image: MultipartBody.Part,
         @Part("face_vector") faceVector: RequestBody,
+        @Part("consent_acknowledged") consentAcknowledged: RequestBody,
         @Part("priority") priority: RequestBody,
         @Part("reason_for_change") reasonForChange: RequestBody? = null
     ): Response<FaceRegistrationResponse>

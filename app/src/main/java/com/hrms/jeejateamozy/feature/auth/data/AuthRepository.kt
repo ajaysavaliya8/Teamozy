@@ -374,46 +374,42 @@ class AuthRepository(
     ): AuthOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             val newDeviceId = androidId()
-            val newDeviceOs = getDeviceOSVersion()
             val newDeviceModel = getDeviceModel()
-            val newDeviceCompanyName = getDeviceManufacturer()
+            val newDeviceManufacturer = getDeviceManufacturer()
+            val newDeviceOsVersion = Build.VERSION.RELEASE
 
             Log.d("AUTH", "requestChangeDevice")
             Log.d("AUTH", "  phone: $phone")
             Log.d("AUTH", "  newDeviceId: $newDeviceId")
-            Log.d("AUTH", "  newDeviceOs: $newDeviceOs")
             Log.d("AUTH", "  newDeviceModel: $newDeviceModel")
-            Log.d("AUTH", "  newDeviceCompanyName: $newDeviceCompanyName")
+            Log.d("AUTH", "  newDeviceManufacturer: $newDeviceManufacturer")
+            Log.d("AUTH", "  newDeviceOsVersion: $newDeviceOsVersion")
 
             val res = api.requestChangeDevice(
-                otp = otp,
                 mobileNumber = phone.toLong(),
+                otp = otp,
                 newDeviceId = newDeviceId,
-                newDeviceOs = newDeviceOs,
+                newDeviceOs = "ANDROID",
                 newDeviceModel = newDeviceModel,
-                newDeviceCompanyName = newDeviceCompanyName,
+                newDeviceManufacturer = newDeviceManufacturer,
+                newDeviceOsVersion = newDeviceOsVersion,
+                newDeviceType = "MOBILE",
+                priority = "NORMAL",
                 reason = null
             )
             Log.d("NET", "requestChangeDevice -> code=${res.code()}")
 
-            if (res.isSuccessful && res.code() == 200) {
+            if (res.isSuccessful && (res.code() == 200 || res.code() == 201)) {
                 val body = res.body()
-                val msg = body?.detail ?: "Device change request submitted successfully"
-                Log.d("AUTH", "Device change request successful: $msg")
-                AuthOutcome.Success(msg)
-            } else {
-                val errorMessage = try {
-                    val errBody = res.errorBody()?.string()
-                    if (errBody.isNullOrBlank()) {
-                        res.message()
-                    } else {
-                        val gson = Gson()
-                        val map = gson.fromJson(errBody, Map::class.java)
-                        map["detail"]?.toString() ?: map["message"]?.toString() ?: res.message()
-                    }
-                } catch (e: Exception) {
-                    res.message()
+                if (body?.success == true) {
+                    val msg = body.message ?: "Device change request submitted successfully"
+                    Log.d("AUTH", "Device change request successful: $msg")
+                    AuthOutcome.Success(msg)
+                } else {
+                    AuthOutcome.Error(body?.message ?: "Request failed")
                 }
+            } else {
+                val errorMessage = extractMessage(res)
                 Log.e("AUTH", "Device change request failed: $errorMessage")
                 AuthOutcome.Error(errorMessage)
             }

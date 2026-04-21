@@ -702,7 +702,13 @@ data class FaceRegistrationResponse(
 )
 
 data class FaceRegistrationData(
-    val image_path: String? = null
+    // First-time enrollment (auto-approved) path
+    val image_path: String? = null,
+    // Update flow (change request) path
+    val requested_image_path: String? = null,
+    val status: String? = null, // PENDING
+    // Both paths
+    val request_id: Int? = null
 )
 
 data class PendingFaceRegistrationResponse(
@@ -712,7 +718,9 @@ data class PendingFaceRegistrationResponse(
 )
 
 data class PendingFaceRegistrationData(
-    val pending: Boolean
+    val pending: Boolean,
+    val request_id: Int? = null,
+    val status: String? = null
 )
 
 data class SocialMediaUpdateResponse(

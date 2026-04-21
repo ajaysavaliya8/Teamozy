@@ -153,12 +153,17 @@ fun ProfileScreen(
                             "text/plain".toMediaTypeOrNull(),
                             "Face registration from mobile app"
                         )
+                        val consentPart = okhttp3.RequestBody.create(
+                            "text/plain".toMediaTypeOrNull(),
+                            "true"
+                        )
 
                         // Call API
                         val response = withContext(Dispatchers.IO) {
                             api.registerFaceRecognition(
                                 face_image = imagePart,
                                 faceVector = faceDataPart,
+                                consentAcknowledged = consentPart,
                                 priority = priorityPart,
                                 reasonForChange = reasonPart
                             )
@@ -178,11 +183,8 @@ fun ProfileScreen(
                                 faceRegistrationResult = FaceRegistrationResult.Error(message)
                             }
                         } else {
-                            val message = try {
-                                response.errorBody()?.string() ?: response.message()
-                            } catch (e: Exception) {
-                                "Failed to register face"
-                            }
+                            val message = com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
+                                .extractErrorMessage(response, "Failed to register face")
                             faceRegistrationResult = FaceRegistrationResult.Error(message)
                         }
                     } catch (e: Exception) {
