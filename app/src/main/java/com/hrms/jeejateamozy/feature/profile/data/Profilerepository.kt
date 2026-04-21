@@ -7,7 +7,6 @@ import android.net.Uri
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
-import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,7 +70,6 @@ class ProfileRepository(private val context: Context) {
 
                 response.code() == 401 -> {
                     compressedFile.delete()
-                    AppStateManager.emitUnauthorized()
                     ProfilePictureOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -120,7 +118,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     ProfilePictureOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -165,7 +162,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     ContactInfoOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -243,7 +239,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     ContactInfoOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -290,7 +285,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     PersonalInfoOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -349,7 +343,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     PersonalInfoOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -396,7 +389,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     EmploymentDetailOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -438,7 +430,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     BankingInfoOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -480,7 +471,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     EmploymentIdentityOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -526,7 +516,6 @@ class ProfileRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     ShiftDetailsOutcome.Error("Unauthorized. Please login again.")
                 }
 

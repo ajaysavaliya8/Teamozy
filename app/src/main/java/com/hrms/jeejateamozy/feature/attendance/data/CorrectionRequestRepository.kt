@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.*
-import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -70,7 +69,6 @@ class CorrectionRequestRepository(private val context: Context) {
                         }
                     }
                     response.code() == 401 -> {
-                        AppStateManager.emitUnauthorized()
                         CorrectionRequestOptionsOutcome.Error("Unauthorized. Please login again.")
                     }
                     else -> {
@@ -177,7 +175,6 @@ class CorrectionRequestRepository(private val context: Context) {
                     }
                 }
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     SubmitCorrectionRequestOutcome.Error("Unauthorized. Please login again.")
                 }
                 else -> {
@@ -215,7 +212,6 @@ class CorrectionRequestRepository(private val context: Context) {
                         }
                     }
                     response.code() == 401 -> {
-                        AppStateManager.emitUnauthorized()
                         WithdrawCorrectionRequestOutcome.Error("Unauthorized. Please login again.")
                     }
                     else -> {
@@ -257,7 +253,6 @@ class CorrectionRequestRepository(private val context: Context) {
                     }
                 }
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     CorrectionRequestListOutcome.Error("Unauthorized. Please login again.")
                 }
                 else -> {
@@ -287,7 +282,6 @@ class CorrectionRequestRepository(private val context: Context) {
                         }
                     }
                     response.code() == 401 -> {
-                        AppStateManager.emitUnauthorized()
                         CorrectionRequestDetailOutcome.Error("Unauthorized. Please login again.")
                     }
                     else -> {
@@ -321,7 +315,6 @@ class CorrectionRequestRepository(private val context: Context) {
                         }
                     }
                     response.code() == 401 -> {
-                        AppStateManager.emitUnauthorized()
                         DownloadAttachmentOutcome.Error("Unauthorized. Please login again.")
                     }
                     response.code() == 404 -> {

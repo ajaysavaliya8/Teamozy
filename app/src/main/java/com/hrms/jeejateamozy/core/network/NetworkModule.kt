@@ -140,25 +140,21 @@ object NetworkModule {
         val path = req.url.encodedPath
         val isPreAuth = preAuthPathSuffixes.any { path.endsWith(it) }
 
-        if (!isPreAuth) {
-            if (res.code == 401) {
-                AppStateManager.emitUnauthorized()
-            } else if (res.code == 403) {
-                // Distinguish true auth-middleware 403 from app-level business 403.
-                // App-level errors use the structured envelope {success, message, error_code, ...}
-                // — those should NOT log the user out (e.g. "Face recognition is not enabled",
-                // "Employment is not active"). Also preserve the existing "Invalid company code"
-                // allowance which is a URL-routing issue.
-                try {
-                    val body = res.peekBody(512).string()
-                    val isStructuredBusinessError = body.contains("\"error_code\"")
-                    val isCompanyCodeIssue = body.contains("Invalid company code", ignoreCase = true)
-                    if (!isStructuredBusinessError && !isCompanyCodeIssue) {
-                        AppStateManager.emitUnauthorized()
-                    }
-                } catch (_: Exception) {
+        if (!isPreAuth && (res.code == 401 || res.code == 403)) {
+            // Distinguish true auth-middleware 401/403 from app-level business errors.
+            // App-level errors use the structured envelope {success, message, error_code, ...}
+            // — those should NOT log the user out (e.g. "Shift not allocated",
+            // "Face recognition is not enabled", "Employment is not active").
+            // Also preserve the existing "Invalid company code" allowance.
+            try {
+                val body = res.peekBody(512).string()
+                val isStructuredBusinessError = body.contains("\"error_code\"")
+                val isCompanyCodeIssue = body.contains("Invalid company code", ignoreCase = true)
+                if (!isStructuredBusinessError && !isCompanyCodeIssue) {
                     AppStateManager.emitUnauthorized()
                 }
+            } catch (_: Exception) {
+                AppStateManager.emitUnauthorized()
             }
         }
         res

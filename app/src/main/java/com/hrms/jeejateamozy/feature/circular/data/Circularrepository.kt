@@ -3,7 +3,6 @@ package com.hrms.jeejateamozy.feature.circular.data
 import android.content.Context
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
-import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.core.network.Circular
 import com.hrms.jeejateamozy.core.network.CircularDetail
 import com.hrms.jeejateamozy.core.network.CircularStats
@@ -87,7 +86,6 @@ class CircularRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     CircularListOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -135,7 +133,6 @@ class CircularRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     CircularDetailOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -188,7 +185,6 @@ class CircularRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     CircularStatsOutcome.Error("Unauthorized. Please login again.")
                 }
 

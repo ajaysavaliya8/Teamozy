@@ -1,9 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./gradlew :app:compileDebugKotlin:*)",
       "WebSearch",
-      "Bash(./gradlew:*)",
       "Bash(cd:*)",
       "Bash(.gradlew.bat assembleDebug)",
       "Bash(gradlew.bat:*)",
@@ -31,7 +29,22 @@
       "Bash(cmd /c:*)",
       "Bash(find:*)",
       "Bash(mkdir -p ~/.claude/commands)",
-      "Bash(mkdir -p \"C:/Users/ajays/StudioProjects/Teamozy/.claude/commands\")"
+      "Bash(mkdir -p \"C:/Users/ajays/StudioProjects/Teamozy/.claude/commands\")",
+      "Bash(sed -n '165,175p' app/src/main/java/com/hrms/jeejateamozy/feature/attendance/data/AttendanceRepository.kt)",
+      "Bash(sed -n '257,265p' app/src/main/java/com/hrms/jeejateamozy/feature/attendance/data/AttendanceRepository.kt)",
+      "Bash(sed -n '91,99p' app/src/main/java/com/hrms/jeejateamozy/feature/leave/data/LeaveRepository.kt)",
+      "Bash(sed -n '70,78p' app/src/main/java/com/hrms/jeejateamozy/feature/profile/data/Profilerepository.kt)",
+      "Bash(sed -n '83,90p' app/src/main/java/com/hrms/jeejateamozy/feature/workreport/data/WorkReportRepository.kt)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:glama.ai)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(claude mcp *)",
+      "Bash(adb version *)",
+      "Bash(adb devices *)",
+      "Bash(adb shell *)",
+      "Bash(adb exec-out *)",
+      "Bash(adb pull *)",
+      "Bash(mkdir -p screenshots/login)"
     ]
   }
 }

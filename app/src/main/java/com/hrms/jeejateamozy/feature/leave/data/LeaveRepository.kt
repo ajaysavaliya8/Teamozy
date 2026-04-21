@@ -4,7 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.*
-import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -92,7 +91,6 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     LeaveTypesOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -182,7 +180,6 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     ApplyLeaveOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -245,7 +242,6 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     LeaveApplicationsOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -290,7 +286,6 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     LeaveApplicationDetailOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -344,7 +339,6 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     WithdrawLeaveOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -398,7 +392,6 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     CancelLeaveOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -442,7 +435,6 @@ class LeaveRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     LeaveSummaryOutcome.Error("Unauthorized. Please login again.")
                 }
 

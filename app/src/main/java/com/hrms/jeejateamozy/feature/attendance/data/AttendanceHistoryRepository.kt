@@ -3,7 +3,6 @@ package com.hrms.jeejateamozy.feature.attendance.data
 import android.content.Context
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.*
-import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -55,7 +54,6 @@ class AttendanceHistoryRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     MonthlyTimesheetOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -92,7 +90,6 @@ class AttendanceHistoryRepository(private val context: Context) {
                     }
 
                     response.code() == 401 -> {
-                        AppStateManager.emitUnauthorized()
                         DayTimesheetOutcome.Error("Unauthorized. Please login again.")
                     }
 

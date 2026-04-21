@@ -6,7 +6,6 @@ import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.PendingMessage
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
-import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.feature.location.model.LocationData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -165,7 +164,6 @@ class AttendanceRepository(private val context: Context) {
                 }
 
                 res.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     AttendanceOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -259,7 +257,6 @@ class AttendanceRepository(private val context: Context) {
                 }
 
                 res.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     CheckInOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -338,7 +335,6 @@ class AttendanceRepository(private val context: Context) {
                 }
 
                 res.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     SignatureOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -441,7 +437,6 @@ class AttendanceRepository(private val context: Context) {
                 }
 
                 res.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     CheckOutOutcome.Error("Unauthorized. Please login again.")
                 }
 
@@ -574,7 +569,6 @@ class AttendanceRepository(private val context: Context) {
                 }
 
                 res.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     SignatureOutcome.Error("Unauthorized. Please login again.")
                 }
 

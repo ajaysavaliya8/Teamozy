@@ -5,7 +5,6 @@ import android.net.Uri
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.WorkReport
-import com.hrms.jeejateamozy.core.state.AppStateManager
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
 import kotlinx.coroutines.Dispatchers
@@ -83,7 +82,6 @@ class WorkReportRepository(private val context: Context) {
                     }
 
                     response.code() == 401 -> {
-                        AppStateManager.emitUnauthorized()
                         WorkReportListOutcome.Error("Unauthorized. Please login again.")
                     }
 
@@ -219,7 +217,6 @@ class WorkReportRepository(private val context: Context) {
                 }
 
                 response.code() == 401 -> {
-                    AppStateManager.emitUnauthorized()
                     CreateWorkReportOutcome.Error("Unauthorized. Please login again.")
                 }
 
