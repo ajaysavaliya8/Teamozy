@@ -122,16 +122,31 @@ fun CircularListScreen(
                 }
 
                 // Circulars List
-                if (uiState.circulars.isEmpty() && !uiState.isLoading) {
-                    item {
-                        EmptyState()
+                when {
+                    uiState.isLoading && uiState.circulars.isEmpty() -> {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
                     }
-                } else {
-                    items(uiState.circulars) { circular ->
-                        CircularCard(
-                            circular = circular,
-                            onClick = { onNavigateToDetail(circular.id) }
-                        )
+                    uiState.circulars.isEmpty() -> {
+                        item {
+                            EmptyState()
+                        }
+                    }
+                    else -> {
+                        items(uiState.circulars) { circular ->
+                            CircularCard(
+                                circular = circular,
+                                onClick = { onNavigateToDetail(circular.id) }
+                            )
+                        }
                     }
                 }
 

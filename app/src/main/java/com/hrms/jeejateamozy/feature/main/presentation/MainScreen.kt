@@ -711,9 +711,6 @@ fun MainScreen(
 
                     NavigationScreen.PROFILE -> {
                         ProfileScreen(
-                            onNavigateToFaceChange = {
-                                // No action needed - ProfileScreen handles it internally
-                            },
                             onNavigateToEditSocialMedia = {
                                 showEditSocialMedia = true
                             },
@@ -770,30 +767,56 @@ fun MainScreen(
                             token = token
                         )
                         val body = response.body()
-                        if (response.isSuccessful && body?.success == true) {
-                            postShiftResult = body.message ?: "Response submitted"
-                            postShiftLoading = false
-                            postShiftIsError = false
-                            NotificationEventBus.clearPendingPostShiftPayload()
-                            preferencesManager.clearPostShiftData()
-                            NotificationEventBus.notifyAttendanceRefresh()
-                            // Stop location tracking if employee is done working
-                            if (actionId == "done") {
-                                LocationTrackingService.stopTracking(context)
+                        // Parse error body once so we can read both message and error_code from non-2xx responses.
+                        // body is null when Retrofit skipped parsing on non-2xx, so error_code only comes via errorBody.
+                        val errorJson = if (!response.isSuccessful) {
+                            response.errorBody()?.string()?.let {
+                                try { JSONObject(it) } catch (_: Exception) { null }
                             }
-                            // Auto-dismiss after 1.5s
-                            delay(1500)
-                            postShiftPayload = null
-                            postShiftResult = null
-                        } else {
-                            val errorMsg = response.body()?.message
-                                ?: response.errorBody()?.string()?.let {
-                                    try { JSONObject(it).optString("message", "") } catch (_: Exception) { "" }
-                                }?.ifEmpty { null }
-                                ?: "Failed to submit response"
-                            postShiftResult = errorMsg
-                            postShiftLoading = false
-                            postShiftIsError = true
+                        } else null
+                        val errorCode = errorJson?.optString("error_code")?.ifEmpty { null }
+                        val isAlreadyResolved = response.code() == 409 || errorCode == "CONFLICT"
+
+                        when {
+                            response.isSuccessful && body?.success == true -> {
+                                postShiftResult = body.message ?: "Response submitted"
+                                postShiftLoading = false
+                                postShiftIsError = false
+                                NotificationEventBus.clearPendingPostShiftPayload()
+                                preferencesManager.clearPostShiftData()
+                                NotificationEventBus.notifyAttendanceRefresh()
+                                // Stop location tracking if employee is done working
+                                if (actionId == "done") {
+                                    LocationTrackingService.stopTracking(context)
+                                }
+                                // Auto-dismiss after 1.5s
+                                delay(1500)
+                                postShiftPayload = null
+                                postShiftResult = null
+                            }
+                            isAlreadyResolved -> {
+                                // PSR already resolved (e.g. cron closed it during race).
+                                // Not a user-facing error: clear local state, refresh, dismiss.
+                                postShiftResult = body?.message
+                                    ?: errorJson?.optString("message")?.ifEmpty { null }
+                                    ?: "This post-shift check has already been resolved."
+                                postShiftLoading = false
+                                postShiftIsError = false
+                                NotificationEventBus.clearPendingPostShiftPayload()
+                                preferencesManager.clearPostShiftData()
+                                NotificationEventBus.notifyAttendanceRefresh()
+                                delay(1500)
+                                postShiftPayload = null
+                                postShiftResult = null
+                            }
+                            else -> {
+                                val errorMsg = body?.message
+                                    ?: errorJson?.optString("message")?.ifEmpty { null }
+                                    ?: "Failed to submit response"
+                                postShiftResult = errorMsg
+                                postShiftLoading = false
+                                postShiftIsError = true
+                            }
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Post-shift response failed", e)
@@ -844,7 +867,6 @@ private fun parsePostShiftDataJson(json: String?): PostShiftCheckPayload? {
         PostShiftCheckPayload(
             attendanceRecordId = attendanceRecordId,
             attendanceDate = obj.optString("attendance_date", "").ifEmpty { null },
-            employeeId = obj.optInt("employee_id", 0).takeIf { it > 0 },
             shiftEndTime = obj.optString("shift_end_time", "").ifEmpty { null },
             actions = actions,
             title = obj.optString("title", "Shift Check"),
@@ -869,23 +891,31 @@ private suspend fun fetchPostShiftFromServer(
     try {
         val res = NetworkModule.apiService.getPostShiftStatus(token, attendanceRecordId)
         val body = res.body()
-        if (res.isSuccessful && body?.success == true && body.data != null) {
-            val d = body.data
+        val d = body?.data
+        val recordId = d?.attendance_record_id
+        // New API: always success=true, data.has_pending is discriminator.
+        // Old API: success=false when no pending; pending payload has no has_pending flag.
+        val hasPending = when {
+            d == null -> false
+            d.has_pending == false -> false
+            d.has_pending == true -> true
+            else -> body?.success == true && recordId != null
+        }
+        if (res.isSuccessful && hasPending && d != null && recordId != null) {
             val actions = d.actions?.takeIf { it.isNotEmpty() }
                 ?: listOf(
                     PostShiftAction("working", "Yes, Working"),
                     PostShiftAction("done", "No, Done")
                 )
             val payload = PostShiftCheckPayload(
-                attendanceRecordId = d.attendance_record_id,
+                attendanceRecordId = recordId,
                 attendanceDate = d.attendance_date,
-                employeeId = d.employee_id,
                 shiftEndTime = d.shift_end_time,
                 actions = actions,
                 title = d.title ?: "Shift Check",
                 message = d.message ?: "Are you still working?"
             )
-            Log.d("MainScreen", "Post-shift data from server (recordId: ${d.attendance_record_id})")
+            Log.d("MainScreen", "Post-shift data from server (recordId: $recordId)")
             onResult(payload)
         } else {
             onNone()

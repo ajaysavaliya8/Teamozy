@@ -399,7 +399,7 @@ class AuthRepository(
             )
             Log.d("NET", "requestChangeDevice -> code=${res.code()}")
 
-            if (res.isSuccessful && (res.code() == 200 || res.code() == 201)) {
+            if (res.isSuccessful) {
                 val body = res.body()
                 if (body?.success == true) {
                     val msg = body.message ?: "Device change request submitted successfully"

@@ -91,13 +91,16 @@ class LeaveViewModel(
                     }
 
                     is LeaveTypesOutcome.Error -> {
+                        // Only set inline error on the Apply screen — don't emit a global
+                        // snackbar. Types are loaded in init; if they fail at the same time
+                        // as history (e.g. both 404), we'd otherwise show two overlapping
+                        // errors. The inline message surfaces when the user opens Apply Leave.
                         _applyLeaveUiState.update {
                             it.copy(
                                 isLoading = false,
                                 errorMessage = outcome.message
                             )
                         }
-                        _events.emit(LeaveEvent.ShowError(outcome.message))
                         Log.e("LeaveViewModel", "Error loading leave types: ${outcome.message}")
                     }
                 }
@@ -108,7 +111,6 @@ class LeaveViewModel(
                         errorMessage = e.message ?: "Unknown error"
                     )
                 }
-                _events.emit(LeaveEvent.ShowError(e.message ?: "Unknown error"))
                 Log.e("LeaveViewModel", "Exception loading leave types", e)
             }
         }

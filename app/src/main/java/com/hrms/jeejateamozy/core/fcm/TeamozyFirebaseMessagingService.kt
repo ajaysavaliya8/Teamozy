@@ -162,7 +162,6 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         // Parse attendance_record_id from top-level or nested data
         var attendanceRecordId: Int? = data["attendance_record_id"]?.toIntOrNull()
         var attendanceDate: String? = data["attendance_date"]
-        var employeeId: Int? = data["employee_id"]?.toIntOrNull()
         var shiftEndTime: String? = data["shift_end_time"]
         val actions = mutableListOf<PostShiftAction>()
 
@@ -176,9 +175,6 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
                 }
                 if (attendanceDate == null) {
                     attendanceDate = json.optString("attendance_date", "").ifEmpty { null }
-                }
-                if (employeeId == null) {
-                    employeeId = json.optInt("employee_id", 0).takeIf { it > 0 }
                 }
                 if (shiftEndTime == null) {
                     shiftEndTime = json.optString("shift_end_time", "").ifEmpty { null }
@@ -215,7 +211,6 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         val payload = PostShiftCheckPayload(
             attendanceRecordId = attendanceRecordId,
             attendanceDate = attendanceDate,
-            employeeId = employeeId,
             shiftEndTime = shiftEndTime,
             actions = actions,
             title = title,
@@ -229,7 +224,6 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
         val postShiftDataJson = JSONObject().apply {
             put("attendance_record_id", attendanceRecordId)
             put("attendance_date", attendanceDate ?: "")
-            put("employee_id", employeeId ?: 0)
             put("shift_end_time", shiftEndTime ?: "")
             put("title", title)
             put("message", messageText)

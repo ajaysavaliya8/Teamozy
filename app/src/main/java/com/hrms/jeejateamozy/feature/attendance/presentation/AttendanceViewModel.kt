@@ -329,8 +329,14 @@ class AttendanceViewModel(
             is CheckOutOutcome.RequiresFaceVerification -> {
                 Log.d(TAG, "✅ Check-out requires face verification")
 
-                // Pre-fetch location while user does face verification
-                startLocationPrefetch(context)
+                // If the server attached a pending message for AT_CHECKOUT delivery, show
+                // that dialog first. The existing pendingMessage ack flow then advances
+                // to the next step (face verification in this branch).
+                val pending = outcome.pendingMessage
+                if (pending == null) {
+                    // Pre-fetch location while user does face verification
+                    startLocationPrefetch(context)
+                }
 
                 _ui.value = _ui.value.copy(
                     isLoading = false,
@@ -344,12 +350,15 @@ class AttendanceViewModel(
                     checkOutWorkReportRequired = outcome.workReportRequired,
                     checkOutMessage = outcome.message,
                     checkOutFaceVector = outcome.faceVector,
-                    showFaceVerification = true
+                    pendingMessage = pending,
+                    showPendingMessageDialog = pending != null,
+                    showFaceVerification = pending == null
                 )
             }
 
             is CheckOutOutcome.RequiresReasons -> {
                 Log.d(TAG, "✅ Check-out requires reasons")
+                val pending = outcome.pendingMessage
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     checkOutTToken = outcome.tToken,
@@ -360,12 +369,14 @@ class AttendanceViewModel(
                     checkOutOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkOutWorkReportRequired = outcome.workReportRequired,
                     checkOutMessage = outcome.message,
-                    showReasonDialog = outcome.earlyReasonRequired || outcome.outOfRangeReasonRequired,
-                    showWorkReportDialog = outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired,
+                    pendingMessage = pending,
+                    showPendingMessageDialog = pending != null,
+                    showReasonDialog = pending == null && (outcome.earlyReasonRequired || outcome.outOfRangeReasonRequired),
+                    showWorkReportDialog = pending == null && outcome.workReportRequired && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired,
                     reverifyError = null
                 )
 
-                if (!outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired && !outcome.workReportRequired) {
+                if (pending == null && !outcome.earlyReasonRequired && !outcome.outOfRangeReasonRequired && !outcome.workReportRequired) {
                     completeCheckOut(null, null, null, null, context)
                 }
             }
@@ -397,6 +408,34 @@ class AttendanceViewModel(
             acknowledgmentNote = acknowledgmentNote
         )
 
+        // Route to the next step of whichever flow the message was attached to.
+        // Checkout takes precedence if its t_token is set (the checkout pending
+        // message is delivered at /check-out, by which point checkInTToken is null).
+        val isCheckOut = _ui.value.checkOutTToken != null && _ui.value.checkInTToken == null
+
+        if (isCheckOut) {
+            val state = _ui.value
+            val hasFaceVerification = state.checkOutFaceVector != null
+            val hasReasons = state.checkOutEarlyReasonRequired || state.checkOutOutOfRangeReasonRequired
+            val needsWorkReport = state.checkOutWorkReportRequired
+            when {
+                hasFaceVerification -> {
+                    startLocationPrefetch(context)
+                    _ui.value = state.copy(showFaceVerification = true)
+                }
+                hasReasons -> {
+                    _ui.value = state.copy(showReasonDialog = true, reverifyError = null)
+                }
+                needsWorkReport -> {
+                    _ui.value = state.copy(showWorkReportDialog = true)
+                }
+                else -> {
+                    completeCheckOut(null, null, null, null, context)
+                }
+            }
+            return
+        }
+
         val hasLateOrOutOfRangeReasons = _ui.value.checkInLateReasonRequired || _ui.value.checkInOutOfRangeReasonRequired
         val hasFaceVerification = _ui.value.checkInFaceVector != null
 
@@ -415,12 +454,38 @@ class AttendanceViewModel(
     }
 
     fun onPendingMessageDismissed(context: Context? = null) {
-        Log.d(TAG, "❌ Message cancelled - stopping check-in process")
+        // Check-out takes precedence if its t_token is set (pending_message is
+        // delivered at /check-out — by which point checkInTToken is null).
+        val isCheckOut = _ui.value.checkOutTToken != null && _ui.value.checkInTToken == null
+        Log.d(TAG, "❌ Message cancelled - stopping ${if (isCheckOut) "check-out" else "check-in"} process")
 
         cancelLocationPrefetch()
 
         // Re-warm GPS so the next attempt is fast
         context?.let { try { LocationHelper(it).warmUpGps() } catch (_: Exception) {} }
+
+        if (isCheckOut) {
+            _ui.value = _ui.value.copy(
+                isLoading = false,
+                showPendingMessageDialog = false,
+                pendingMessage = null,
+                acknowledgmentNote = null,
+                checkOutTToken = null,
+                checkOutFaceVector = null,
+                checkOutMessage = null,
+                checkOutMinimumQualityScore = null,
+                checkOutIsEarly = false,
+                checkOutIsOutOfRange = false,
+                checkOutEarlyReasonRequired = false,
+                checkOutOutOfRangeReasonRequired = false,
+                checkOutWorkReportRequired = false,
+                showFaceVerification = false,
+                showReasonDialog = false,
+                showWorkReportDialog = false
+            )
+            emitError("Check-out cancelled")
+            return
+        }
 
         _ui.value = _ui.value.copy(
             isLoading = false,
@@ -553,7 +618,7 @@ class AttendanceViewModel(
                         emitError("Fake GPS detected. Please disable mock location apps.")
                         return@launch
                     }
-                    when (val outcome = repo.locationReverify(tToken, locResult.latitude, locResult.longitude)) {
+                    when (val outcome = repo.locationReverify(tToken, locResult.latitude, locResult.longitude, isCheckOut = !isCheckIn)) {
                         is LocationReverifyOutcome.Success -> {
                             Log.d(TAG, "✅ Location reverify success: ${outcome.message}")
                             if (isCheckIn) {
@@ -574,6 +639,38 @@ class AttendanceViewModel(
                                 )
                             }
                             emitSuccess(outcome.message)
+                        }
+                        is LocationReverifyOutcome.NotApplicable -> {
+                            // Policy doesn't enforce geofence → clear the out-of-range flag
+                            // so the signature commit proceeds. Silent on purpose: the user
+                            // tapped reverify but there was nothing to verify.
+                            Log.i(TAG, "ℹ️ Reverify not applicable: ${outcome.message}")
+                            _ui.value = _ui.value.copy(
+                                isReverifying = false,
+                                reverifyError = null,
+                                checkInIsOutOfRange = if (isCheckIn) false else _ui.value.checkInIsOutOfRange,
+                                checkInOutOfRangeReasonRequired = if (isCheckIn) false else _ui.value.checkInOutOfRangeReasonRequired,
+                                checkOutIsOutOfRange = if (!isCheckIn) false else _ui.value.checkOutIsOutOfRange,
+                                checkOutOutOfRangeReasonRequired = if (!isCheckIn) false else _ui.value.checkOutOutOfRangeReasonRequired
+                            )
+                        }
+                        is LocationReverifyOutcome.StaleToken -> {
+                            // t_token is spent/expired → restart the check-in flow.
+                            Log.w(TAG, "🔁 Reverify stale token: ${outcome.message}")
+                            _ui.value = _ui.value.copy(
+                                isReverifying = false,
+                                reverifyError = outcome.message,
+                                checkInTToken = null,
+                                checkOutTToken = null,
+                                checkInFaceVector = null,
+                                checkOutFaceVector = null,
+                                checkInMessage = null,
+                                checkOutMessage = null,
+                                showReasonDialog = false
+                            )
+                            emitError(outcome.message)
+                            delay(500)
+                            refreshStatus(force = true, context = context)
                         }
                         is LocationReverifyOutcome.Error -> {
                             Log.e(TAG, "❌ Location reverify error: ${outcome.message}")
@@ -743,6 +840,29 @@ class AttendanceViewModel(
                         )
 
                         emitSuccess(outcome.message)
+                    }
+
+                    is SignatureOutcome.Conflict -> {
+                        // 409 CONFLICT — one of: concurrent signature race, multi-punch
+                        // disabled ("already checked in"), or max check-ins reached.
+                        // Clear the spent t_token + face state, show the server's message,
+                        // and refresh so the UI snaps to the authoritative state
+                        // (CHECK_OUT_NEEDED / DAY_COMPLETE / CHECK_IN_NEEDED).
+                        Log.w(TAG, "⚠️ CHECK-IN SIGNATURE CONFLICT: ${outcome.message}")
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            checkInTToken = null,
+                            checkInFaceVector = null,
+                            checkInMessage = null,
+                            pendingMessage = null,
+                            acknowledgmentNote = null,
+                            faceVerificationQualityScore = null,
+                            faceVerificationSuccess = false
+                        )
+                        emitError(outcome.message)
+                        delay(500)
+                        refreshStatus(force = true, context = context)
                     }
 
                     is SignatureOutcome.Error -> {
@@ -933,6 +1053,26 @@ class AttendanceViewModel(
                         emitSuccess(outcome.message)
 
                         // Refresh from server to get accurate state (supports multiple check-ins)
+                        delay(500)
+                        refreshStatus(force = true, context = context)
+                    }
+
+                    is SignatureOutcome.Conflict -> {
+                        // 409 CONFLICT — session was already closed (cron auto-close or
+                        // another request won the race). Clear spent t_token + face state,
+                        // show the server's message, and refresh so the UI snaps to
+                        // CHECK_IN_NEEDED (or whatever the actual state is).
+                        Log.w(TAG, "⚠️ CHECK-OUT SIGNATURE CONFLICT: ${outcome.message}")
+                        _ui.value = _ui.value.copy(
+                            isLoading = false,
+                            loadingMessage = null,
+                            checkOutTToken = null,
+                            checkOutFaceVector = null,
+                            checkOutMessage = null,
+                            tempEarlyReason = null,
+                            tempOutOfRangeReason = null
+                        )
+                        emitError(outcome.message)
                         delay(500)
                         refreshStatus(force = true, context = context)
                     }

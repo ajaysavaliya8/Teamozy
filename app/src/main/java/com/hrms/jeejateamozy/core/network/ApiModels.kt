@@ -133,19 +133,10 @@ data class CheckInData(
     val minimum_quality_score: Float? = null,
     val face_vector: String? = null,
     val is_late: Boolean? = null,
-    val late_minutes: Int? = null,
     val is_out_of_range: Boolean? = null,
     val late_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
-    val pending_message: PendingMessage? = null,
-    val shift_info: CheckInShiftInfo? = null
-)
-
-data class CheckInShiftInfo(
-    val shift_start: String? = null,
-    val shift_end: String? = null,
-    val crosses_midnight: Boolean? = null,
-    val grace_minutes: Int? = null
+    val pending_message: PendingMessage? = null
 )
 
 data class CheckInSignatureResponse(
@@ -156,12 +147,8 @@ data class CheckInSignatureResponse(
 
 data class CheckInSignatureData(
     val attendance_record_id: Int? = null,
-    val session_id: Int? = null,
     val check_in_time: String? = null,
-    val check_out_time: String? = null,
-    val is_new_record: Boolean? = null,
-    val first_location_tracked: Boolean? = null,
-    val location_history_id: Int? = null
+    val scheduled_end_time: String? = null
 )
 
 data class CheckOutResponse(
@@ -181,7 +168,9 @@ data class CheckOutData(
     val early_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
     val work_report_require: Boolean? = null,
-    val work_minutes: Int? = null
+    val work_minutes: Int? = null,
+    // Admin message tied to delivery_channel IN ('AT_CHECKOUT', 'BOTH').
+    val pending_message: PendingMessage? = null
 )
 
 data class CheckOutSignatureResponse(
@@ -192,15 +181,12 @@ data class CheckOutSignatureResponse(
 
 data class CheckOutSignatureData(
     val attendance_record_id: Int? = null,
-    val session_id: Int? = null,
     val check_out_time: String? = null,
     val work_minutes: Int? = null,
     val attendance_status: String? = null,
     val is_complete: Boolean? = null,
     val work_report_id: Int? = null,
-    val attachments_count: Int? = null,
-    val last_location_tracked: Boolean? = null,
-    val location_history_id: Int? = null
+    val attachments_count: Int? = null
 )
 
 // ========================================
@@ -682,46 +668,6 @@ data class FaceVerifyResponse(
     val face_token: String? = null
 )
 
-data class FaceRecognitionDataResponse(
-    val success: Boolean,
-    val message: String? = null,
-    val data: FaceRecognitionData? = null
-)
-
-data class FaceRecognitionData(
-    val face_vector: String? = null,
-    val minimum_face_recognition_quality_score: Float? = null,
-    val require_face_checkin: Boolean? = null,
-    val require_face_break: Boolean? = null
-)
-
-data class FaceRegistrationResponse(
-    val success: Boolean,
-    val message: String? = null,
-    val data: FaceRegistrationData? = null
-)
-
-data class FaceRegistrationData(
-    // First-time enrollment (auto-approved) path
-    val image_path: String? = null,
-    // Update flow (change request) path
-    val requested_image_path: String? = null,
-    val status: String? = null, // PENDING
-    // Both paths
-    val request_id: Int? = null
-)
-
-data class PendingFaceRegistrationResponse(
-    val success: Boolean,
-    val message: String? = null,
-    val data: PendingFaceRegistrationData? = null
-)
-
-data class PendingFaceRegistrationData(
-    val pending: Boolean,
-    val request_id: Int? = null,
-    val status: String? = null
-)
 
 data class SocialMediaUpdateResponse(
     val success: Boolean,
@@ -779,7 +725,9 @@ data class WorkReportDto(
     val id: Int,
     val report_date: String,
     val work_description: String,
-    val attachments: String? = null,
+    // Tolerant: backend may send a JSONB array of {name, url, ...} objects or a
+    // legacy JSON-serialized string of URLs. [normalizeAttachments] handles both.
+    val attachments: Any? = null,
     val report_status: String,
     val branch_name: String?,
     val submitted_at: String?,
@@ -790,20 +738,11 @@ data class WorkReportDto(
     val created_at: String,
     val updated_at: String
 ) {
-    private fun parseAttachments(): List<String> {
-        if (attachments.isNullOrBlank() || attachments == "[]") return emptyList()
-        return try {
-            com.google.gson.Gson().fromJson(attachments, Array<String>::class.java).toList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
     fun toDomain() = WorkReport(
         id = id,
         reportDate = report_date,
         workDescription = work_description,
-        attachments = parseAttachments(),
+        attachments = normalizeAttachments(attachments),
         reportStatus = report_status,
         branchName = branch_name,
         submittedAt = submitted_at,
@@ -879,30 +818,27 @@ data class CircularDto(
     val description: String,
     val circular_type: String,
     val priority: String,
-    val attachments: String? = null,
+    // Tolerant of both formats: new backend sends a JSONB array of {name, url, ...}
+    // objects; legacy deployments serialized a JSON string of URL strings. Using
+    // Any? lets Gson accept either shape; [normalizeAttachments] extracts URLs.
+    val attachments: Any? = null,
     val effective_date: String?,
     val expiry_date: String?,
-    val published_date: String?
+    // Field name changed from `published_date` → `published_at`. Accept both so
+    // the client works against old and new deployments.
+    @SerializedName(value = "published_at", alternate = ["published_date"])
+    val published_at: String? = null
 ) {
-    private fun parseAttachments(): List<String> {
-        if (attachments.isNullOrBlank() || attachments == "[]") return emptyList()
-        return try {
-            com.google.gson.Gson().fromJson(attachments, Array<String>::class.java).toList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
     fun toDomain() = Circular(
         id = id,
         title = title,
         description = description,
         circularType = circular_type,
         priority = priority,
-        attachments = parseAttachments(),
+        attachments = normalizeAttachments(attachments),
         effectiveDate = effective_date,
         expiryDate = expiry_date,
-        publishedDate = published_date
+        publishedDate = published_at
     )
 }
 
@@ -933,31 +869,47 @@ data class CircularDetailDto(
     val description: String,
     val circular_type: String,
     val priority: String,
-    val attachments: String? = null,
+    val attachments: Any? = null,
     val effective_date: String?,
     val expiry_date: String?,
-    val published_date: String?
+    @SerializedName(value = "published_at", alternate = ["published_date"])
+    val published_at: String? = null
 ) {
-    private fun parseAttachments(): List<String> {
-        if (attachments.isNullOrBlank() || attachments == "[]") return emptyList()
-        return try {
-            com.google.gson.Gson().fromJson(attachments, Array<String>::class.java).toList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
     fun toDomain() = Circular(
         id = id,
         title = title,
         description = description,
         circularType = circular_type,
         priority = priority,
-        attachments = parseAttachments(),
+        attachments = normalizeAttachments(attachments),
         effectiveDate = effective_date,
         expiryDate = expiry_date,
-        publishedDate = published_date
+        publishedDate = published_at
     )
+}
+
+/**
+ * Accept both attachment shapes:
+ *   - Legacy: JSON-string of URLs (["url1","url2"])
+ *   - Current: JSONB array of objects [{name, url, ...}] or plain URL strings
+ * Returns a flat List<String> of URLs/names — whatever identifier is available.
+ */
+private fun normalizeAttachments(raw: Any?): List<String> = when (raw) {
+    null -> emptyList()
+    is String -> {
+        if (raw.isBlank() || raw == "[]") emptyList()
+        else try {
+            com.google.gson.Gson().fromJson(raw, Array<String>::class.java).toList()
+        } catch (_: Exception) { emptyList() }
+    }
+    is List<*> -> raw.mapNotNull { item ->
+        when (item) {
+            is String -> item
+            is Map<*, *> -> (item["url"] ?: item["name"]) as? String
+            else -> null
+        }
+    }
+    else -> emptyList()
 }
 
 data class CircularStatsResponse(
@@ -1459,12 +1411,15 @@ data class PendingMessage(
     val title: String,
     @SerializedName("content")
     val body: String,
-    @SerializedName("has_attachments")
-    val has_attachment: Boolean,
     val attachment_url: String?,
-    @SerializedName("require_acknowledgment")
-    val requires_acknowledgment: Boolean
-)
+    // Accept both the new `requires_acknowledgment` key and the legacy `require_acknowledgment`
+    // key so the client works against old and new backend deployments.
+    @SerializedName(value = "requires_acknowledgment", alternate = ["require_acknowledgment"])
+    val requires_acknowledgment: Boolean = false
+) {
+    // Derived from attachment_url since backend no longer sends a separate has_attachments flag.
+    val has_attachment: Boolean get() = !attachment_url.isNullOrBlank()
+}
 
 // ========================================
 // ENUMS
@@ -1520,8 +1475,9 @@ data class NotificationsData(
 )
 
 /**
- * Single notification from server
- * Note: Extra fields like circular_id, leave_id, date are flattened from mobile_params
+ * Single notification from server. Deep-link keys (circular_id, leave_id, etc.)
+ * live inside the nested [params] object per the current /notifications contract.
+ * Kotlin accessors below read from [params] so existing callers keep working.
  */
 data class ServerNotification(
     val id: Int,
@@ -1536,17 +1492,37 @@ data class ServerNotification(
     val isRead: Boolean = false,
     @SerializedName("created_at")
     val createdAt: String?,
-    // Flattened params from mobile_params
-    @SerializedName("circular_id")
-    val circularId: Int? = null,
-    @SerializedName("leave_id")
-    val leaveId: Int? = null,
-    @SerializedName("application_id")
-    val applicationId: Int? = null,
-    val date: String? = null,
-    @SerializedName("post_shift_data")
-    val postShiftData: String? = null
-)
+    val params: Map<String, Any>? = null
+) {
+    val circularId: Int? get() = paramInt("circular_id")
+    val leaveId: Int? get() = paramInt("leave_id")
+    val applicationId: Int? get() = paramInt("application_id")
+    val date: String? get() = params?.get("date") as? String
+
+    /**
+     * Post-shift notifications carry their payload inside [params]. Serialize the
+     * whole map back to a JSON string so downstream parsePostShiftDataJson can
+     * read the same keys it always read (attendance_record_id, attendance_date,
+     * shift_end_time, title, message, actions).
+     */
+    val postShiftData: String?
+        get() {
+            val p = params ?: return null
+            if (p.isEmpty()) return null
+            return try { org.json.JSONObject(p).toString() } catch (_: Exception) { null }
+        }
+
+    // Gson deserializes numeric JSON values as Double by default; tolerate Int,
+    // Long, or numeric strings (FCM sometimes stringifies numbers) as well.
+    private fun paramInt(key: String): Int? = when (val v = params?.get(key)) {
+        null -> null
+        is Int -> v
+        is Long -> v.toInt()
+        is Number -> v.toInt()
+        is String -> v.toIntOrNull()
+        else -> null
+    }
+}
 
 /**
  * Response for mark read / mark all read / delete operations
@@ -1568,7 +1544,6 @@ data class PostShiftAction(
 data class PostShiftCheckPayload(
     val attendanceRecordId: Int,
     val attendanceDate: String? = null,
-    val employeeId: Int? = null,
     val shiftEndTime: String? = null,
     val actions: List<PostShiftAction> = emptyList(),
     val title: String,
@@ -1593,9 +1568,9 @@ data class PostShiftStatusResponse(
 )
 
 data class PostShiftStatusData(
-    val attendance_record_id: Int,
+    val has_pending: Boolean? = null,
+    val attendance_record_id: Int? = null,
     val attendance_date: String? = null,
-    val employee_id: Int? = null,
     val shift_end_time: String? = null,
     val title: String? = null,
     val message: String? = null,

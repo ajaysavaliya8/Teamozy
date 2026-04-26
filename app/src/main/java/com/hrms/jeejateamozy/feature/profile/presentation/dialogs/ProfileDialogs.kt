@@ -44,7 +44,7 @@ fun ProfilePictureOptionsSheet(
             )
 
             ProfilePictureOption(
-                icon = Icons.Filled.Add,
+                icon = Icons.Filled.Image,
                 title = "Choose from Gallery",
                 onClick = {
                     onDismiss()
@@ -55,7 +55,7 @@ fun ProfilePictureOptionsSheet(
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             ProfilePictureOption(
-                icon = Icons.Default.Add,
+                icon = Icons.Filled.PhotoCamera,
                 title = "Take Photo",
                 subtitle = "Coming soon",
                 onClick = {

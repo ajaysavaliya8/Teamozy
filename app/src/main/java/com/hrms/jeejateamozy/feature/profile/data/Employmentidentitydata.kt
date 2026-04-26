@@ -9,12 +9,24 @@ data class EmploymentIdentityResponse(
     val data: EmploymentIdentityData? = null
 )
 
+/**
+ * Backend returns identity documents as a typed list keyed by `category_system_code`
+ * ("AADHAAR", "PAN", etc.). The UI displays just the document number for each, so the
+ * DTO only parses what's read — Gson ignores the other fields the server sends.
+ */
 data class EmploymentIdentityData(
-    val aadhaar_number: String?,
-    val pan_number: String?,
-    val aadhaar_front_image_url: String?,
-    val aadhaar_back_image_url: String?,
-    val pan_card_image_url: String?
+    val documents: List<IdentityDocument> = emptyList()
+) {
+    private fun docFor(code: String): IdentityDocument? =
+        documents.firstOrNull { it.category_system_code.equals(code, ignoreCase = true) }
+
+    val aadhaar_number: String? get() = docFor("AADHAAR")?.document_number
+    val pan_number: String? get() = docFor("PAN")?.document_number
+}
+
+data class IdentityDocument(
+    val category_system_code: String? = null,
+    val document_number: String? = null
 )
 
 /**

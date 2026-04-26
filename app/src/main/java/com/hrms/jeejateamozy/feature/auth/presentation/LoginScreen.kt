@@ -575,7 +575,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         DeviceRegistrationDialog(
             message = deviceDialogMessage,
             mobileNumber = deviceMobileNumber,
-            onMobileNumberChange = { deviceMobileNumber = it },
             otp = deviceOtp,
             onOtpChange = {
                 deviceOtp = it
@@ -659,7 +658,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 private fun DeviceRegistrationDialog(
     message: String,
     mobileNumber: String,
-    onMobileNumberChange: (String) -> Unit,
     otp: String,
     onOtpChange: (String) -> Unit,
     otpSent: Boolean,

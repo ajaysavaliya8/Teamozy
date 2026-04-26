@@ -14,19 +14,6 @@ import com.hrms.jeejateamozy.feature.location.data.remote.LocationSyncRequest
 import okhttp3.ResponseBody
 
 
-data class DeviceChangeResponse(
-    val success: Boolean,
-    val message: String?,
-    val data: DeviceChangeRequestData? = null,
-    val error_code: String? = null
-)
-
-data class DeviceChangeRequestData(
-    val request_id: Int,
-    val request_type: String, // NEW | CHANGE
-    val status: String        // PENDING
-)
-
 interface PublicApiService {
     @POST("company/find-company")
     suspend fun findCompany(@Body body: FindCompanyRequest): Response<FindCompanyResponse>
@@ -106,7 +93,7 @@ interface ApiService {
         @Field("new_device_type") newDeviceType: String? = null,          // MOBILE | TABLET
         @Field("priority") priority: String? = null,                      // LOW | NORMAL | HIGH | URGENT
         @Field("reason") reason: String? = null
-    ): Response<DeviceChangeResponse>
+    ): Response<BasicResponse>
 
     // ========================================
     // ATTENDANCE ENDPOINTS
@@ -191,8 +178,11 @@ interface ApiService {
     // FACE RECOGNITION ENDPOINTS
     // ========================================
 
-    @GET("employees/face-recognition")
-    suspend fun getFaceRecognitionData(): Response<FaceRecognitionDataResponse>
+    // Precheck before starting a face-update flow. Returns 200 if the user can
+    // proceed (no active request, or a still-supersedable PENDING one), and
+    // 409 if an IN_PROGRESS request is already being reviewed.
+    @GET("employees/face-recognition/pending-request")
+    suspend fun getPendingFaceRegistration(): Response<BasicResponse>
 
     @Multipart
     @POST("employees/face-recognition")
@@ -202,10 +192,7 @@ interface ApiService {
         @Part("consent_acknowledged") consentAcknowledged: RequestBody,
         @Part("priority") priority: RequestBody,
         @Part("reason_for_change") reasonForChange: RequestBody? = null
-    ): Response<FaceRegistrationResponse>
-
-    @GET("employees/face-recognition/pending-request")
-    suspend fun getPendingFaceRegistration(): Response<PendingFaceRegistrationResponse>
+    ): Response<BasicResponse>
 
     // ========================================
     // PROFILE ENDPOINTS
@@ -530,6 +517,15 @@ interface ApiService {
     @FormUrlEncoded
     @POST("check-in-location-reverify")
     suspend fun checkInLocationReverify(
+        @Field("t_token") tToken: String,
+        @Field("latitude") latitude: Double,
+        @Field("longitude") longitude: Double,
+        @Query("token") token: String
+    ): Response<LocationReverifyResponse>
+
+    @FormUrlEncoded
+    @POST("check-out-location-reverify")
+    suspend fun checkOutLocationReverify(
         @Field("t_token") tToken: String,
         @Field("latitude") latitude: Double,
         @Field("longitude") longitude: Double,

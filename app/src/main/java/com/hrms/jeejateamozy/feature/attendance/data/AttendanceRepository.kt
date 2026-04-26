@@ -66,7 +66,8 @@ sealed class CheckOutOutcome {
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
         val workReportRequired: Boolean,
-        val message: String
+        val message: String,
+        val pendingMessage: PendingMessage? = null
     ) : CheckOutOutcome()
 
     data class RequiresReasons(
@@ -77,7 +78,8 @@ sealed class CheckOutOutcome {
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
         val workReportRequired: Boolean,
-        val message: String
+        val message: String,
+        val pendingMessage: PendingMessage? = null
     ) : CheckOutOutcome()
 
     data class Success(val message: String) : CheckOutOutcome()
@@ -85,12 +87,24 @@ sealed class CheckOutOutcome {
 }
 
 sealed class LocationReverifyOutcome {
+    // 200 — new coordinates are inside the geofence. Client swaps to [newTToken].
     data class Success(
         val newTToken: String?,
         val message: String,
         val isOutOfRange: Boolean
     ) : LocationReverifyOutcome()
 
+    // 400 "Geofence re-verification is not applicable for your policy" — the
+    // employee's policy doesn't enforce geofence, so re-verify is pointless.
+    // The VM clears the out-of-range flag so the signature commit proceeds.
+    data class NotApplicable(val message: String) : LocationReverifyOutcome()
+
+    // 400 "Invalid token data" / 401 UNAUTHORIZED / 403 FORBIDDEN — the t_token
+    // is stale or malformed; the check-in flow must restart from /check-in.
+    data class StaleToken(val message: String) : LocationReverifyOutcome()
+
+    // Everything else — including 400 "still outside geofence" (the user moves and
+    // retries with fresh GPS, no client-side distinct handling needed).
     data class Error(val message: String) : LocationReverifyOutcome()
 }
 
@@ -101,6 +115,14 @@ sealed class SignatureOutcome {
         val checkInTime: String?,
         val checkOutTime: String? = null
     ) : SignatureOutcome()
+
+    // Server returned 409 CONFLICT. Covers three cases, all using error_code="CONFLICT":
+    //   1. UNIQUE-race: a concurrent /check-in-signature won the session_number lock.
+    //   2. "Already checked in. Multiple check-ins are not allowed for your shift."
+    //   3. "Maximum check-ins per day reached."
+    // In all three the t_token is spent; UI discards it and refreshes state from the
+    // server. The server-supplied message is the source of truth for what to show.
+    data class Conflict(val message: String) : SignatureOutcome()
 
     data class Error(val message: String) : SignatureOutcome()
 }
@@ -327,24 +349,19 @@ class AttendanceRepository(private val context: Context) {
                             message = body.message,
                             attendanceRecordId = body.data?.attendance_record_id,
                             checkInTime = body.data?.check_in_time,
-                            checkOutTime = body.data?.check_out_time
+                            // check-in-signature response does not carry a check_out_time;
+                            // scheduled_end_time is the closest equivalent.
+                            checkOutTime = body.data?.scheduled_end_time
                         )
                     } else {
                         SignatureOutcome.Error(body?.message ?: "Invalid response from server")
                     }
                 }
 
-                res.code() == 401 -> {
-                    SignatureOutcome.Error("Unauthorized. Please login again.")
-                }
-
-                res.code() == 403 -> {
-                    SignatureOutcome.Error(extractError(res))
-                }
-
-                res.code() == 400 -> {
-                    SignatureOutcome.Error(extractError(res))
-                }
+                // 409 CONFLICT covers: concurrent UNIQUE race, "already checked in
+                // (multi-punch disabled)", and "max check-ins per day reached".
+                // t_token is spent; the VM surfaces the message and refreshes state.
+                res.code() == 409 -> SignatureOutcome.Conflict(extractError(res))
 
                 else -> SignatureOutcome.Error(extractError(res))
             }
@@ -403,6 +420,9 @@ class AttendanceRepository(private val context: Context) {
                             FaceVectorUtil.parseFaceVector(faceVectorString)
                         }
 
+                        val pendingMessage = data.pending_message
+                        Log.d("NET", "  pending_message: ${if (pendingMessage != null) "ID=${pendingMessage.id}, Type=${pendingMessage.type}" else "null"}")
+
                         if (faceVerificationRequired) {
                             Log.d("NET", "  face_vector present: ${data.face_vector != null}")
                             Log.d("NET", "  face_vector parsed: ${faceVector != null}")
@@ -417,7 +437,8 @@ class AttendanceRepository(private val context: Context) {
                                 earlyReasonRequired = earlyReasonRequired,
                                 outOfRangeReasonRequired = outOfRangeReasonRequired,
                                 workReportRequired = workReportRequired,
-                                message = message
+                                message = message,
+                                pendingMessage = pendingMessage
                             )
                         } else {
                             CheckOutOutcome.RequiresReasons(
@@ -428,7 +449,8 @@ class AttendanceRepository(private val context: Context) {
                                 earlyReasonRequired = earlyReasonRequired,
                                 outOfRangeReasonRequired = outOfRangeReasonRequired,
                                 workReportRequired = workReportRequired,
-                                message = message
+                                message = message,
+                                pendingMessage = pendingMessage
                             )
                         }
                     } else {
@@ -568,17 +590,9 @@ class AttendanceRepository(private val context: Context) {
                     }
                 }
 
-                res.code() == 401 -> {
-                    SignatureOutcome.Error("Unauthorized. Please login again.")
-                }
-
-                res.code() == 403 -> {
-                    SignatureOutcome.Error(extractError(res))
-                }
-
-                res.code() == 400 -> {
-                    SignatureOutcome.Error(extractError(res))
-                }
+                // 409 CONFLICT — session already closed (cron auto-close or race).
+                // t_token is spent; the VM surfaces the message and refreshes state.
+                res.code() == 409 -> SignatureOutcome.Conflict(extractError(res))
 
                 else -> SignatureOutcome.Error(extractError(res))
             }
@@ -589,22 +603,35 @@ class AttendanceRepository(private val context: Context) {
     }
 
     /**
-     * Re-verify location for check-in when out of range
+     * Re-verify location when out of range. Dispatches to the endpoint matching
+     * the originating flow — the backend expects the check-out reverify to be
+     * called with a check-out t_token and vice versa. Defaults to the check-in
+     * endpoint for backward compat with callers that never passed the flag.
      */
     suspend fun locationReverify(
         tToken: String,
         latitude: Double,
-        longitude: Double
+        longitude: Double,
+        isCheckOut: Boolean = false
     ): LocationReverifyOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
-            Log.d("NET", "locationReverify called: t_token=${tToken.take(20)}..., lat=$latitude, lng=$longitude")
+            Log.d("NET", "locationReverify(${if (isCheckOut) "check-out" else "check-in"}) called: t_token=${tToken.take(20)}..., lat=$latitude, lng=$longitude")
 
-            val res = api.checkInLocationReverify(
-                tToken = tToken,
-                latitude = latitude,
-                longitude = longitude,
-                token = token()
-            )
+            val res = if (isCheckOut) {
+                api.checkOutLocationReverify(
+                    tToken = tToken,
+                    latitude = latitude,
+                    longitude = longitude,
+                    token = token()
+                )
+            } else {
+                api.checkInLocationReverify(
+                    tToken = tToken,
+                    latitude = latitude,
+                    longitude = longitude,
+                    token = token()
+                )
+            }
 
             Log.d("NET", "locationReverify -> code=${res.code()}")
 
@@ -623,8 +650,24 @@ class AttendanceRepository(private val context: Context) {
                     }
                 }
 
-                res.code() == 401 -> {
-                    LocationReverifyOutcome.Error(extractError(res))
+                // 401 UNAUTHORIZED — t_token expired/invalid → restart check-in flow.
+                res.code() == 401 -> LocationReverifyOutcome.StaleToken(extractError(res))
+
+                // 403 FORBIDDEN — t_token/JWT user mismatch → restart check-in flow.
+                res.code() == 403 -> LocationReverifyOutcome.StaleToken(extractError(res))
+
+                // 400 has a few sub-cases sharing error_code=BAD_REQUEST. Only two require
+                // distinct client behavior: "not applicable" (clear out-of-range flag) and
+                // "invalid token data" (restart flow). Everything else — including "still
+                // outside geofence" — falls to Error; the user can retry with fresh GPS.
+                res.code() == 400 -> {
+                    val msg = extractError(res)
+                    val lower = msg.lowercase()
+                    when {
+                        "not applicable" in lower -> LocationReverifyOutcome.NotApplicable(msg)
+                        "invalid token data" in lower -> LocationReverifyOutcome.StaleToken(msg)
+                        else -> LocationReverifyOutcome.Error(msg)
+                    }
                 }
 
                 else -> LocationReverifyOutcome.Error(extractError(res))

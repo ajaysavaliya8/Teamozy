@@ -162,7 +162,6 @@ class NotificationViewModel(
                     JSONObject().apply {
                         put("attendance_record_id", pending.attendanceRecordId)
                         put("attendance_date", pending.attendanceDate ?: "")
-                        put("employee_id", pending.employeeId ?: 0)
                         put("shift_end_time", pending.shiftEndTime ?: "")
                         put("title", notification.title ?: pending.title)
                         put("message", notification.message ?: pending.message)

@@ -30,30 +30,6 @@ class PreferencesManager private constructor(context: Context) {
         set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
 
     // ============================================
-    // FACE RECOGNITION SETTINGS
-    // ============================================
-
-    var faceThreshold: Float
-        get() = prefs.getFloat(KEY_FACE_THRESHOLD, 0.57f)
-        set(value) = prefs.edit().putFloat(KEY_FACE_THRESHOLD, value).apply()
-
-    // Alias for backward compatibility
-    var faceAccuracyThreshold: Float
-        get() = faceThreshold
-        set(value) { faceThreshold = value }
-
-    // ❌ REMOVED: var faceVector - No longer storing face vectors locally
-    // Face vectors are now fetched from API for each verification
-
-    var requireFaceCheckin: Boolean
-        get() = prefs.getBoolean(KEY_REQUIRE_FACE_CHECKIN, false)
-        set(value) = prefs.edit().putBoolean(KEY_REQUIRE_FACE_CHECKIN, value).apply()
-
-    var requireFaceBreak: Boolean
-        get() = prefs.getBoolean(KEY_REQUIRE_FACE_BREAK, false)
-        set(value) = prefs.edit().putBoolean(KEY_REQUIRE_FACE_BREAK, value).apply()
-
-    // ============================================
     // USER PROFILE INFORMATION
     // ============================================
 
@@ -235,11 +211,6 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
-
-        // Face Recognition Keys
-        private const val KEY_FACE_THRESHOLD = "face_threshold"
-        private const val KEY_REQUIRE_FACE_CHECKIN = "require_face_checkin"
-        private const val KEY_REQUIRE_FACE_BREAK = "require_face_break"
 
         // User Profile Keys
         private const val KEY_MOBILE_NUMBER = "mobile_number"

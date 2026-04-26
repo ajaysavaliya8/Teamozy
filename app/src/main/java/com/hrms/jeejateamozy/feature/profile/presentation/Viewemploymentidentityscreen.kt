@@ -10,27 +10,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityOutcome
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
-import androidx.compose.ui.res.painterResource
+
 /**
  * ViewEmploymentIdentityScreen - Display employment identity information (READ ONLY)
- * Shows Aadhaar, PAN and their images
  */
 @Composable
 fun ViewEmploymentIdentityScreen(
@@ -42,9 +35,6 @@ fun ViewEmploymentIdentityScreen(
     // State variables
     var aadhaarNumber by remember { mutableStateOf("") }
     var panNumber by remember { mutableStateOf("") }
-    var aadharFrontImageUrl by remember { mutableStateOf<String?>(null) }
-    var aadharBackImageUrl by remember { mutableStateOf<String?>(null) }
-    var panCardImageUrl by remember { mutableStateOf<String?>(null) }
 
     var isFetching by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -57,9 +47,6 @@ fun ViewEmploymentIdentityScreen(
                 result.identityInfo?.let { data ->
                     aadhaarNumber = data.aadhaar_number ?: ""
                     panNumber = data.pan_number ?: ""
-                    aadharFrontImageUrl = data.aadhaar_front_image_url
-                    aadharBackImageUrl = data.aadhaar_back_image_url
-                    panCardImageUrl = data.pan_card_image_url
                 }
                 isFetching = false
             }
@@ -189,9 +176,7 @@ fun ViewEmploymentIdentityScreen(
                             title = "Aadhaar Information",
                             icon = Icons.Default.Badge,
                             number = aadhaarNumber,
-                            numberLabel = "Aadhaar Number",
-                            frontImageUrl = aadharFrontImageUrl,
-                            backImageUrl = aadharBackImageUrl
+                            numberLabel = "Aadhaar Number"
                         )
 
                         Spacer(Modifier.height(20.dp))
@@ -201,9 +186,7 @@ fun ViewEmploymentIdentityScreen(
                             title = "PAN Information",
                             icon = Icons.Default.CreditCard,
                             number = panNumber,
-                            numberLabel = "PAN Number",
-                            frontImageUrl = panCardImageUrl,
-                            backImageUrl = null // PAN only has one image
+                            numberLabel = "PAN Number"
                         )
 
                         Spacer(Modifier.height(32.dp))
@@ -222,9 +205,7 @@ private fun IdentitySection(
     title: String,
     icon: ImageVector,
     number: String,
-    numberLabel: String,
-    frontImageUrl: String?,
-    backImageUrl: String?
+    numberLabel: String
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -258,55 +239,7 @@ private fun IdentitySection(
             Divider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(16.dp))
 
-            // Number Display
             InfoRow(label = numberLabel, value = number.ifEmpty { "Not Available" })
-
-            // Images
-            if (!frontImageUrl.isNullOrBlank()) {
-                Spacer(Modifier.height(16.dp))
-                IdentityImageCard(
-                    title = if (backImageUrl != null) "Front Image" else "Document Image",
-                    imageUrl = frontImageUrl
-                )
-            }
-
-            if (!backImageUrl.isNullOrBlank()) {
-                Spacer(Modifier.height(16.dp))
-                IdentityImageCard(
-                    title = "Back Image",
-                    imageUrl = backImageUrl
-                )
-            }
-
-            // No images message
-            if (frontImageUrl.isNullOrBlank() && backImageUrl.isNullOrBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "No images available",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -333,49 +266,3 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
-/**
- * Identity Image Card Component
- */
-/**
- * Identity Image Card Component
- */
-@Composable
-private fun IdentityImageCard(title: String, imageUrl: String) {
-    val context = LocalContext.current
-
-    Column {
-        Text(
-            text = title,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            )
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                    error = painterResource(android.R.drawable.ic_menu_report_image),  // Optional: error placeholder
-                    placeholder = painterResource(android.R.drawable.ic_menu_gallery)  // Optional: loading placeholder
-                )
-            }
-        }
-    }
-}

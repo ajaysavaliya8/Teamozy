@@ -150,7 +150,7 @@ fun HomePage(
         snackbarHost = {
             SnackbarHost(
                 hostState = snack,
-                modifier = Modifier.padding(bottom = 80.dp)
+                modifier = Modifier.padding(bottom = paddingValues.calculateBottomPadding())
             )
         },
         topBar = {

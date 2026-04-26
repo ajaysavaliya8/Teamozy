@@ -26,8 +26,8 @@ android {
         applicationId = "com.hrms.jeejateamozy"
         minSdk = 24
         targetSdk = 36
-        versionCode = 25
-        versionName = "1.2.5"
+        versionCode = 27
+        versionName = "1.2.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

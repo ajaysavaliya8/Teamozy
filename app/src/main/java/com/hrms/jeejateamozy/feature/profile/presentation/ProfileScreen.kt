@@ -51,7 +51,6 @@ private const val TAG = "ProfileScreen"
  */
 @Composable
 fun ProfileScreen(
-    onNavigateToFaceChange: () -> Unit,
     onNavigateToEditSocialMedia: () -> Unit,
     onNavigateToEditContactDetail: () -> Unit,
     onNavigateToEditPersonalInfo: () -> Unit,
@@ -79,8 +78,39 @@ fun ProfileScreen(
 
     // Face Registration States
     var showFaceRegistration by remember { mutableStateOf(false) }
-    var registrationBusy by remember { mutableStateOf(false) }
+    var isCheckingFacePending by remember { mutableStateOf(false) }
     var faceRegistrationResult by remember { mutableStateOf<FaceRegistrationResult?>(null) }
+
+    // Precheck /employees/face-recognition/pending-request. On 200 proceed to
+    // the capture flow; on 409 an IN_PROGRESS review is blocking — surface
+    // the server message and abort.
+    val startFaceUpdate = {
+        if (!isCheckingFacePending && !showFaceRegistration) {
+            scope.launch {
+                isCheckingFacePending = true
+                try {
+                    val response = withContext(Dispatchers.IO) {
+                        NetworkModule.apiService.getPendingFaceRegistration()
+                    }
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        showFaceRegistration = true
+                    } else {
+                        val message = com.hrms.jeejateamozy.core.utils.NetworkErrorHandler
+                            .extractErrorMessage(response, "Unable to start face update.")
+                        faceRegistrationResult = FaceRegistrationResult.Error(message)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Face pending-request precheck failed", e)
+                    faceRegistrationResult = FaceRegistrationResult.Error(
+                        "Network error. Please try again."
+                    )
+                } finally {
+                    isCheckingFacePending = false
+                }
+            }
+        }
+        Unit
+    }
 
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -117,10 +147,8 @@ fun ProfileScreen(
         FaceRegistrationScreen(
             onDismiss = {
                 showFaceRegistration = false
-                registrationBusy = false
             },
             onEnrolled = { embedding: FloatArray, bitmap: Bitmap ->
-                registrationBusy = true
                 scope.launch {
                     try {
                         val api = NetworkModule.apiService
@@ -169,7 +197,6 @@ fun ProfileScreen(
                             )
                         }
 
-                        registrationBusy = false
                         showFaceRegistration = false
                         bitmap.recycle()
 
@@ -189,7 +216,6 @@ fun ProfileScreen(
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Registration error", e)
-                        registrationBusy = false
                         showFaceRegistration = false
                         bitmap.recycle()
                         faceRegistrationResult = FaceRegistrationResult.Error("Network error. Please try again.")
@@ -211,20 +237,6 @@ fun ProfileScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { /* TODO */ },
-                        modifier = Modifier
-                            .padding(end = 4.dp)
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                    ) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
                     IconButton(
                         onClick = { showLogoutDialog = true },
                         modifier = Modifier
@@ -287,7 +299,7 @@ fun ProfileScreen(
 
                 // Face Recognition Section
                 FaceRecognitionSection(
-                    onUpdateFaceClick = { showFaceRegistration = true }
+                    onUpdateFaceClick = startFaceUpdate
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -316,6 +328,19 @@ fun ProfileScreen(
 
                 // ✅ ADDED: Bottom spacing
                 Spacer(Modifier.height(100.dp))
+            }
+
+            // Precheck loading overlay — visible while we confirm the user
+            // doesn't have an IN_PROGRESS face update before opening the camera.
+            if (isCheckingFacePending) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.3f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
 
             // Success/Error Messages
