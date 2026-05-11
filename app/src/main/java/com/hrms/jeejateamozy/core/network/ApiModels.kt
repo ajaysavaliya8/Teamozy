@@ -62,7 +62,8 @@ data class LoginData(
     val name: String? = null,
     val mobile_number: Long? = null,
     val full_name: String? = null,
-    val profile_url: String? = null,
+    val gender: String? = null,
+    val profile_picture_path: String? = null,
     val branch_name: String? = null,
     val department_name: String? = null,
     val shift_name: String? = null,
@@ -81,7 +82,7 @@ data class LoginData(
     val company_email: String? = null,
     val company_contact: String? = null,
     val company_website: String? = null,
-    val company_logo_url: String? = null,
+    val company_logo_path: String? = null,
 
     // Support Information
     val hr_email: String? = null,
@@ -167,10 +168,31 @@ data class CheckOutData(
     val is_out_of_range: Boolean? = null,
     val early_reason_required: Boolean? = null,
     val out_of_range_reason_required: Boolean? = null,
-    val work_report_require: Boolean? = null,
+    val work_report_required: Boolean? = null,   // new field name
+    val work_report_require: Boolean? = null,    // old field name — backward compat only
     val work_minutes: Int? = null,
+    val work_report_question_set: WorkReportQuestionSet? = null,
+    val priority_options: List<String>? = null,
     // Admin message tied to delivery_channel IN ('AT_CHECKOUT', 'BOTH').
     val pending_message: PendingMessage? = null
+)
+
+data class WorkReportQuestionSet(
+    val id: Int,
+    val questions: List<WorkReportQuestion>
+)
+
+data class WorkReportQuestionOption(
+    val label: String,
+    val value: String
+)
+
+data class WorkReportQuestion(
+    val id: Int,
+    val question_text: String,
+    val question_type: String, // SHORT_TEXT|LONG_TEXT|NUMBER|BOOLEAN|DATE|TIME|SINGLE_CHOICE|MULTI_CHOICE
+    val is_required: Boolean,
+    val options: List<WorkReportQuestionOption>? = null
 )
 
 data class CheckOutSignatureResponse(
@@ -186,7 +208,12 @@ data class CheckOutSignatureData(
     val attendance_status: String? = null,
     val is_complete: Boolean? = null,
     val work_report_id: Int? = null,
-    val attachments_count: Int? = null
+    val attachments_count: Int? = null,
+    val work_report_priority: String? = null,
+    val work_report_status: String? = null,
+    val work_report_answers_count: Int? = null,
+    val approval_instance_id: Int? = null,
+    val workflow_warning: String? = null
 )
 
 // ========================================
@@ -690,7 +717,7 @@ data class ProfilePictureUpdateResponse(
 )
 
 data class ProfilePictureData(
-    val profile_url: String? = null,
+    val profile_picture_path: String? = null,
     val filename: String? = null
 )
 
@@ -931,7 +958,7 @@ data class CircularStatsDto(
 }
 
 // ========================================
-// LEAVE MODELS - UPDATED WITH HALF-DAY SUPPORT
+// LEAVE MODELS
 // ========================================
 
 // Domain model for LeaveType
@@ -940,23 +967,29 @@ data class LeaveType(
     val name: String,
     val code: String,
     val description: String?,
-    val requiresApproval: Boolean,
-    val applyOnHolidays: Boolean,
     val isPaid: Boolean,
-    val applicableFor: String?,
-    val isActive: Boolean,
-    val requiresDocument: Boolean,
-    val maxDays: Int?,
-    val minNoticeDays: Int?,
-    val isCarryForward: Boolean,
-    val maxCarryForwardDays: Int?,
+    val paidPercentage: Double?,
     val colorCode: String?,
-    val allowHalfDay: Boolean
+    val allowHalfDay: Boolean,
+    val annualQuota: Int?,
+    val documentRequirement: String?,      // NOT_REQUIRED | OPTIONAL | MANDATORY
+    val documentMandatoryAfterDays: Int?,
+    val maxDaysPerApplication: Int?,
+    val minDaysPerApplication: Int?,
+    val backdatedAllowed: Boolean,
+    val backdatedMaxDays: Int?,
+    val advanceLeaveAllowed: Boolean,
+    val advanceMaxDays: Int?,
+    val reasonMandatory: Boolean,
+    val applicationMode: String?,
+    val displayOrder: Int?
 )
 
 data class LeaveTypesResponse(
-    val status: String,
-    val data: List<LeaveTypeDto>
+    val success: Boolean,
+    val message: String? = null,
+    val data: List<LeaveTypeDto> = emptyList(),
+    val total: Int = 0
 )
 
 data class LeaveTypeDto(
@@ -964,74 +997,70 @@ data class LeaveTypeDto(
     val name: String,
     val code: String,
     val description: String? = null,
-    val requires_approval: Boolean = true,
-    val apply_on_holidays: Boolean = false,
     val is_paid: Boolean = true,
-    val applicable_for: String? = null,
-    val is_active: Boolean = true,
-    val requires_document: Boolean = false,
-    val max_days: Int? = null,
-    val min_notice_days: Int? = null,
-    val is_carry_forward: Boolean = false,
-    val max_carry_forward_days: Int? = null,
+    val paid_percentage: Double? = null,
     val color_code: String? = null,
+    val display_order: Int? = null,
+    val applicable_gender: String? = null,
+    val applicable_marital: String? = null,
+    val annual_quota: Int? = null,
     val allow_half_day: Boolean = true,
-    val display_order: Int? = null
+    val document_requirement: String? = null,
+    val document_mandatory_after_days: Int? = null,
+    val max_days_per_application: Int? = null,
+    val min_days_per_application: Int? = null,
+    val backdated_allowed: Boolean = false,
+    val backdated_max_days: Int? = null,
+    val advance_leave_allowed: Boolean = true,
+    val advance_max_days: Int? = null,
+    val reason_mandatory: Boolean = false,
+    val application_mode: String? = null
 ) {
     fun toDomain() = LeaveType(
         id = id,
         name = name,
         code = code,
         description = description,
-        requiresApproval = requires_approval,
-        applyOnHolidays = apply_on_holidays,
         isPaid = is_paid,
-        applicableFor = applicable_for,
-        isActive = is_active,
-        requiresDocument = requires_document,
-        maxDays = max_days,
-        minNoticeDays = min_notice_days,
-        isCarryForward = is_carry_forward,
-        maxCarryForwardDays = max_carry_forward_days,
+        paidPercentage = paid_percentage,
         colorCode = color_code,
-        allowHalfDay = allow_half_day
+        allowHalfDay = allow_half_day,
+        annualQuota = annual_quota,
+        documentRequirement = document_requirement,
+        documentMandatoryAfterDays = document_mandatory_after_days,
+        maxDaysPerApplication = max_days_per_application,
+        minDaysPerApplication = min_days_per_application,
+        backdatedAllowed = backdated_allowed,
+        backdatedMaxDays = backdated_max_days,
+        advanceLeaveAllowed = advance_leave_allowed,
+        advanceMaxDays = advance_max_days,
+        reasonMandatory = reason_mandatory,
+        applicationMode = application_mode,
+        displayOrder = display_order
     )
 }
 
 data class ApplyLeaveResponse(
-    val status: String,
+    val success: Boolean,
     val message: String,
-    val data: ApplyLeaveData?
+    val data: ApplyLeaveData? = null
 )
 
 data class ApplyLeaveData(
     val application_id: Int,
-    val applied_at: String,
-    val total_days: Double,
-    val effective_days: Double,
-    val status: String,
-    val requires_approval: Boolean,
-    // New workflow fields
     val reference_number: String? = null,
-    val workflow_status: String? = null,
     val approval_instance_id: Int? = null,
-    val workflow_name: String? = null,
-    val current_step: Int? = null,
-    val current_step_name: String? = null,
-    val total_steps: Int? = null,
-    val pending_with: List<String>? = null,
-    val auto_approved: Boolean? = null,
-    val workflow_error: String? = null
+    val total_days: Double = 0.0
 )
 
 data class LeaveApplicationsResponse(
-    val status: String,
-    val data: LeaveApplicationsData
-)
-
-data class LeaveApplicationsData(
-    val applications: List<LeaveApplicationDto>,
-    val pagination: PaginationDto
+    val success: Boolean,
+    val message: String? = null,
+    val data: List<LeaveApplicationDto> = emptyList(),
+    val total: Int = 0,
+    val page: Int = 1,
+    val limit: Int = 10,
+    val total_pages: Int = 0
 )
 
 // Minimal DTO for leave applications list view
@@ -1039,21 +1068,27 @@ data class LeaveApplicationDto(
     val id: Int,
     val reference_number: String? = null,
     val leave_type_name: String,
+    val leave_type_code: String? = null,
     val color_code: String? = null,
     val start_date: String,
     val end_date: String,
     val total_days: Double,
-    val status: String
+    val status: String,
+    val cancellation_status: String? = null,
+    val applied_at: String? = null
 ) {
     fun toDomain() = LeaveApplication(
         id = id,
         referenceNumber = reference_number,
         leaveTypeName = leave_type_name,
+        leaveTypeCode = leave_type_code,
         colorCode = color_code,
         startDate = start_date,
         endDate = end_date,
         totalDays = total_days,
-        status = status
+        status = status,
+        cancellationStatus = cancellation_status,
+        appliedAt = applied_at
     )
 }
 
@@ -1062,13 +1097,15 @@ data class LeaveApplication(
     val id: Int,
     val referenceNumber: String?,
     val leaveTypeName: String,
+    val leaveTypeCode: String?,
     val colorCode: String?,
     val startDate: String,
     val endDate: String,
     val totalDays: Double,
-    val status: String
+    val status: String,
+    val cancellationStatus: String? = null,
+    val appliedAt: String? = null
 ) {
-    // Backward compatibility - returns totalDays as Int
     val numDays: Int get() = totalDays.toInt()
 }
 
@@ -1124,7 +1161,8 @@ data class ApproverInfo(
 // =============================================================================
 
 data class LeaveApplicationDetailResponse(
-    val status: String,
+    val success: Boolean,
+    val message: String? = null,
     val data: LeaveApplicationDetailDto
 )
 
@@ -1132,15 +1170,22 @@ data class LeaveApplicationDetailDto(
     val id: Int,
     val reference_number: String? = null,
     val leave_type_name: String,
+    val leave_type_code: String? = null,
     val color_code: String? = null,
     val is_paid: Boolean = true,
+    val paid_percentage: Double? = null,
     val start_date: String,
     val end_date: String,
     val total_days: Double,
+    val is_first_day_half: Boolean = false,
+    val first_day_half_type: String? = null,
+    val is_last_day_half: Boolean = false,
+    val last_day_half_type: String? = null,
     val reason: String? = null,
     val document: String? = null,
     val applied_at: String? = null,
     val status: String,
+    val current_status: String? = null,
     val alternate_contact: String? = null,
     val emergency_contact: String? = null,
     val handover: HandoverInfoDto? = null,
@@ -1148,6 +1193,8 @@ data class LeaveApplicationDetailDto(
     val approvers: List<String>? = null,
     val pending_with: List<String>? = null,
     val rejection_reason: String? = null,
+    val cancellation_status: String? = null,
+    val cancellation_reason: String? = null,
     val allow_withdraw: Boolean = false,
     val allow_cancel: Boolean = false
 ) {
@@ -1155,15 +1202,22 @@ data class LeaveApplicationDetailDto(
         id = id,
         referenceNumber = reference_number,
         leaveTypeName = leave_type_name,
+        leaveTypeCode = leave_type_code,
         colorCode = color_code,
         isPaid = is_paid,
+        paidPercentage = paid_percentage,
         startDate = start_date,
         endDate = end_date,
         totalDays = total_days,
+        isFirstDayHalf = is_first_day_half,
+        firstDayHalfType = first_day_half_type,
+        isLastDayHalf = is_last_day_half,
+        lastDayHalfType = last_day_half_type,
         reason = reason,
         document = document,
         appliedAt = applied_at,
         status = status,
+        currentStatus = current_status ?: status,
         alternateContact = alternate_contact,
         emergencyContact = emergency_contact,
         handover = handover?.toDomain(),
@@ -1171,6 +1225,8 @@ data class LeaveApplicationDetailDto(
         approvers = approvers,
         pendingWith = pending_with,
         rejectionReason = rejection_reason,
+        cancellationStatus = cancellation_status,
+        cancellationReason = cancellation_reason,
         allowWithdraw = allow_withdraw,
         allowCancel = allow_cancel
     )
@@ -1205,15 +1261,22 @@ data class LeaveApplicationDetail(
     val id: Int,
     val referenceNumber: String?,
     val leaveTypeName: String,
+    val leaveTypeCode: String?,
     val colorCode: String?,
     val isPaid: Boolean,
+    val paidPercentage: Double?,
     val startDate: String,
     val endDate: String,
     val totalDays: Double,
+    val isFirstDayHalf: Boolean = false,
+    val firstDayHalfType: String? = null,
+    val isLastDayHalf: Boolean = false,
+    val lastDayHalfType: String? = null,
     val reason: String?,
     val document: String?,
     val appliedAt: String?,
     val status: String,
+    val currentStatus: String,
     val alternateContact: String?,
     val emergencyContact: String?,
     val handover: HandoverInfo?,
@@ -1221,6 +1284,8 @@ data class LeaveApplicationDetail(
     val approvers: List<String>?,
     val pendingWith: List<String>?,
     val rejectionReason: String?,
+    val cancellationStatus: String? = null,
+    val cancellationReason: String? = null,
     val allowWithdraw: Boolean = false,
     val allowCancel: Boolean = false
 ) {
@@ -1241,7 +1306,8 @@ data class TimelineEvent(
 
 // Leave Summary
 data class LeaveSummaryResponse(
-    val status: String,
+    val success: Boolean,
+    val message: String? = null,
     val data: LeaveSummaryDto
 )
 
@@ -1250,7 +1316,8 @@ data class LeaveSummaryDto(
     val total_days_taken: Double,
     val by_status: Map<String, StatusCountDto>,
     val by_type: List<TypeCountDto>,
-    val upcoming_leaves: List<UpcomingLeaveDto>
+    val upcoming_leaves: List<UpcomingLeaveDto>,
+    val balances: List<LeaveBalanceDto>? = null
 ) {
     fun toDomain() = LeaveSummary(
         year = year,
@@ -1258,7 +1325,8 @@ data class LeaveSummaryDto(
         totalDaysTakenDouble = total_days_taken,
         byStatus = by_status.mapValues { it.value.toDomain() },
         byType = by_type.map { it.toDomain() },
-        upcomingLeaves = upcoming_leaves.map { it.toDomain() }
+        upcomingLeaves = upcoming_leaves.map { it.toDomain() },
+        balances = balances?.map { it.toDomain() } ?: emptyList()
     )
 }
 
@@ -1268,7 +1336,8 @@ data class LeaveSummary(
     val totalDaysTakenDouble: Double = 0.0,
     val byStatus: Map<String, StatusCount>,
     val byType: List<TypeCount>,
-    val upcomingLeaves: List<UpcomingLeave>
+    val upcomingLeaves: List<UpcomingLeave>,
+    val balances: List<LeaveBalance> = emptyList()
 )
 
 data class StatusCountDto(
@@ -1285,13 +1354,15 @@ data class StatusCount(
 )
 
 data class TypeCountDto(
+    val leave_type_id: Int? = null,
     val leave_type: String,
     val color_code: String? = null,
-    val is_paid: Boolean,
+    val is_paid: Boolean = false,
     val count: Int,
     val total_days: Double
 ) {
     fun toDomain() = TypeCount(
+        leaveTypeId = leave_type_id,
         leaveType = leave_type,
         colorCode = color_code,
         isPaid = is_paid,
@@ -1302,9 +1373,10 @@ data class TypeCountDto(
 }
 
 data class TypeCount(
+    val leaveTypeId: Int? = null,
     val leaveType: String,
     val colorCode: String? = null,
-    val isPaid: Boolean,
+    val isPaid: Boolean = false,
     val count: Int,
     val totalDays: Int,
     val totalDaysDouble: Double = 0.0
@@ -1312,56 +1384,89 @@ data class TypeCount(
 
 data class UpcomingLeaveDto(
     val id: Int,
+    val reference_number: String? = null,
     val leave_type: String,
     val color_code: String? = null,
     val start_date: String,
     val end_date: String,
     val total_days: Double,
-    val effective_days: Double? = null,
     val status: String,
-    val current_status: String? = null,
-    val workflow_status: String? = null
+    val current_status: String? = null
 ) {
     fun toDomain() = UpcomingLeave(
         id = id,
+        referenceNumber = reference_number,
         leaveType = leave_type,
         colorCode = color_code,
         startDate = start_date,
         endDate = end_date,
         totalDays = total_days,
-        effectiveDays = effective_days ?: total_days,
         status = status,
-        currentStatus = current_status ?: status,
-        workflowStatus = workflow_status
+        currentStatus = current_status ?: status
     )
 }
 
 data class UpcomingLeave(
     val id: Int,
+    val referenceNumber: String? = null,
     val leaveType: String,
     val colorCode: String?,
     val startDate: String,
     val endDate: String,
     val totalDays: Double,
-    val effectiveDays: Double,
     val status: String,
-    val currentStatus: String,
-    val workflowStatus: String?
+    val currentStatus: String
 ) {
-    // Backward compatibility - returns totalDays as Int
     val numDays: Int get() = totalDays.toInt()
 }
 
+data class LeaveBalanceDto(
+    val leave_type_id: Int,
+    val leave_type_name: String,
+    val leave_type_code: String? = null,
+    val color_code: String? = null,
+    val available_balance: Double,
+    val used: Double,
+    val accrued: Double,
+    val carry_forward: Double
+) {
+    fun toDomain() = LeaveBalance(
+        leaveTypeId = leave_type_id,
+        leaveTypeName = leave_type_name,
+        leaveTypeCode = leave_type_code,
+        colorCode = color_code,
+        availableBalance = available_balance,
+        used = used,
+        accrued = accrued,
+        carryForward = carry_forward
+    )
+}
+
+data class LeaveBalance(
+    val leaveTypeId: Int,
+    val leaveTypeName: String,
+    val leaveTypeCode: String?,
+    val colorCode: String?,
+    val availableBalance: Double,
+    val used: Double,
+    val accrued: Double,
+    val carryForward: Double
+)
+
 // Withdraw / Cancel Leave
 data class WithdrawLeaveResponse(
-    val status: String,
+    val success: Boolean,
     val message: String
 )
 
 data class CancelLeaveResponse(
-    val status: String,
+    val success: Boolean,
     val message: String
 )
+
+// Request bodies for withdraw/cancel (JSON body, not form-encoded)
+data class WithdrawLeaveRequest(val withdrawal_reason: String)
+data class CancelLeaveRequest(val cancellation_reason: String)
 
 // Half Day Type Enum
 enum class HalfDayType(val value: String) {

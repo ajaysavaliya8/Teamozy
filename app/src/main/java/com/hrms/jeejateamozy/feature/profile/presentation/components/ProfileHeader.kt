@@ -21,7 +21,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.hrms.jeejateamozy.R
 import com.hrms.jeejateamozy.core.image.CoilImageLoader
+import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
+import com.hrms.jeejateamozy.core.utils.PrivateFileUrl
 import com.hrms.jeejateamozy.feature.profile.presentation.utils.formatPhoneNumber
 import com.hrms.jeejateamozy.feature.profile.presentation.utils.openUrl
 
@@ -48,48 +50,29 @@ fun ProfileHeader(
                 modifier = Modifier.size(120.dp),
                 contentAlignment = Alignment.BottomEnd
             ) {
-                // Avatar Image
-                if (!prefs.profileUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(prefs.profileUrl)
-                            .crossfade(true)
-                            .build(),
-                        imageLoader = CoilImageLoader.get(context),
-                        contentDescription = "Profile Picture",
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .border(
-                                3.dp,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                                CircleShape
-                            ),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .border(
-                                3.dp,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                                CircleShape
-                            )
-                            .background(
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = "Profile Picture",
-                            modifier = Modifier.size(60.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                // Avatar Image — always fetch from server; fall back to gender-aware default when no picture uploaded
+                val avatarPath = when {
+                    !prefs.profileUrl.isNullOrBlank() -> prefs.profileUrl
+                    prefs.gender == "FEMALE" -> "private/profile/default_female.webp"
+                    else -> "private/profile/default_male.webp"
                 }
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(PrivateFileUrl.build(NetworkModule.BASE_URL, avatarPath))
+                        .crossfade(true)
+                        .build(),
+                    imageLoader = CoilImageLoader.get(context),
+                    contentDescription = "Profile Picture",
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(CircleShape)
+                        .border(
+                            3.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                            CircleShape
+                        ),
+                    contentScale = ContentScale.Crop
+                )
 
                 // Edit/Add Button
                 Surface(

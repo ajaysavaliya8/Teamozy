@@ -19,6 +19,7 @@ import java.io.File
 data class ApplyLeaveUiState(
     val isLoading: Boolean = false,
     val leaveTypes: List<LeaveType> = emptyList(),
+    val leaveTypesMessage: String = "",
     val selectedLeaveType: LeaveType? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null
@@ -84,6 +85,7 @@ class LeaveViewModel(
                             it.copy(
                                 isLoading = false,
                                 leaveTypes = outcome.leaveTypes,
+                                leaveTypesMessage = outcome.message,
                                 errorMessage = null
                             )
                         }

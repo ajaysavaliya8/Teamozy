@@ -51,7 +51,7 @@ class ProfileRepository(private val context: Context) {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
                     if (responseBody?.success == true) {
-                        responseBody.data?.profile_url?.let { url ->
+                        responseBody.data?.profile_picture_path?.let { url ->
                             pm.profileUrl = url
                             Log.d("PROFILE", "Profile URL updated: $url")
                         }
@@ -60,7 +60,7 @@ class ProfileRepository(private val context: Context) {
 
                         ProfilePictureOutcome.Success(
                             message = responseBody.message ?: "Profile picture updated successfully",
-                            profileUrl = responseBody.data?.profile_url
+                            profileUrl = responseBody.data?.profile_picture_path
                         )
                     } else {
                         compressedFile.delete()
@@ -275,6 +275,7 @@ class ProfileRepository(private val context: Context) {
                     val responseBody = response.body()
                     if (responseBody?.success == true) {
                         Log.d("PROFILE", "Personal info retrieved successfully")
+                        responseBody.data?.gender?.let { pm.gender = it }
                         PersonalInfoOutcome.Success(
                             message = responseBody.message,
                             personalInfo = responseBody.data
@@ -313,7 +314,8 @@ class ProfileRepository(private val context: Context) {
         spouseName: String?,
         noOfChildren: Int?,
         languages: List<String>?,
-        religion: String?
+        religion: String?,
+        bio: String? = null
     ): PersonalInfoOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("PROFILE", "Updating personal information")
@@ -324,7 +326,8 @@ class ProfileRepository(private val context: Context) {
                 spouseName = spouseName,
                 noOfChildren = noOfChildren,
                 languages = languages,
-                religion = religion
+                religion = religion,
+                bio = bio
             )
 
             Log.d("PROFILE", "Update personal info response code: ${response.code()}")

@@ -62,59 +62,24 @@ object NetworkModule {
         chain.proceed(request.newBuilder().url(newUrl).build())
     }
 
-    /**
-     * Adds Authorization: Bearer <token> header to all requests (except login endpoints)
-     * ✅ UPDATED: Also adds token as query parameter for file URLs (required by backend)
-     */
     private val authInterceptor = Interceptor { chain ->
         val originalRequest = chain.request()
         val url = originalRequest.url.toString()
 
-        // Skip adding token for login/register endpoints
         val skipAuth = url.contains("send-login") || url.contains("verify-login")
 
         if (skipAuth) {
             chain.proceed(originalRequest)
         } else {
-            // Add Authorization header with Bearer token AND X-Device-Id header
             val token = PreferencesManager.getInstance(appContext).authToken
             val deviceId = PreferencesManager.getInstance(appContext).deviceId
 
-            // ✅ Check if this is a file URL that needs token as query parameter
-            val isFileUrl = url.contains("/panel/files/") ||
-                    url.contains("/files/profile/") ||
-                    url.contains("/files/adhar/") ||
-                    url.contains("/files/pan/") ||
-                    url.contains("/files/company_logo/")
-
-            val newRequest = if (isFileUrl && !token.isNullOrBlank()) {
-                // ✅ For file URLs: Add token as query parameter (backend requirement)
-                val newUrl = originalRequest.url.newBuilder()
-                    .addQueryParameter("token", token)
-                    .build()
-
-                originalRequest.newBuilder()
-                    .url(newUrl)
-                    .header("Authorization", "Bearer $token")
-                    .apply {
-                        if (deviceId.isNotBlank()) {
-                            header("X-Device-Id", deviceId)
-                        }
-                    }
-                    .build()
-            } else {
-                // ✅ For regular API calls: Use Authorization header only
-                originalRequest.newBuilder()
-                    .apply {
-                        if (!token.isNullOrBlank()) {
-                            header("Authorization", "Bearer $token")
-                        }
-                        if (deviceId.isNotBlank()) {
-                            header("X-Device-Id", deviceId)
-                        }
-                    }
-                    .build()
-            }
+            val newRequest = originalRequest.newBuilder()
+                .apply {
+                    if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
+                    if (deviceId.isNotBlank()) header("X-Device-Id", deviceId)
+                }
+                .build()
 
             chain.proceed(newRequest)
         }

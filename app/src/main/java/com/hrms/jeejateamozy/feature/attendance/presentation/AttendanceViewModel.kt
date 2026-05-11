@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hrms.jeejateamozy.core.network.PendingMessage
+import com.hrms.jeejateamozy.core.network.WorkReportQuestionSet
 import com.hrms.jeejateamozy.core.utils.LocationHelper
 import com.hrms.jeejateamozy.core.utils.LocationResult
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceOutcome
@@ -348,6 +349,8 @@ class AttendanceViewModel(
                     checkOutEarlyReasonRequired = outcome.earlyReasonRequired,
                     checkOutOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkOutWorkReportRequired = outcome.workReportRequired,
+                    checkOutWorkReportQuestionSet = outcome.workReportQuestionSet,
+                    checkOutPriorityOptions = outcome.priorityOptions,
                     checkOutMessage = outcome.message,
                     checkOutFaceVector = outcome.faceVector,
                     pendingMessage = pending,
@@ -368,6 +371,8 @@ class AttendanceViewModel(
                     checkOutEarlyReasonRequired = outcome.earlyReasonRequired,
                     checkOutOutOfRangeReasonRequired = outcome.outOfRangeReasonRequired,
                     checkOutWorkReportRequired = outcome.workReportRequired,
+                    checkOutWorkReportQuestionSet = outcome.workReportQuestionSet,
+                    checkOutPriorityOptions = outcome.priorityOptions,
                     checkOutMessage = outcome.message,
                     pendingMessage = pending,
                     showPendingMessageDialog = pending != null,
@@ -479,6 +484,8 @@ class AttendanceViewModel(
                 checkOutEarlyReasonRequired = false,
                 checkOutOutOfRangeReasonRequired = false,
                 checkOutWorkReportRequired = false,
+                checkOutWorkReportQuestionSet = null,
+                checkOutPriorityOptions = emptyList(),
                 showFaceVerification = false,
                 showReasonDialog = false,
                 showWorkReportDialog = false
@@ -552,6 +559,8 @@ class AttendanceViewModel(
                 checkOutEarlyReasonRequired = false,
                 checkOutOutOfRangeReasonRequired = false,
                 checkOutWorkReportRequired = false,
+                checkOutWorkReportQuestionSet = null,
+                checkOutPriorityOptions = emptyList(),
                 faceVerificationQualityScore = null,
                 faceVerificationSuccess = false,
                 tempEarlyReason = null,
@@ -908,7 +917,9 @@ class AttendanceViewModel(
         outOfRangeReason: String?,
         workReport: String?,
         workReportFileUri: Uri?,
-        context: Context
+        context: Context,
+        priority: String? = null,
+        answers: String? = null
     ) {
         val tToken = _ui.value.checkOutTToken
         if (tToken == null) {
@@ -1007,6 +1018,8 @@ class AttendanceViewModel(
                     faceVerify = _ui.value.faceVerificationSuccess,
                     earlyReason = earlyReason,
                     outOfRangeReason = outOfRangeReason,
+                    priority = priority,
+                    answers = answers,
                     workReport = workReport,
                     workReportFileUri = workReportFileUri,
                     lastLocation = lastLocation
@@ -1044,6 +1057,8 @@ class AttendanceViewModel(
                             checkOutTToken = null,
                             checkOutFaceVector = null,
                             checkOutMessage = null,
+                            checkOutWorkReportQuestionSet = null,
+                            checkOutPriorityOptions = emptyList(),
                             faceVerificationQualityScore = null,
                             faceVerificationSuccess = false,
                             tempEarlyReason = null,
@@ -1051,6 +1066,7 @@ class AttendanceViewModel(
                         )
 
                         emitSuccess(outcome.message)
+                        outcome.workflowWarning?.let { emitSuccess(it) }
 
                         // Refresh from server to get accurate state (supports multiple check-ins)
                         delay(500)
@@ -1069,6 +1085,8 @@ class AttendanceViewModel(
                             checkOutTToken = null,
                             checkOutFaceVector = null,
                             checkOutMessage = null,
+                            checkOutWorkReportQuestionSet = null,
+                            checkOutPriorityOptions = emptyList(),
                             tempEarlyReason = null,
                             tempOutOfRangeReason = null
                         )
@@ -1085,6 +1103,8 @@ class AttendanceViewModel(
                             checkOutTToken = null,
                             checkOutFaceVector = null,
                             checkOutMessage = null,
+                            checkOutWorkReportQuestionSet = null,
+                            checkOutPriorityOptions = emptyList(),
                             tempEarlyReason = null,
                             tempOutOfRangeReason = null
                         )
@@ -1124,13 +1144,15 @@ class AttendanceViewModel(
         }
     }
 
-    fun onWorkReportSubmitted(workReport: String, fileUri: Uri?, context: Context) {
+    fun onWorkReportSubmitted(workReport: String?, fileUri: Uri?, priority: String?, answers: String?, context: Context) {
         completeCheckOut(
             _ui.value.tempEarlyReason,
             _ui.value.tempOutOfRangeReason,
             workReport,
             fileUri,
-            context
+            context,
+            priority = priority,
+            answers = answers
         )
     }
 
@@ -1167,6 +1189,8 @@ data class AttendanceUiState(
     val checkOutEarlyReasonRequired: Boolean = false,
     val checkOutOutOfRangeReasonRequired: Boolean = false,
     val checkOutWorkReportRequired: Boolean = false,
+    val checkOutWorkReportQuestionSet: WorkReportQuestionSet? = null,
+    val checkOutPriorityOptions: List<String> = emptyList(),
     val checkOutMessage: String? = null,
     val checkOutFaceVector: FloatArray? = null,
 

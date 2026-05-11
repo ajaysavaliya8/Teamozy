@@ -1,7 +1,5 @@
 package com.hrms.jeejateamozy.feature.attendance.presentation.dialogs
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,15 +17,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import android.view.ViewGroup
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.hrms.jeejateamozy.core.image.CoilImageLoader
+import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.PendingMessage
-import com.hrms.jeejateamozy.core.utils.PreferencesManager
+import com.hrms.jeejateamozy.core.utils.PrivateFileUrl
 
 /**
  * Message type styling configuration
@@ -52,9 +56,10 @@ fun PendingMessageDialog(
     onAcknowledge: (acknowledgmentNote: String?) -> Unit
 ) {
     val context = LocalContext.current
-    val preferencesManager = remember { PreferencesManager.getInstance(context) }
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     var acknowledgmentNote by remember { mutableStateOf("") }
     val messageStyle = getMessageTypeStyle(message.type)
+    val dialogView = LocalView.current
 
     Dialog(
         onDismissRequest = {
@@ -68,10 +73,25 @@ fun PendingMessageDialog(
             usePlatformDefaultWidth = false
         )
     ) {
+        if (!dialogView.isInEditMode) {
+            SideEffect {
+                (dialogView.parent as? DialogWindowProvider)?.window?.setLayout(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 48.dp),
+            contentAlignment = Alignment.Center
+        ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .padding(16.dp),
+                .fillMaxWidth()
+                .heightIn(max = screenHeight * 0.82f),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
@@ -109,11 +129,11 @@ fun PendingMessageDialog(
                     }
                 }
 
-                // Content - Reduced padding
+                // Content
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Title
@@ -132,8 +152,8 @@ fun PendingMessageDialog(
                         lineHeight = 20.sp
                     )
 
-                    // Image display
                     if (message.has_attachment && message.attachment_url != null) {
+                        val fileUrl = PrivateFileUrl.build(NetworkModule.BASE_URL, message.attachment_url)
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
@@ -143,14 +163,14 @@ fun PendingMessageDialog(
                         ) {
                             AsyncImage(
                                 model = ImageRequest.Builder(context)
-                                    .data(message.attachment_url)
-                                    .addHeader("Authorization", "Bearer ${preferencesManager.authToken.orEmpty()}")
+                                    .data(fileUrl)
                                     .crossfade(true)
                                     .build(),
+                                imageLoader = CoilImageLoader.get(context),
                                 contentDescription = "Attachment Image",
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 150.dp, max = 400.dp)
+                                    .heightIn(min = 120.dp, max = 220.dp)
                                     .clip(RoundedCornerShape(12.dp)),
                                 contentScale = ContentScale.Fit,
                                 alignment = Alignment.Center
@@ -255,6 +275,7 @@ fun PendingMessageDialog(
                 }
             }
         }
+        } // end Box
     }
 }
 

@@ -206,6 +206,23 @@ fun EditSocialMediaScreen(
                         successMessage = null
 
                         try {
+                            // Validate: non-blank URLs must start with http:// or https://
+                            val urlFields = mapOf(
+                                "Facebook" to facebook,
+                                "LinkedIn" to linkedin,
+                                "X (Twitter)" to x,
+                                "Instagram" to instagram,
+                                "Snapchat" to snapchat
+                            )
+                            val invalid = urlFields.entries.filter { (_, v) ->
+                                v.isNotBlank() && !v.trim().startsWith("http://") && !v.trim().startsWith("https://")
+                            }.map { it.key }
+                            if (invalid.isNotEmpty()) {
+                                errorMessage = "Invalid URL for: ${invalid.joinToString(", ")}. Must start with http:// or https://"
+                                isLoading = false
+                                return@launch
+                            }
+
                             val res = NetworkModule.apiService.updateSocialMedia(
                                 facebookUrl = facebook.ifBlank { null },
                                 linkedinUrl = linkedin.ifBlank { null },

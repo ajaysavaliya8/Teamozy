@@ -263,9 +263,10 @@ fun ApplyLeaveScreen(
             Log.d("LEAVE_SUBMIT", "❌ Dependency validation FAILED")
         }
 
-        // Validate document if required
-        Log.d("LEAVE_SUBMIT", "Requires Document: ${selectedLeaveType?.requiresDocument}, Selected File: $selectedFileName")
-        if (selectedLeaveType?.requiresDocument == true && selectedFileName == null) {
+        // Validate document if required (MANDATORY means always required)
+        val docReq = selectedLeaveType?.documentRequirement?.uppercase()
+        Log.d("LEAVE_SUBMIT", "Document requirement: $docReq, Selected File: $selectedFileName")
+        if (docReq == "MANDATORY" && selectedFileName == null) {
             errorMessages.add("This leave type requires a supporting document")
             isValid = false
             Log.d("LEAVE_SUBMIT", "❌ Document validation FAILED")
@@ -410,7 +411,10 @@ fun ApplyLeaveScreen(
                 }
                 // No leave types available
                 !uiState.isLoading && uiState.leaveTypes.isEmpty() -> {
-                    NoLeaveTypesState(onNavigateBack = onNavigateBack)
+                    NoLeaveTypesState(
+                        message = uiState.errorMessage ?: uiState.leaveTypesMessage,
+                        onNavigateBack = onNavigateBack
+                    )
                 }
                 // Show form
                 else -> {
@@ -643,7 +647,7 @@ private fun LoadingState() {
 // NO LEAVE TYPES STATE
 // ==========================================
 @Composable
-private fun NoLeaveTypesState(onNavigateBack: () -> Unit) {
+private fun NoLeaveTypesState(message: String, onNavigateBack: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -660,15 +664,9 @@ private fun NoLeaveTypesState(onNavigateBack: () -> Unit) {
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
             )
             Text(
-                text = "No Leave Types Available",
+                text = message.ifBlank { "No leave types are assigned to you. Please contact HR." },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = "You don't have any leave types assigned to you.\nThis could be due to your role, department, or employment status.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -941,7 +939,7 @@ private fun LeaveApplicationContent(
                 FormSection(
                     title = "Supporting Document",
                     icon = Icons.AutoMirrored.Outlined.InsertDriveFile,
-                    isRequired = selectedLeaveType?.requiresDocument == true
+                    isRequired = selectedLeaveType?.documentRequirement?.uppercase() == "MANDATORY"
                 ) {
                     if (selectedFileName == null) {
                         OutlinedCard(
@@ -1174,9 +1172,9 @@ private fun LeaveTypeSelector(
                             else
                                 MaterialTheme.colorScheme.secondary
                         )
-                        if (selectedLeaveType.requiresApproval) {
+                        if (selectedLeaveType.applicationMode != null) {
                             LeaveTypeChip(
-                                text = "Requires Approval",
+                                text = selectedLeaveType.applicationMode,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }

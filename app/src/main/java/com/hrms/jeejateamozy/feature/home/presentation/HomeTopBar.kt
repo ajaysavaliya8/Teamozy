@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.hrms.jeejateamozy.core.image.CoilImageLoader
+import com.hrms.jeejateamozy.core.network.NetworkModule
+import com.hrms.jeejateamozy.core.utils.PrivateFileUrl
 
 /**
  * Redesigned Home screen top bar component
@@ -39,6 +41,7 @@ fun HomeTopBar(
     companyName: String?,
     userName: String?,
     profileUrl: String?,
+    gender: String? = null,
     isRefreshing: Boolean,
     onRefreshClick: () -> Unit,
     onNotificationClick: () -> Unit = {},
@@ -67,27 +70,23 @@ fun HomeTopBar(
                     .clickable { onProfileClick() },
                 contentAlignment = Alignment.Center
             ) {
-                if (!profileUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(profileUrl)
-                            .crossfade(true)
-                            .build(),
-                        imageLoader = CoilImageLoader.get(context),
-                        contentDescription = "Profile Picture",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Text(
-                        text = (userName?.firstOrNull() ?: 'U').uppercase(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+                val avatarPath = when {
+                    !profileUrl.isNullOrBlank() -> profileUrl
+                    gender == "FEMALE" -> "private/profile/default_female.webp"
+                    else -> "private/profile/default_male.webp"
                 }
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(PrivateFileUrl.build(NetworkModule.BASE_URL, avatarPath))
+                        .crossfade(true)
+                        .build(),
+                    imageLoader = CoilImageLoader.get(context),
+                    contentDescription = "Profile Picture",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
             }
 
             Spacer(Modifier.width(12.dp))

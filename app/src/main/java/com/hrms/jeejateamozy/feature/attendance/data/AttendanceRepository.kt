@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.network.PendingMessage
+import com.hrms.jeejateamozy.core.network.WorkReportQuestionSet
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.location.model.LocationData
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +67,8 @@ sealed class CheckOutOutcome {
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
         val workReportRequired: Boolean,
+        val workReportQuestionSet: WorkReportQuestionSet? = null,
+        val priorityOptions: List<String> = emptyList(),
         val message: String,
         val pendingMessage: PendingMessage? = null
     ) : CheckOutOutcome()
@@ -78,6 +81,8 @@ sealed class CheckOutOutcome {
         val earlyReasonRequired: Boolean,
         val outOfRangeReasonRequired: Boolean,
         val workReportRequired: Boolean,
+        val workReportQuestionSet: WorkReportQuestionSet? = null,
+        val priorityOptions: List<String> = emptyList(),
         val message: String,
         val pendingMessage: PendingMessage? = null
     ) : CheckOutOutcome()
@@ -113,7 +118,8 @@ sealed class SignatureOutcome {
         val message: String,
         val attendanceRecordId: Int?,
         val checkInTime: String?,
-        val checkOutTime: String? = null
+        val checkOutTime: String? = null,
+        val workflowWarning: String? = null
     ) : SignatureOutcome()
 
     // Server returned 409 CONFLICT. Covers three cases, all using error_code="CONFLICT":
@@ -403,7 +409,9 @@ class AttendanceRepository(private val context: Context) {
                         val isOutOfRange = data.is_out_of_range ?: false
                         val earlyReasonRequired = data.early_reason_required ?: false
                         val outOfRangeReasonRequired = data.out_of_range_reason_required ?: false
-                        val workReportRequired = data.work_report_require ?: false
+                        val workReportRequired = data.work_report_required ?: data.work_report_require ?: false
+                        val workReportQuestionSet = data.work_report_question_set
+                        val priorityOptions = data.priority_options ?: emptyList()
                         val message = body.message ?: "Ready for check-out"
 
                         Log.d("NET", "Check-out initial success:")
@@ -414,7 +422,9 @@ class AttendanceRepository(private val context: Context) {
                         Log.d("NET", "  is_out_of_range: $isOutOfRange")
                         Log.d("NET", "  early_reason_required: $earlyReasonRequired")
                         Log.d("NET", "  out_of_range_reason_required: $outOfRangeReasonRequired")
-                        Log.d("NET", "  work_report_require: $workReportRequired")
+                        Log.d("NET", "  work_report_required: $workReportRequired")
+                        Log.d("NET", "  work_report_question_set: ${if (workReportQuestionSet != null) "id=${workReportQuestionSet.id}, ${workReportQuestionSet.questions.size} questions" else "null"}")
+                        Log.d("NET", "  priority_options: $priorityOptions")
 
                         val faceVector = data.face_vector?.let { faceVectorString ->
                             FaceVectorUtil.parseFaceVector(faceVectorString)
@@ -437,6 +447,8 @@ class AttendanceRepository(private val context: Context) {
                                 earlyReasonRequired = earlyReasonRequired,
                                 outOfRangeReasonRequired = outOfRangeReasonRequired,
                                 workReportRequired = workReportRequired,
+                                workReportQuestionSet = workReportQuestionSet,
+                                priorityOptions = priorityOptions,
                                 message = message,
                                 pendingMessage = pendingMessage
                             )
@@ -449,6 +461,8 @@ class AttendanceRepository(private val context: Context) {
                                 earlyReasonRequired = earlyReasonRequired,
                                 outOfRangeReasonRequired = outOfRangeReasonRequired,
                                 workReportRequired = workReportRequired,
+                                workReportQuestionSet = workReportQuestionSet,
+                                priorityOptions = priorityOptions,
                                 message = message,
                                 pendingMessage = pendingMessage
                             )
@@ -484,9 +498,11 @@ class AttendanceRepository(private val context: Context) {
         faceVerify: Boolean = false,
         earlyReason: String? = null,
         outOfRangeReason: String? = null,
+        priority: String? = null,
+        answers: String? = null,
         workReport: String? = null,
         workReportFileUri: Uri? = null,
-        lastLocation: LocationData? = null  // NEW: Last location data
+        lastLocation: LocationData? = null
     ): SignatureOutcome = withContext(Dispatchers.IO) {
         return@withContext try {
             Log.d("NET", "checkOutSignature called:")
@@ -495,6 +511,8 @@ class AttendanceRepository(private val context: Context) {
             Log.d("NET", "  face_verify: $faceVerify")
             Log.d("NET", "  early_reason: ${earlyReason?.take(50)}")
             Log.d("NET", "  out_of_range_reason: ${outOfRangeReason?.take(50)}")
+            Log.d("NET", "  priority: $priority")
+            Log.d("NET", "  answers: ${answers?.take(100)}")
             Log.d("NET", "  work_report: ${workReport?.take(50)}")
             Log.d("NET", "  last_location: ${if (lastLocation != null) "lat=${lastLocation.latitude}, lng=${lastLocation.longitude}" else "null"}")
 
@@ -504,6 +522,8 @@ class AttendanceRepository(private val context: Context) {
             val faceVerifyBody = faceVerify.toString().toRequestBody("text/plain".toMediaTypeOrNull())
             val earlyReasonBody = earlyReason?.toRequestBody("text/plain".toMediaTypeOrNull())
             val outOfRangeReasonBody = outOfRangeReason?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val priorityBody = priority?.toRequestBody("text/plain".toMediaTypeOrNull())
+            val answersBody = answers?.toRequestBody("text/plain".toMediaTypeOrNull())
             val workReportBody = workReport?.toRequestBody("text/plain".toMediaTypeOrNull())
 
             // NEW: Prepare last location request bodies
@@ -553,6 +573,8 @@ class AttendanceRepository(private val context: Context) {
                 faceVerify = faceVerifyBody,
                 earlyReason = earlyReasonBody,
                 outOfRangeReason = outOfRangeReasonBody,
+                priority = priorityBody,
+                answers = answersBody,
                 workReport = workReportBody,
                 work_report_file = filePart,
                 // NEW: Last location tracking data
@@ -580,10 +602,14 @@ class AttendanceRepository(private val context: Context) {
 
                     if (body != null && body.success) {
                         Log.d("NET", "Check-out signature success: ${body.message}")
+                        val warning = body.data?.workflow_warning
+                        if (warning != null) Log.d("NET", "  workflow_warning: $warning")
                         SignatureOutcome.Success(
                             message = body.message,
                             attendanceRecordId = body.data?.attendance_record_id,
-                            checkInTime = body.data?.check_out_time
+                            checkInTime = null,
+                            checkOutTime = body.data?.check_out_time,
+                            workflowWarning = warning
                         )
                     } else {
                         SignatureOutcome.Error(body?.message ?: "Invalid response from server")

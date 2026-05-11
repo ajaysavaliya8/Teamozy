@@ -58,6 +58,7 @@ fun EditPersonalInfoScreen(
     var noOfChildren by remember { mutableStateOf("") }
     var languagesText by remember { mutableStateOf("") }
     var religion by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
 
     var isLoading by remember { mutableStateOf(false) }
     var isFetching by remember { mutableStateOf(true) }
@@ -84,6 +85,7 @@ fun EditPersonalInfoScreen(
             noOfChildren = data.no_of_children?.toString() ?: ""
             languagesText = data.languages?.joinToString(", ") ?: ""
             religion = data.religion ?: ""
+            bio = data.bio ?: ""
         }
     }
 
@@ -439,9 +441,33 @@ fun EditPersonalInfoScreen(
                                     label = { Text("Religion") },
                                     placeholder = { Text("e.g., Hindu, Muslim, Christian") },
                                     modifier = Modifier.fillMaxWidth(),
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                                     colors = textFieldColors,
                                     shape = RoundedCornerShape(12.dp)
+                                )
+
+                                // Bio
+                                OutlinedTextField(
+                                    value = bio,
+                                    onValueChange = { if (it.length <= 2000) bio = it },
+                                    label = { Text("Bio") },
+                                    placeholder = { Text("Write a short bio about yourself") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    colors = textFieldColors,
+                                    shape = RoundedCornerShape(12.dp),
+                                    minLines = 3,
+                                    maxLines = 6,
+                                    supportingText = {
+                                        Text(
+                                            "${bio.length} / 2000",
+                                            fontSize = 12.sp,
+                                            color = if (bio.length >= 1900)
+                                                MaterialTheme.colorScheme.error
+                                            else
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -478,7 +504,8 @@ fun EditPersonalInfoScreen(
                                             spouseName = spouseName.ifBlank { null },
                                             noOfChildren = childrenInt,
                                             languages = languagesList,
-                                            religion = religion.ifBlank { null }
+                                            religion = religion.ifBlank { null },
+                                            bio = bio.ifBlank { null }
                                         )
 
                                         when (result) {

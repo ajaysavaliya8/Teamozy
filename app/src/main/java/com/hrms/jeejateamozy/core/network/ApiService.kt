@@ -155,6 +155,8 @@ interface ApiService {
         @Part("face_verify") faceVerify: RequestBody? = null,
         @Part("early_reason") earlyReason: RequestBody? = null,
         @Part("out_of_range_reason") outOfRangeReason: RequestBody? = null,
+        @Part("priority") priority: RequestBody? = null,
+        @Part("answers") answers: RequestBody? = null,
         @Part("work_description") workReport: RequestBody? = null,
         @Part work_report_file: MultipartBody.Part? = null,
         // Location tracking data
@@ -252,7 +254,8 @@ interface ApiService {
         @Field("spouse_name") spouseName: String? = null,
         @Field("no_of_children") noOfChildren: Int? = null,
         @Field("languages") languages: List<String>? = null,
-        @Field("religion") religion: String? = null
+        @Field("religion") religion: String? = null,
+        @Field("bio") bio: String? = null
     ): Response<BasicResponse>
 
     @GET("employment-details")
@@ -326,6 +329,10 @@ interface ApiService {
         @Part("start_date") startDate: RequestBody,
         @Part("end_date") endDate: RequestBody,
         @Part("leave_reason") leaveReason: RequestBody,
+        @Part("is_first_day_half") isFirstDayHalf: RequestBody? = null,
+        @Part("first_day_half_type") firstDayHalfType: RequestBody? = null,
+        @Part("is_last_day_half") isLastDayHalf: RequestBody? = null,
+        @Part("last_day_half_type") lastDayHalfType: RequestBody? = null,
         @Part("alternate_contact") alternateContact: RequestBody?,
         @Part("emergency_contact") emergencyContact: RequestBody?,
         @Part("task_depended_on_you") taskDependedOnYou: RequestBody,
@@ -356,23 +363,21 @@ interface ApiService {
     ): Response<LeaveApplicationDetailResponse>
 
     /**
-     * Withdraw a pending or approved leave application
+     * Withdraw a pending leave application — JSON body
      */
-    @FormUrlEncoded
     @POST("withdraw-leave/{application_id}")
     suspend fun withdrawLeave(
         @Path("application_id") applicationId: Int,
-        @Field("withdrawal_reason") withdrawalReason: String
+        @Body body: WithdrawLeaveRequest
     ): Response<WithdrawLeaveResponse>
 
     /**
-     * Cancel an approved leave application before it starts
+     * Cancel an approved leave application before it starts — JSON body
      */
-    @FormUrlEncoded
     @POST("cancel-leave/{application_id}")
     suspend fun cancelLeave(
         @Path("application_id") applicationId: Int,
-        @Field("cancellation_reason") cancellationReason: String
+        @Body body: CancelLeaveRequest
     ): Response<CancelLeaveResponse>
 
     /**

@@ -2,6 +2,7 @@
 
 package com.hrms.jeejateamozy.feature.profile.presentation
 
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,45 +10,47 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import com.hrms.jeejateamozy.core.network.NetworkModule
+import com.hrms.jeejateamozy.core.utils.PrivateFileUrl
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityOutcome
+import com.hrms.jeejateamozy.feature.profile.data.IdentityDocument
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
-/**
- * ViewEmploymentIdentityScreen - Display employment identity information (READ ONLY)
- */
 @Composable
 fun ViewEmploymentIdentityScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val profileRepository = remember { ProfileRepository(context) }
+    val scope = rememberCoroutineScope()
 
-    // State variables
-    var aadhaarNumber by remember { mutableStateOf("") }
-    var panNumber by remember { mutableStateOf("") }
-
+    var documents by remember { mutableStateOf<List<IdentityDocument>>(emptyList()) }
     var isFetching by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var downloadingDocId by remember { mutableStateOf<Int?>(null) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
 
-    // Fetch employment identity on screen load
     LaunchedEffect(Unit) {
         isFetching = true
         when (val result = profileRepository.getEmploymentIdentity()) {
             is EmploymentIdentityOutcome.Success -> {
-                result.identityInfo?.let { data ->
-                    aadhaarNumber = data.aadhaar_number ?: ""
-                    panNumber = data.pan_number ?: ""
-                }
+                documents = result.identityInfo?.documents ?: emptyList()
                 isFetching = false
             }
             is EmploymentIdentityOutcome.Error -> {
@@ -61,18 +64,11 @@ fun ViewEmploymentIdentityScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Text(
-                        "Employment Identity",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Employment Identity", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -89,27 +85,18 @@ fun ViewEmploymentIdentityScreen(
         ) {
             when {
                 isFetching -> {
-                    // Loading State
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
                 errorMessage != null -> {
-                    // Error State
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Column(
@@ -134,7 +121,6 @@ fun ViewEmploymentIdentityScreen(
                     }
                 }
                 else -> {
-                    // Content State
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -142,7 +128,7 @@ fun ViewEmploymentIdentityScreen(
                             .padding(16.dp)
                             .padding(bottom = 80.dp)
                     ) {
-                        // Info Card - Notice
+                        // Info banner
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
@@ -169,27 +155,85 @@ fun ViewEmploymentIdentityScreen(
                             }
                         }
 
-                        Spacer(Modifier.height(20.dp))
+                        Spacer(Modifier.height(16.dp))
 
-                        // Aadhaar Section
-                        IdentitySection(
-                            title = "Aadhaar Information",
-                            icon = Icons.Default.Badge,
-                            number = aadhaarNumber,
-                            numberLabel = "Aadhaar Number"
-                        )
+                        downloadError?.let { err ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                            ) {
+                                Text(
+                                    text = err,
+                                    modifier = Modifier.padding(12.dp),
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
 
-                        Spacer(Modifier.height(20.dp))
+                        if (documents.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No identity documents on record",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        } else {
+                            documents.forEach { doc ->
+                                IdentityDocumentCard(
+                                    doc = doc,
+                                    isDownloading = downloadingDocId == doc.id,
+                                    onViewDocument = {
+                                        val filePath = doc.file_path ?: return@IdentityDocumentCard
+                                        val url = PrivateFileUrl.build(NetworkModule.BASE_URL, filePath)
+                                            ?: return@IdentityDocumentCard
 
-                        // PAN Section
-                        IdentitySection(
-                            title = "PAN Information",
-                            icon = Icons.Default.CreditCard,
-                            number = panNumber,
-                            numberLabel = "PAN Number"
-                        )
+                                        downloadingDocId = doc.id
+                                        downloadError = null
 
-                        Spacer(Modifier.height(32.dp))
+                                        scope.launch {
+                                            try {
+                                                val bytes = withContext(Dispatchers.IO) {
+                                                    val req = okhttp3.Request.Builder().url(url).build()
+                                                    NetworkModule.okHttp.newCall(req).execute().use { response ->
+                                                        if (!response.isSuccessful) error("HTTP ${response.code}")
+                                                        response.body?.bytes() ?: error("Empty response")
+                                                    }
+                                                }
+                                                val ext = when {
+                                                    doc.file_type != null -> ".${doc.file_type.lowercase()}"
+                                                    filePath.contains('.') -> ".${filePath.substringAfterLast('.')}"
+                                                    else -> ".pdf"
+                                                }
+                                                val tmp = File(context.cacheDir, "doc_${doc.category_system_code ?: "file"}$ext")
+                                                tmp.writeBytes(bytes)
+                                                val uri = FileProvider.getUriForFile(
+                                                    context,
+                                                    "${context.packageName}.provider",
+                                                    tmp
+                                                )
+                                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                    setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                context.startActivity(Intent.createChooser(intent, "Open document"))
+                                            } catch (e: Exception) {
+                                                downloadError = "Failed to open document: ${e.message}"
+                                            } finally {
+                                                downloadingDocId = null
+                                            }
+                                        }
+                                    }
+                                )
+                                Spacer(Modifier.height(12.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -197,58 +241,106 @@ fun ViewEmploymentIdentityScreen(
     }
 }
 
-/**
- * Reusable component for displaying identity section (Aadhaar or PAN)
- */
 @Composable
-private fun IdentitySection(
-    title: String,
-    icon: ImageVector,
-    number: String,
-    numberLabel: String
+private fun IdentityDocumentCard(
+    doc: IdentityDocument,
+    isDownloading: Boolean,
+    onViewDocument: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Section Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
-                    imageVector = icon,
+                    imageVector = Icons.Default.Description,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    text = title,
+                    text = doc.category_name ?: doc.category_system_code ?: "Document",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
+                doc.verification_status?.let { status ->
+                    val (bg, fg) = when (status.uppercase()) {
+                        "VERIFIED" -> Color(0xFF10B981) to Color.White
+                        "PENDING" -> Color(0xFFF59E0B) to Color.White
+                        "REJECTED" -> Color(0xFFEF4444) to Color.White
+                        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = bg
+                    ) {
+                        Text(
+                            text = status,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = fg
+                        )
+                    }
+                }
             }
 
-            Divider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(16.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
-            InfoRow(label = numberLabel, value = number.ifEmpty { "Not Available" })
+            if (!doc.document_number.isNullOrBlank()) {
+                DocInfoRow(label = "Document Number", value = doc.document_number)
+                Spacer(Modifier.height(8.dp))
+            }
+            if (!doc.issue_date.isNullOrBlank()) {
+                DocInfoRow(label = "Issue Date", value = doc.issue_date)
+                Spacer(Modifier.height(8.dp))
+            }
+            if (!doc.expiry_date.isNullOrBlank()) {
+                DocInfoRow(label = "Expiry Date", value = doc.expiry_date)
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (doc.file_path != null) {
+                Spacer(Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = onViewDocument,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    enabled = !isDownloading
+                ) {
+                    if (isDownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Opening...")
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("View Document", fontSize = 14.sp)
+                    }
+                }
+            }
         }
     }
 }
 
-/**
- * Info Row Component
- */
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun DocInfoRow(label: String, value: String) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = label,
@@ -256,7 +348,7 @@ private fun InfoRow(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Medium
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             text = value,
             fontSize = 14.sp,
@@ -265,4 +357,3 @@ private fun InfoRow(label: String, value: String) {
         )
     }
 }
-

@@ -303,7 +303,8 @@ class AuthRepository(
                             data?.name?.let { pm.userName = it }
                             data?.mobile_number?.let { pm.mobileNumber = it }
                             data?.full_name?.let { pm.fullName = it }
-                            data?.profile_url?.let { pm.profileUrl = it }
+                            data?.gender?.let { pm.gender = it }
+                            data?.profile_picture_path?.let { pm.profileUrl = it }
                             data?.branch_name?.let { pm.branchName = it }
                             data?.department_name?.let { pm.departmentName = it }
                             data?.shift_name?.let { pm.shiftName = it }
@@ -319,7 +320,7 @@ class AuthRepository(
                             data?.company_email?.let { pm.companyEmail = it }
                             data?.company_contact?.let { pm.companyContact = it }
                             data?.company_website?.let { pm.companyWebsite = it }
-                            data?.company_logo_url?.let { pm.companyLogoUrl = it }
+                            data?.company_logo_path?.let { pm.companyLogoUrl = it }
                             // Support info
                             data?.hr_email?.let { pm.hrEmail = it }
                             data?.technical_support_number?.let { pm.technicalSupportNumber = it }
@@ -569,7 +570,8 @@ class AuthRepository(
             data?.name?.let { pm.userName = it }
             data?.mobile_number?.let { pm.mobileNumber = it }
             data?.full_name?.let { pm.fullName = it }
-            data?.profile_url?.let { pm.profileUrl = it }
+            data?.gender?.let { pm.gender = it }
+            data?.profile_picture_path?.let { pm.profileUrl = it }
             data?.branch_name?.let { pm.branchName = it }
             data?.department_name?.let { pm.departmentName = it }
             data?.shift_name?.let { pm.shiftName = it }
@@ -587,7 +589,7 @@ class AuthRepository(
             data?.company_email?.let { pm.companyEmail = it }
             data?.company_contact?.let { pm.companyContact = it }
             data?.company_website?.let { pm.companyWebsite = it }
-            data?.company_logo_url?.let { pm.companyLogoUrl = it }
+            data?.company_logo_path?.let { pm.companyLogoUrl = it }
 
             // Save support info
             data?.hr_email?.let { pm.hrEmail = it }

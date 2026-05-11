@@ -159,6 +159,7 @@ fun HomePage(
                 companyName = prefs.companyName,
                 userName = prefs.userName,
                 profileUrl = prefs.profileUrl,
+                gender = prefs.gender,
                 isRefreshing = ui.isRefreshing,
                 onRefreshClick = { vm.refreshStatus(force = true) },
                 onNotificationClick = {
@@ -326,9 +327,13 @@ fun HomePage(
     // Work Report Bottom Sheet
     if (ui.showWorkReportDialog) {
         WorkReportBottomSheet(
+            questionSet = ui.checkOutWorkReportQuestionSet,
+            priorityOptions = ui.checkOutPriorityOptions,
+            isEarly = ui.checkOutIsEarly,
+            isOutOfRange = ui.checkOutIsOutOfRange,
             onDismiss = { vm.onWorkReportDialogDismissed(context) },
-            onSubmit = { workReport, fileUri ->
-                vm.onWorkReportSubmitted(workReport, fileUri, context)
+            onSubmit = { workReport, fileUri, priority, answers ->
+                vm.onWorkReportSubmitted(workReport, fileUri, priority, answers, context)
             }
         )
     }

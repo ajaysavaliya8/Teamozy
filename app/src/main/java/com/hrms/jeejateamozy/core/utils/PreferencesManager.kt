@@ -45,6 +45,10 @@ class PreferencesManager private constructor(context: Context) {
         get() = prefs.getString(KEY_PROFILE_URL, null)
         set(value) = prefs.edit().putString(KEY_PROFILE_URL, value).apply()
 
+    var gender: String?
+        get() = prefs.getString(KEY_GENDER, null)
+        set(value) = prefs.edit().putString(KEY_GENDER, value).apply()
+
     var branchName: String?
         get() = prefs.getString(KEY_BRANCH_NAME, null)
         set(value) = prefs.edit().putString(KEY_BRANCH_NAME, value).apply()
@@ -216,6 +220,7 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_MOBILE_NUMBER = "mobile_number"
         private const val KEY_FULL_NAME = "full_name"
         private const val KEY_PROFILE_URL = "profile_url"
+        private const val KEY_GENDER = "gender"
         private const val KEY_BRANCH_NAME = "branch_name"
         private const val KEY_DEPARTMENT_NAME = "department_name"
         private const val KEY_SHIFT_NAME = "shift_name"

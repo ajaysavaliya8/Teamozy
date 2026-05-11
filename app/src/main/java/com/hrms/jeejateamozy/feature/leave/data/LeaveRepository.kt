@@ -18,7 +18,7 @@ import java.io.File
 // =============================================================================
 
 sealed class LeaveTypesOutcome {
-    data class Success(val leaveTypes: List<LeaveType>) : LeaveTypesOutcome()
+    data class Success(val leaveTypes: List<LeaveType>, val message: String = "") : LeaveTypesOutcome()
     data class Error(val message: String) : LeaveTypesOutcome()
 }
 
@@ -81,10 +81,10 @@ class LeaveRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         val leaveTypes = responseBody.data.map { it.toDomain() }
                         Log.d(TAG, "Successfully fetched ${leaveTypes.size} leave types")
-                        LeaveTypesOutcome.Success(leaveTypes = leaveTypes)
+                        LeaveTypesOutcome.Success(leaveTypes = leaveTypes, message = responseBody.message ?: "")
                     } else {
                         LeaveTypesOutcome.Error("Failed to fetch leave types")
                     }
@@ -118,6 +118,10 @@ class LeaveRepository(private val context: Context) {
         startDate: String,
         endDate: String,
         leaveReason: String,
+        isFirstDayHalf: Boolean = false,
+        firstDayHalfType: String? = null,
+        isLastDayHalf: Boolean = false,
+        lastDayHalfType: String? = null,
         alternateContact: String?,
         emergencyContact: String?,
         taskDependedOnYou: Boolean,
@@ -129,19 +133,22 @@ class LeaveRepository(private val context: Context) {
         return@withContext try {
             Log.d(TAG, "Applying for leave: type=$leaveTypeId, dates=$startDate to $endDate, priority=$priority")
 
-            // Create request bodies
-            val leaveTypeIdBody = leaveTypeId.toString().toRequestBody("text/plain".toMediaTypeOrNull())
-            val startDateBody = startDate.toRequestBody("text/plain".toMediaTypeOrNull())
-            val endDateBody = endDate.toRequestBody("text/plain".toMediaTypeOrNull())
-            val leaveReasonBody = leaveReason.toRequestBody("text/plain".toMediaTypeOrNull())
-            val alternateContactBody = alternateContact?.toRequestBody("text/plain".toMediaTypeOrNull())
-            val emergencyContactBody = emergencyContact?.toRequestBody("text/plain".toMediaTypeOrNull())
-            val taskDependedOnYouBody = taskDependedOnYou.toString().toRequestBody("text/plain".toMediaTypeOrNull())
-            val dependencyHandledByBody = dependencyHandledBy?.toRequestBody("text/plain".toMediaTypeOrNull())
-            val handoverNotesBody = handoverNotes?.toRequestBody("text/plain".toMediaTypeOrNull())
-            val priorityBody = priority.toRequestBody("text/plain".toMediaTypeOrNull())
+            val plain = "text/plain".toMediaTypeOrNull()
+            val leaveTypeIdBody = leaveTypeId.toString().toRequestBody(plain)
+            val startDateBody = startDate.toRequestBody(plain)
+            val endDateBody = endDate.toRequestBody(plain)
+            val leaveReasonBody = leaveReason.toRequestBody(plain)
+            val isFirstDayHalfBody = if (isFirstDayHalf) "true".toRequestBody(plain) else null
+            val firstDayHalfTypeBody = firstDayHalfType?.toRequestBody(plain)
+            val isLastDayHalfBody = if (isLastDayHalf) "true".toRequestBody(plain) else null
+            val lastDayHalfTypeBody = lastDayHalfType?.toRequestBody(plain)
+            val alternateContactBody = alternateContact?.toRequestBody(plain)
+            val emergencyContactBody = emergencyContact?.toRequestBody(plain)
+            val taskDependedOnYouBody = taskDependedOnYou.toString().toRequestBody(plain)
+            val dependencyHandledByBody = dependencyHandledBy?.toRequestBody(plain)
+            val handoverNotesBody = handoverNotes?.toRequestBody(plain)
+            val priorityBody = priority.toRequestBody(plain)
 
-            // Create multipart file if provided
             val filePart = supportingDocumentFile?.let {
                 val requestFile = it.asRequestBody("application/octet-stream".toMediaTypeOrNull())
                 MultipartBody.Part.createFormData("supporting_document", it.name, requestFile)
@@ -152,6 +159,10 @@ class LeaveRepository(private val context: Context) {
                 startDate = startDateBody,
                 endDate = endDateBody,
                 leaveReason = leaveReasonBody,
+                isFirstDayHalf = isFirstDayHalfBody,
+                firstDayHalfType = firstDayHalfTypeBody,
+                isLastDayHalf = isLastDayHalfBody,
+                lastDayHalfType = lastDayHalfTypeBody,
                 alternateContact = alternateContactBody,
                 emergencyContact = emergencyContactBody,
                 taskDependedOnYou = taskDependedOnYouBody,
@@ -166,7 +177,7 @@ class LeaveRepository(private val context: Context) {
             when {
                 response.isSuccessful && (response.code() == 201 || response.code() == 200) -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d(TAG, "Leave applied successfully")
                         ApplyLeaveOutcome.Success(message = responseBody.message)
                     } else {
@@ -226,11 +237,16 @@ class LeaveRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
-                        Log.d(TAG, "Successfully fetched ${responseBody.data.applications.size} applications")
+                    if (responseBody?.success == true) {
+                        val applications = responseBody.data.map { it.toDomain() }
+                        Log.d(TAG, "Successfully fetched ${applications.size} applications")
 
-                        val applications = responseBody.data.applications.map { it.toDomain() }
-                        val pagination = responseBody.data.pagination.toDomain()
+                        val pagination = PaginationInfo(
+                            currentPage = responseBody.page,
+                            pageSize = responseBody.limit,
+                            totalCount = responseBody.total,
+                            totalPages = responseBody.total_pages
+                        )
 
                         LeaveApplicationsOutcome.Success(
                             applications = applications,
@@ -277,7 +293,7 @@ class LeaveRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d(TAG, "Successfully fetched leave application detail")
                         LeaveApplicationDetailOutcome.Success(detail = responseBody.data.toDomain())
                     } else {
@@ -317,7 +333,7 @@ class LeaveRepository(private val context: Context) {
 
             val response = api.withdrawLeave(
                 applicationId = applicationId,
-                withdrawalReason = withdrawalReason
+                body = WithdrawLeaveRequest(withdrawalReason)
             )
 
             Log.d(TAG, "Withdraw leave response code: ${response.code()}")
@@ -325,7 +341,7 @@ class LeaveRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d(TAG, "Leave withdrawn successfully")
                         WithdrawLeaveOutcome.Success(message = responseBody.message)
                     } else {
@@ -370,7 +386,7 @@ class LeaveRepository(private val context: Context) {
 
             val response = api.cancelLeave(
                 applicationId = applicationId,
-                cancellationReason = cancellationReason
+                body = CancelLeaveRequest(cancellationReason)
             )
 
             Log.d(TAG, "Cancel leave response code: ${response.code()}")
@@ -378,7 +394,7 @@ class LeaveRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d(TAG, "Leave cancelled successfully")
                         CancelLeaveOutcome.Success(message = responseBody.message)
                     } else {
@@ -425,7 +441,7 @@ class LeaveRepository(private val context: Context) {
             when {
                 response.isSuccessful && response.code() == 200 -> {
                     val responseBody = response.body()
-                    if (responseBody?.status == "success") {
+                    if (responseBody?.success == true) {
                         Log.d(TAG, "Successfully fetched leave summary")
                         val summary = responseBody.data.toDomain()
                         LeaveSummaryOutcome.Success(summary = summary)

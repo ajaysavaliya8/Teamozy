@@ -19,7 +19,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.hrms.jeejateamozy.core.image.CoilImageLoader
+import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
+import com.hrms.jeejateamozy.core.utils.PrivateFileUrl
 import com.hrms.jeejateamozy.feature.profile.presentation.utils.openUrl
 
 /**
@@ -63,10 +65,11 @@ fun CompanyCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Company Logo
-                    if (!prefs.companyLogoUrl.isNullOrBlank()) {
+                    val logoUrl = PrivateFileUrl.build(NetworkModule.BASE_URL, prefs.companyLogoUrl)
+                    if (logoUrl != null) {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(prefs.companyLogoUrl)
+                                .data(logoUrl)
                                 .crossfade(true)
                                 .build(),
                             imageLoader = CoilImageLoader.get(context),

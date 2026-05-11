@@ -24,7 +24,9 @@ data class PersonalInfoData(
     val mother_name: String?,
     val no_of_children: Int?,
     val languages: List<String>?,
-    val profile_picture_url: String?
+    val profile_picture_path: String?,
+    val date_of_marriage: String? = null,
+    val bio: String? = null
 )
 
 /**
