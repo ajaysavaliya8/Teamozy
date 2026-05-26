@@ -91,7 +91,9 @@ class AttendanceViewModel(
 
     private fun startLocationPrefetch(context: Context) {
         locationRefiner?.stop()
-        locationRefiner = LiveLocationRefiner(context).also { it.start() }
+        // applicationContext: the refiner can outlive the Activity (config change / backgrounding),
+        // so never hold an Activity reference in it.
+        locationRefiner = LiveLocationRefiner(context.applicationContext).also { it.start() }
     }
 
     private fun cancelLocationPrefetch() {
@@ -977,6 +979,7 @@ class AttendanceViewModel(
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Check-in error", e)
+                cancelLocationPrefetch()
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     loadingMessage = null
@@ -1060,6 +1063,7 @@ class AttendanceViewModel(
                                     isLoading = false,
                                     loadingMessage = null
                                 )
+                                cancelLocationPrefetch()
                                 emitError("Network error. Please check your connection and try again.")
                                 return@launch
                             }
@@ -1203,6 +1207,7 @@ class AttendanceViewModel(
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Check-out error", e)
+                cancelLocationPrefetch()
                 _ui.value = _ui.value.copy(
                     isLoading = false,
                     loadingMessage = null
@@ -1302,6 +1307,10 @@ class AttendanceViewModel(
         geoReverifyJob?.cancel(); geoReverifyJob = null
         geoStatusJob?.cancel(); geoStatusJob = null
         geofenceStream?.stop()
+        // Also stop the commit-location refiner: once the screen is hidden (ON_PAUSE) or the user
+        // leaves Home, the punch is no longer foreground — don't keep sampling GPS in the background.
+        // (At a committed punch this runs after finish() already nulled the refiner, so it's a no-op.)
+        cancelLocationPrefetch()
         // Clear the live label so a stale "In range ✓" doesn't linger after a commit / pause.
         _ui.value = _ui.value.copy(geoStatus = GeoStatus.Disabled)
     }

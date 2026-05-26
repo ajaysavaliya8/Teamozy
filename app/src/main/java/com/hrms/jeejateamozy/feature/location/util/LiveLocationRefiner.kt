@@ -12,6 +12,8 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Continuously samples high-accuracy GPS for the duration of a punch (check-in/out) and holds the
@@ -33,6 +35,9 @@ class LiveLocationRefiner(private val context: Context) {
     }
     private val helper by lazy { LiveLocationHelper(context) }
 
+    // best/callback are only ever touched on the main looper (the LocationCallback is delivered on
+    // Looper.getMainLooper(); start()/stop()/finish() are called from the ViewModel's Main scope),
+    // so @Volatile covers the cross-read in finish() without needing further synchronization.
     @Volatile private var best: Location? = null
     private var callback: LocationCallback? = null
 
@@ -81,7 +86,8 @@ class LiveLocationRefiner(private val context: Context) {
         val b = best
         return if (b != null) {
             Log.d(TAG, "📍 Refiner finishing with best acc=${b.accuracy}m")
-            helper.buildResult(b)
+            // buildResult does synchronous binder I/O (battery/wifi/network) — keep it off Main.
+            withContext(Dispatchers.IO) { helper.buildResult(b) }
         } else {
             Log.w(TAG, "📍 Refiner had no fix — falling back to one-shot capture")
             helper.captureLiveLocation()
