@@ -91,53 +91,63 @@ class LiveLocationHelper(private val context: Context) {
                 Log.w(TAG, "⚠️ Best accuracy=${location.accuracy}m exceeds ${MAX_ACCURACY_METERS}m limit")
             }
 
-            // Check for mock/fake GPS
-            val isMocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                location.isMock
-            } else {
-                @Suppress("DEPRECATION")
-                location.isFromMockProvider
-            }
-            if (isMocked) {
-                Log.e(TAG, "🚫 Mock location detected!")
-                return LiveLocationResult.Error("Fake GPS detected. Please disable mock location apps.")
-            }
-
-            // Collect all device metadata (with safe handling for missing permissions)
-            val deviceId = getDeviceId()
-            val appVersion = BuildConfig.VERSION_NAME
-            val batteryLevel = getBatteryLevel()
-            val networkType = getNetworkType()
-            val wifiInfo = getWifiInfoSafe()  // Safe version
-            val recordedAt = getCurrentISOTimestamp()
-
-            val locationData = LocationData(
-                recordedAt = recordedAt,
-                latitude = location.latitude,
-                longitude = location.longitude,
-                locationAccuracy = location.accuracy,
-                altitude = if (location.hasAltitude()) location.altitude else null,
-                verticalAccuracy = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasVerticalAccuracy()) {
-                    location.verticalAccuracyMeters
-                } else null,
-                speed = if (location.hasSpeed()) location.speed else null,
-                heading = if (location.hasBearing()) location.bearing else null,
-                deviceId = deviceId,
-                appVersion = appVersion,
-                networkType = networkType,
-                wifiName = wifiInfo.first,
-                wifiMacAddress = wifiInfo.second,
-                batteryLevel = batteryLevel,
-                geofenceId = null // Will be determined by server
-            )
-
-            Log.d(TAG, "✅ Live location captured: lat=${location.latitude}, lng=${location.longitude}, accuracy=${location.accuracy}m")
-            LiveLocationResult.Success(locationData)
+            buildResult(location)
 
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error capturing location", e)
             LiveLocationResult.Error(e.message ?: "Failed to capture location")
         }
+    }
+
+    /**
+     * Build the committed [LiveLocationResult] from an already-chosen [location]: mock-check, then
+     * collect device metadata at this moment, then assemble [LocationData]. Shared by the one-shot
+     * [captureLiveLocation] and the continuous [LiveLocationRefiner] so both produce an identical
+     * payload shape. Returns an Error if the fix is from a mock provider.
+     */
+    fun buildResult(location: Location): LiveLocationResult {
+        // Check for mock/fake GPS
+        val isMocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            location.isMock
+        } else {
+            @Suppress("DEPRECATION")
+            location.isFromMockProvider
+        }
+        if (isMocked) {
+            Log.e(TAG, "🚫 Mock location detected!")
+            return LiveLocationResult.Error("Fake GPS detected. Please disable mock location apps.")
+        }
+
+        // Collect all device metadata (with safe handling for missing permissions)
+        val deviceId = getDeviceId()
+        val appVersion = BuildConfig.VERSION_NAME
+        val batteryLevel = getBatteryLevel()
+        val networkType = getNetworkType()
+        val wifiInfo = getWifiInfoSafe()  // Safe version
+        val recordedAt = getCurrentISOTimestamp()
+
+        val locationData = LocationData(
+            recordedAt = recordedAt,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            locationAccuracy = location.accuracy,
+            altitude = if (location.hasAltitude()) location.altitude else null,
+            verticalAccuracy = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasVerticalAccuracy()) {
+                location.verticalAccuracyMeters
+            } else null,
+            speed = if (location.hasSpeed()) location.speed else null,
+            heading = if (location.hasBearing()) location.bearing else null,
+            deviceId = deviceId,
+            appVersion = appVersion,
+            networkType = networkType,
+            wifiName = wifiInfo.first,
+            wifiMacAddress = wifiInfo.second,
+            batteryLevel = batteryLevel,
+            geofenceId = null // Will be determined by server
+        )
+
+        Log.d(TAG, "✅ Live location captured: lat=${location.latitude}, lng=${location.longitude}, accuracy=${location.accuracy}m")
+        return LiveLocationResult.Success(locationData)
     }
 
     @SuppressLint("MissingPermission")
