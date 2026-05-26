@@ -10,6 +10,19 @@ import com.hrms.jeejateamozy.core.network.PendingMessage
 import com.hrms.jeejateamozy.core.network.WorkReportQuestionSet
 import com.hrms.jeejateamozy.core.utils.LocationHelper
 import com.hrms.jeejateamozy.core.utils.LocationResult
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Location
+import android.os.Build
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.hrms.jeejateamozy.feature.attendance.domain.geofence.Geofence
+import com.hrms.jeejateamozy.feature.attendance.domain.geofence.GeoStatus
+import com.hrms.jeejateamozy.feature.attendance.domain.geofence.GeoStatusEval
+import com.hrms.jeejateamozy.feature.attendance.domain.geofence.GeofenceCalc
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceOutcome
 import com.hrms.jeejateamozy.feature.attendance.data.AttendanceRepository
 import com.hrms.jeejateamozy.feature.attendance.data.CheckInOutcome
@@ -25,9 +38,8 @@ import com.hrms.jeejateamozy.feature.location.keepalive.TrackingAlarmReceiver
 import com.hrms.jeejateamozy.feature.location.keepalive.BatteryOptimizationHelper
 import com.hrms.jeejateamozy.feature.location.heartbeat.TrackingStateManager
 import com.hrms.jeejateamozy.feature.location.util.LiveLocationHelper
+import com.hrms.jeejateamozy.feature.location.util.LiveLocationRefiner
 import com.hrms.jeejateamozy.feature.location.util.LiveLocationResult
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,10 +62,20 @@ class AttendanceViewModel(
 
     companion object {
         private const val TAG = "AttendanceViewModel"
+
+        // Geofence "good enough" bar for the punch fix — NOT the 15 m tracking bar.
+        private const val PUNCH_ACCEPT_M = 30f
+        // How long a cold tap waits for the stream to sharpen before taking its best.
+        private const val PUNCH_WAIT_CAP_MS = 2500L
     }
 
     // Inject LocationRepository via Koin
     private val locationRepository: LocationRepository by inject()
+
+    // ---- Geofence live stream (foreground-only; screen-scoped) ----
+    private var geofenceStream: GeofenceLocationStream? = null
+    private var geoStatusJob: Job? = null
+    private var geoReverifyJob: Job? = null
 
     private val _ui = MutableStateFlow(AttendanceUiState())
     val ui: StateFlow<AttendanceUiState> = _ui.asStateFlow()
@@ -63,19 +85,18 @@ class AttendanceViewModel(
 
     private var hasLoadedInitialStatus = false
 
-    // Pre-fetch live location during face verification so it's ready instantly after
-    private var prefetchedLiveLocation: Deferred<LiveLocationResult>? = null
+    // Continuously refine the committed punch location from punch-start to commit (holds the best
+    // fix). Started at face verification, finished at commit. See LiveLocationRefiner.
+    private var locationRefiner: LiveLocationRefiner? = null
 
     private fun startLocationPrefetch(context: Context) {
-        prefetchedLiveLocation?.cancel()
-        prefetchedLiveLocation = viewModelScope.async {
-            LiveLocationHelper(context).captureLiveLocation()
-        }
+        locationRefiner?.stop()
+        locationRefiner = LiveLocationRefiner(context).also { it.start() }
     }
 
     private fun cancelLocationPrefetch() {
-        prefetchedLiveLocation?.cancel()
-        prefetchedLiveLocation = null
+        locationRefiner?.stop()
+        locationRefiner = null
     }
 
     private fun emitError(message: String) {
@@ -132,6 +153,7 @@ class AttendanceViewModel(
                         attendanceStatus = outcome.attendanceStatus,
                         isComplete = outcome.isComplete,
                         checkOutTime = outcome.checkOutTime,
+                        geofence = outcome.geofence,
                         checkInTToken = null,
                         checkOutTToken = null,
                         showFaceVerification = false,
@@ -214,7 +236,7 @@ class AttendanceViewModel(
         viewModelScope.launch {
             _ui.value = _ui.value.copy(isLoading = true, loadingMessage = "Location fetching...")
 
-            when (val locResult = LocationHelper(context).getCurrentLocation()) {
+            when (val locResult = punchFix(context)) {
                 is LocationResult.Success -> {
                     if (locResult.isMocked) {
                         _ui.value = _ui.value.copy(isLoading = false, loadingMessage = null)
@@ -301,13 +323,17 @@ class AttendanceViewModel(
                 emitError(outcome.message)
             }
         }
+
+        // If the server flagged out-of-range, let the live stream silently re-verify
+        // when the user walks into range during the gather phase.
+        maybeStartAutoReverify(context)
     }
 
     fun startCheckOut(context: Context) {
         viewModelScope.launch {
             _ui.value = _ui.value.copy(isLoading = true, loadingMessage = "Location fetching...")
 
-            when (val locResult = LocationHelper(context).getCurrentLocation()) {
+            when (val locResult = punchFix(context)) {
                 is LocationResult.Success -> {
                     if (locResult.isMocked) {
                         _ui.value = _ui.value.copy(isLoading = false, loadingMessage = null)
@@ -403,6 +429,10 @@ class AttendanceViewModel(
                 emitError(outcome.message)
             }
         }
+
+        // If the server flagged out-of-range, let the live stream silently re-verify
+        // when the user walks into range during the gather phase.
+        maybeStartAutoReverify(context)
     }
 
     fun onPendingMessageAcknowledged(acknowledgmentNote: String?, context: Context) {
@@ -629,7 +659,7 @@ class AttendanceViewModel(
                     }
                     when (val outcome = repo.locationReverify(tToken, locResult.latitude, locResult.longitude, isCheckOut = !isCheckIn)) {
                         is LocationReverifyOutcome.Success -> {
-                            Log.d(TAG, "✅ Location reverify success: ${outcome.message}")
+                            Log.d(TAG, "✅ Location reverify success: ${outcome.message} (outOfRange=${outcome.isOutOfRange})")
                             if (isCheckIn) {
                                 _ui.value = _ui.value.copy(
                                     isReverifying = false,
@@ -647,7 +677,17 @@ class AttendanceViewModel(
                                     checkOutOutOfRangeReasonRequired = outcome.isOutOfRange
                                 )
                             }
-                            emitSuccess(outcome.message)
+                            if (!outcome.isOutOfRange) {
+                                // Server confirmed the user is inside the zone — welcome them and
+                                // continue the flow automatically (commit or next required step).
+                                Log.d(TAG, "📍 Location confirmed in range — welcoming + advancing")
+                                emitSuccess("📍 You're at the location")
+                                advanceAfterLocationConfirmed(context)
+                            } else {
+                                // Still outside per the server — keep the details sheet open; the
+                                // auto-reverify watcher will retry on the next in-range fix.
+                                emitSuccess(outcome.message)
+                            }
                         }
                         is LocationReverifyOutcome.NotApplicable -> {
                             // Policy doesn't enforce geofence → clear the out-of-range flag
@@ -696,6 +736,42 @@ class AttendanceViewModel(
                         reverifyError = locResult.message
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * Continue the punch flow after a re-verify confirms the user is inside the zone. The
+     * out-of-range gate is already cleared in state, so: commit immediately if nothing else is
+     * required; otherwise advance to the next required step (a late/early reason stays in the
+     * details sheet for the user to fill; a work report opens its own sheet). The server stayed
+     * the authority — we only react to its confirmation.
+     */
+    private fun advanceAfterLocationConfirmed(context: Context) {
+        // Defense-in-depth: only auto-continue when the details (reason) sheet is the active step,
+        // i.e. pending-message + face verification are already done. If an earlier step is still
+        // showing, the reverify only cleared the out-of-range flag; the normal flow continues it.
+        if (!_ui.value.showReasonDialog) {
+            Log.d(TAG, "📍 Location confirmed, but details sheet not active — flag cleared, normal flow continues")
+            return
+        }
+        val isCheckIn = _ui.value.checkInTToken != null
+        if (isCheckIn) {
+            if (_ui.value.checkInLateReasonRequired) {
+                Log.d(TAG, "📍 Confirmed; late reason still required — keeping details sheet open")
+                return
+            }
+            completeCheckIn(null, null, context)
+        } else {
+            when {
+                _ui.value.checkOutEarlyReasonRequired -> {
+                    Log.d(TAG, "📍 Confirmed; early reason still required — keeping details sheet open")
+                }
+                _ui.value.checkOutWorkReportRequired -> {
+                    Log.d(TAG, "📍 Confirmed; advancing to work report")
+                    _ui.value = _ui.value.copy(showReasonDialog = false, showWorkReportDialog = true)
+                }
+                else -> completeCheckOut(null, null, null, null, context)
             }
         }
     }
@@ -766,9 +842,9 @@ class AttendanceViewModel(
                 _ui.value = _ui.value.copy(loadingMessage = "Capturing location...")
 
                 Log.d(TAG, "📍 Getting live location for check-in...")
-                val locationResult = prefetchedLiveLocation?.await()
+                val locationResult = locationRefiner?.finish()
                     ?: LiveLocationHelper(context).captureLiveLocation()
-                prefetchedLiveLocation = null
+                locationRefiner = null
 
                 var firstLocation: LocationData? = null
                 when (locationResult) {
@@ -849,6 +925,9 @@ class AttendanceViewModel(
                         )
 
                         emitSuccess(outcome.message)
+
+                        // Punch committed — the foreground geofence stream's job is done.
+                        stopGeofenceStream()
                     }
 
                     is SignatureOutcome.Conflict -> {
@@ -994,9 +1073,9 @@ class AttendanceViewModel(
                 _ui.value = _ui.value.copy(loadingMessage = "Capturing location...")
 
                 Log.d(TAG, "📍 Getting live location for check-out...")
-                val locationResult = prefetchedLiveLocation?.await()
+                val locationResult = locationRefiner?.finish()
                     ?: LiveLocationHelper(context).captureLiveLocation()
-                prefetchedLiveLocation = null
+                locationRefiner = null
 
                 var lastLocation: LocationData? = null
                 when (locationResult) {
@@ -1067,6 +1146,9 @@ class AttendanceViewModel(
 
                         emitSuccess(outcome.message)
                         outcome.workflowWarning?.let { emitSuccess(it) }
+
+                        // Punch committed — the foreground geofence stream's job is done.
+                        stopGeofenceStream()
 
                         // Refresh from server to get accurate state (supports multiple check-ins)
                         delay(500)
@@ -1156,6 +1238,178 @@ class AttendanceViewModel(
         )
     }
 
+    // ==========================================
+    // GEOFENCE LIVE STREAM (foreground-only)
+    // ==========================================
+
+    /**
+     * Start the continuous high-accuracy stream that powers the live in/out display and the
+     * fast punch fix. Call when the attendance screen becomes visible. Foreground-only —
+     * this is NOT the shift tracking service.
+     */
+    fun startGeofenceStream(context: Context) {
+        val appCtx = context.applicationContext
+
+        // Runtime permission may not be granted yet (the check-in button requests it on tap).
+        // Calling requestLocationUpdates without it throws SecurityException — guard first.
+        if (!hasLocationPermission(appCtx)) {
+            Log.d(TAG, "📍 Geofence stream: location permission not granted — not starting")
+            _ui.value = _ui.value.copy(geoStatus = GeoStatus.Disabled)
+            return
+        }
+
+        if (!LocationHelper(appCtx).isLocationEnabled()) {
+            Log.d(TAG, "📍 Geofence stream: GPS/location services off")
+            _ui.value = _ui.value.copy(geoStatus = GeoStatus.LocationOff)
+            return
+        }
+
+        if (geofenceStream == null) {
+            geofenceStream = GeofenceLocationStream(
+                LocationServices.getFusedLocationProviderClient(appCtx)
+            )
+        }
+        geofenceStream?.start()
+
+        // Map each fix → live GeoStatus (verdict only when the fix is decent).
+        if (geoStatusJob == null) {
+            geoStatusJob = viewModelScope.launch {
+                geofenceStream?.best?.collect { loc ->
+                    val newStatus = GeoStatusEval.derive(
+                        geofence = _ui.value.geofence,
+                        lat = loc?.latitude ?: 0.0,
+                        lng = loc?.longitude ?: 0.0,
+                        accuracyM = loc?.accuracy,
+                        hasFix = loc != null
+                    )
+                    // Update + log only on a real change (StateFlow would dedupe anyway).
+                    if (newStatus != _ui.value.geoStatus) {
+                        Log.d(TAG, "🧭 GeoStatus: ${_ui.value.geoStatus} → $newStatus")
+                        _ui.value = _ui.value.copy(geoStatus = newStatus)
+                    }
+                }
+            }
+        }
+    }
+
+    /** Stop the foreground stream + cancel its watchers. Call on screen-hidden / after commit. */
+    fun stopGeofenceStream() {
+        geoReverifyJob?.cancel(); geoReverifyJob = null
+        geoStatusJob?.cancel(); geoStatusJob = null
+        geofenceStream?.stop()
+        // Clear the live label so a stale "In range ✓" doesn't linger after a commit / pause.
+        _ui.value = _ui.value.copy(geoStatus = GeoStatus.Disabled)
+    }
+
+    /**
+     * Best-accuracy-but-fast fix for a punch: use the stream's already-converged fix if it's
+     * good (instant); else wait briefly for it to sharpen; else fall back to a one-shot fix
+     * (which also surfaces the GPS-off error with the existing messaging). Never returns 0,0.
+     */
+    private suspend fun punchFix(context: Context): LocationResult {
+        val s = geofenceStream
+        if (s != null) {
+            val warm = s.freshBest(5000L)?.takeIf { it.accuracy in 1f..PUNCH_ACCEPT_M }
+            val best = when {
+                warm != null -> {
+                    Log.d(TAG, "📍 punchFix: warm stream fix acc=${warm.accuracy}m (instant)")
+                    warm
+                }
+                else -> {
+                    val waited = withTimeoutOrNull(PUNCH_WAIT_CAP_MS) {
+                        s.best.first { it != null && it.accuracy in 1f..PUNCH_ACCEPT_M }
+                    }
+                    if (waited != null) {
+                        Log.d(TAG, "📍 punchFix: stream sharpened to acc=${waited.accuracy}m (waited)")
+                        waited
+                    } else {
+                        val fallbackBest = s.best.value
+                        if (fallbackBest != null) {
+                            Log.d(TAG, "📍 punchFix: wait cap hit, using best acc=${fallbackBest.accuracy}m")
+                        }
+                        fallbackBest
+                    }
+                }
+            }
+            if (best != null && !(best.latitude == 0.0 && best.longitude == 0.0)) {
+                return LocationResult.Success(
+                    latitude = best.latitude,
+                    longitude = best.longitude,
+                    accuracy = best.accuracy,
+                    isMocked = best.isFromMockProviderCompat()
+                )
+            }
+        }
+        // No usable stream fix yet (stream not started, GPS just enabled, etc.).
+        Log.d(TAG, "📍 punchFix: no usable stream fix → one-shot fallback")
+        return LocationHelper(context).getCurrentLocation()
+    }
+
+    /**
+     * If the server flagged out-of-range and a zone is enforced, watch the live stream and
+     * fire the existing reverify (which swaps in a refreshed t_token and clears the flag) the
+     * moment the local calc reads in-range. Self-cancels when the flag clears. A failed
+     * reverify ("still outside") keeps the watcher running to retry on a later fix.
+     */
+    private fun maybeStartAutoReverify(context: Context) {
+        if (geoReverifyJob != null) return
+        if (geofenceStream == null) return
+        if (!_ui.value.checkInIsOutOfRange && !_ui.value.checkOutIsOutOfRange) return
+        if (_ui.value.geofence?.enabled != true) return
+
+        Log.d(TAG, "🔁 Auto-reverify armed (server said out-of-range)")
+        geoReverifyJob = viewModelScope.launch {
+            val stream = geofenceStream ?: return@launch
+            // Edge-trigger: fire reverify once per genuine outside→inside transition, never every
+            // tick. This avoids a network/snackbar spin when the server keeps disagreeing with the
+            // local calc (Success/Error still out-of-range). A real re-entry arms the next attempt.
+            var armed = true
+            stream.best.collect { loc ->
+                val hasSession = _ui.value.checkInTToken != null || _ui.value.checkOutTToken != null
+                val stillOutOfRange = _ui.value.checkInIsOutOfRange || _ui.value.checkOutIsOutOfRange
+                // Stop when the gather session ends (committed / cancelled / stale token cleared)
+                // or the server-side out-of-range flag clears (reverify succeeded).
+                if (!hasSession || !stillOutOfRange) {
+                    Log.d(TAG, "🔁 Auto-reverify stopped (session ended or back in range)")
+                    geoReverifyJob?.cancel(); geoReverifyJob = null
+                    return@collect
+                }
+                if (loc == null || loc.accuracy > PUNCH_ACCEPT_M) return@collect
+                val g = _ui.value.geofence ?: return@collect
+                val inRange = GeofenceCalc.eval(loc.latitude, loc.longitude, g).inRange
+                if (!inRange) { armed = true; return@collect }     // left the zone → re-arm
+                if (!armed || _ui.value.isReverifying) return@collect
+                // Only auto-continue once the user is actually at the details (reason) step. If
+                // they're still at the pending-message / face stage, hold off — firing now would
+                // confirm+commit before those steps run. The watcher stays armed (armed=true is
+                // untouched) and fires the instant the details sheet becomes active.
+                if (!_ui.value.showReasonDialog) return@collect
+                armed = false
+                // Existing path: fetch fix → server reverify → token swap → clears flag on success.
+                Log.d(TAG, "🔁 Auto-reverify firing reverify (now in range locally)")
+                onLocationReverify(context)
+            }
+        }
+    }
+
+    private fun hasLocationPermission(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun Location.isFromMockProviderCompat(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            isMock
+        } else {
+            @Suppress("DEPRECATION") isFromMockProvider
+        }
+
+    override fun onCleared() {
+        stopGeofenceStream()
+        super.onCleared()
+    }
+
     fun canCheckIn(): Boolean = _ui.value.currentState == "CHECK_IN_NEEDED"
     fun canCheckOut(): Boolean = _ui.value.currentState == "CHECK_OUT_NEEDED"
     fun isComplete(): Boolean = _ui.value.isComplete == true
@@ -1211,5 +1465,9 @@ data class AttendanceUiState(
     val isReverifying: Boolean = false,
     val reverifyError: String? = null,
 
-    val checkOutTime: String? = null
+    val checkOutTime: String? = null,
+
+    // Live geofence display (display-only; server stays the authority)
+    val geofence: Geofence? = null,
+    val geoStatus: GeoStatus = GeoStatus.Disabled
 )
