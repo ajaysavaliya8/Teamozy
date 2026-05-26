@@ -55,9 +55,15 @@ class LiveLocationRefiner(private val context: Context) {
                 }
             }
         }
-        callback = cb
-        fused.requestLocationUpdates(req, cb, Looper.getMainLooper())
-        Log.d(TAG, "📍 Refiner started")
+        try {
+            fused.requestLocationUpdates(req, cb, Looper.getMainLooper())
+            callback = cb
+            Log.d(TAG, "📍 Refiner started")
+        } catch (e: SecurityException) {
+            // Location permission revoked between the punch button and here — leave the refiner
+            // inert; finish() will fall back to the one-shot capture (which surfaces the error).
+            Log.w(TAG, "📍 Refiner not started — location permission missing", e)
+        }
     }
 
     fun stop() {

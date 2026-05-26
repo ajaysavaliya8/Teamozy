@@ -717,6 +717,7 @@ class AttendanceViewModel(
                                 checkOutMessage = null,
                                 showReasonDialog = false
                             )
+                            cancelLocationPrefetch()
                             emitError(outcome.message)
                             delay(500)
                             refreshStatus(force = true, context = context)
@@ -777,12 +778,16 @@ class AttendanceViewModel(
     }
 
     fun onReasonDialogDismissed(context: Context? = null) {
+        // User abandoned the punch from the details sheet — stop refining the committed location.
+        cancelLocationPrefetch()
         // Re-warm GPS so the next attempt is fast
         context?.let { try { LocationHelper(it).warmUpGps() } catch (_: Exception) {} }
         _ui.value = _ui.value.copy(showReasonDialog = false)
     }
 
     fun onWorkReportDialogDismissed(context: Context? = null) {
+        // User abandoned the punch from the work-report sheet — stop refining the committed location.
+        cancelLocationPrefetch()
         // Re-warm GPS so the next attempt is fast
         context?.let { try { LocationHelper(it).warmUpGps() } catch (_: Exception) {} }
         _ui.value = _ui.value.copy(showWorkReportDialog = false)
@@ -1407,6 +1412,7 @@ class AttendanceViewModel(
 
     override fun onCleared() {
         stopGeofenceStream()
+        cancelLocationPrefetch()
         super.onCleared()
     }
 
