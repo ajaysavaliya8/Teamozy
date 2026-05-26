@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.feature.attendance.domain.geofence.GeoStatus
 
 /**
  * Reason Bottom Sheet Component
@@ -38,7 +39,8 @@ fun ReasonBottomSheet(
     onSubmit: (lateOrEarlyReason: String?, outOfRangeReason: String?) -> Unit,
     onLocationReverify: (() -> Unit)? = null,
     isReverifying: Boolean = false,
-    reverifyError: String? = null
+    reverifyError: String? = null,
+    geoStatus: GeoStatus = GeoStatus.Disabled
 ) {
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
@@ -168,6 +170,68 @@ fun ReasonBottomSheet(
                 Spacer(Modifier.height(12.dp))
             }
 
+            // Live distance to the required location (display-only; updates as GPS sharpens).
+            // This drives the auto re-verify: when the user walks into range the app verifies
+            // and continues automatically. The server stays the authority on the actual punch.
+            if (isOutOfRange) {
+                val distLabel: String?
+                val distColor: Color
+                when (geoStatus) {
+                    is GeoStatus.OutOfRange -> {
+                        distLabel = "You're about ${geoStatus.metres} m from the location"
+                        distColor = Color(0xFFF59E0B)
+                    }
+                    is GeoStatus.InRange -> {
+                        distLabel = "You're at the location ✓"
+                        distColor = Color(0xFF10B981)
+                    }
+                    is GeoStatus.Acquiring -> {
+                        distLabel = "Getting your accurate location…"
+                        distColor = Color(0xFF6B7280)
+                    }
+                    is GeoStatus.LocationOff -> {
+                        distLabel = "Turn on GPS to verify your location"
+                        distColor = Color(0xFFEF4444)
+                    }
+                    is GeoStatus.Disabled -> {
+                        distLabel = null
+                        distColor = Color.Unspecified
+                    }
+                }
+                if (distLabel != null) {
+                    // Spinner spins while we're still working (out-of-range / acquiring) so the
+                    // employee sees the app is live; it disappears the instant they're confirmed.
+                    val showSpinner = geoStatus is GeoStatus.OutOfRange || geoStatus is GeoStatus.Acquiring
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MyLocation,
+                            contentDescription = null,
+                            tint = distColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = distLabel,
+                            color = distColor,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (showSpinner) {
+                            Spacer(Modifier.width(8.dp))
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = distColor
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+
             // Re-verify Location button (only when out of range)
             if (isOutOfRange && onLocationReverify != null) {
                 OutlinedButton(
@@ -234,6 +298,24 @@ fun ReasonBottomSheet(
                     minLines = 3,
                     maxLines = 5
                 )
+
+                // Live distance attached to the out-of-range reason field (updates as GPS sharpens).
+                if (outOfRangeReasonRequired) {
+                    val fieldDistLabel: String? = when (val gs = geoStatus) {
+                        is GeoStatus.OutOfRange ->
+                            if (gs.metres <= 1) "Right at the edge of the area" else "${gs.metres} m away"
+                        is GeoStatus.InRange -> "You're at the location ✓"
+                        else -> null
+                    }
+                    if (fieldDistLabel != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = fieldDistLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
                 Spacer(Modifier.height(24.dp))
             } else {
