@@ -23,7 +23,8 @@ sealed class AttendanceOutcome {
         val lastCheckInTime: String?,
         val attendanceStatus: String?,
         val isComplete: Boolean?,
-        val checkOutTime: String? = null
+        val checkOutTime: String? = null,
+        val geofence: com.hrms.jeejateamozy.feature.attendance.domain.geofence.Geofence? = null
     ) : AttendanceOutcome()
 
     data class Error(val message: String) : AttendanceOutcome()
@@ -184,7 +185,8 @@ class AttendanceRepository(private val context: Context) {
                             lastCheckInTime = data.last_check_in_time,
                             attendanceStatus = data.attendance_status,
                             isComplete = data.is_complete,
-                            checkOutTime = data.check_out_time
+                            checkOutTime = data.check_out_time,
+                            geofence = data.geofence?.toDomain()
                         )
                     } else {
                         AttendanceOutcome.Error("Invalid response from server")

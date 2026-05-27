@@ -113,20 +113,29 @@ fun HomePage(
         }
     }
 
-    // Refresh status when app returns from background
+    // Refresh status when app returns from background; run the foreground geofence stream
+    // only while this screen is visible (live in/out display + fast, accurate punch fix).
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                Log.d(TAG, "🔄 App resumed - refreshing status")
-                vm.refreshStatus(force = false, context = context)
-                // Also refresh notification count for badge
-                scope.launch { notificationRepo.refreshUnreadCount() }
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    Log.d(TAG, "🔄 App resumed - refreshing status")
+                    vm.refreshStatus(force = false, context = context)
+                    vm.startGeofenceStream(context)
+                    // Also refresh notification count for badge
+                    scope.launch { notificationRepo.refreshUnreadCount() }
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    vm.stopGeofenceStream()
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            vm.stopGeofenceStream()
         }
     }
 
@@ -320,7 +329,8 @@ fun HomePage(
             },
             onLocationReverify = if (isOutOfRange) {{ vm.onLocationReverify(context) }} else null,
             isReverifying = ui.isReverifying,
-            reverifyError = ui.reverifyError
+            reverifyError = ui.reverifyError,
+            geoStatus = ui.geoStatus
         )
     }
 

@@ -119,7 +119,28 @@ data class CheckStatusData(
     val active_sessions_count: Int? = null,
     val last_check_in_time: String? = null,
     val attendance_date: String? = null,
-    val check_out_time: String? = null
+    val check_out_time: String? = null,
+    val geofence: GeofenceDto? = null
+)
+
+/**
+ * Work-zone geometry shipped inside `GET /check-status` → `data.geofence`.
+ * Snake_case to match the JSON (Gson identity naming, like the rest of this file).
+ * Mapped to the domain `Geofence` via `GeofenceDto.toDomain()` in the attendance feature.
+ */
+data class GeofenceDto(
+    val enabled: Boolean = false,
+    val type: String? = null,                              // "circle" | "polygon"
+    val tolerance_meters: Int = 0,
+    val center_latitude: Double? = null,
+    val center_longitude: Double? = null,
+    val radius_meters: Double? = null,
+    val polygon_coordinates: List<GeofencePointDto>? = null
+)
+
+data class GeofencePointDto(
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0
 )
 
 data class CheckInResponse(
