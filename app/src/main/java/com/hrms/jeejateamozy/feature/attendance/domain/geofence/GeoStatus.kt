@@ -10,7 +10,7 @@ sealed interface GeoStatus {
     /** Zone known, but no fix yet accurate enough to judge. */
     data object Acquiring : GeoStatus
 
-    /** Location services off / unavailable. */
+i want to     /** Location services off / unavailable. */
     data object LocationOff : GeoStatus
 
     /** Current fix is inside the zone (or within tolerance). */
