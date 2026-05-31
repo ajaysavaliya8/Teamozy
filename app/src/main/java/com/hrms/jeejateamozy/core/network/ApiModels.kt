@@ -776,7 +776,11 @@ data class WorkReportDto(
     // Tolerant: backend may send a JSONB array of {name, url, ...} objects or a
     // legacy JSON-serialized string of URLs. [normalizeAttachments] handles both.
     val attachments: Any? = null,
-    val report_status: String,
+    // Backend renamed `report_status` → `current_status`. Accept either so an old
+    // build doesn't NPE against a new server (or vice versa during a deploy window).
+    // Mirrors the same tolerance pattern used by LeaveApplicationDetailDto below.
+    val current_status: String? = null,
+    val report_status: String? = null,
     val branch_name: String?,
     val submitted_at: String?,
     val reviewed_at: String?,
@@ -786,21 +790,29 @@ data class WorkReportDto(
     val created_at: String,
     val updated_at: String
 ) {
-    fun toDomain() = WorkReport(
-        id = id,
-        reportDate = report_date,
-        workDescription = work_description,
-        attachments = normalizeAttachments(attachments),
-        reportStatus = report_status,
-        branchName = branch_name,
-        submittedAt = submitted_at,
-        reviewedAt = reviewed_at,
-        reviewedByName = reviewed_by_name,
-        reviewerComments = reviewer_comments,
-        rejectionReason = rejection_reason,
-        createdAt = created_at,
-        updatedAt = updated_at
-    )
+    fun toDomain(): WorkReport {
+        val resolvedStatus = current_status ?: report_status
+        if (resolvedStatus == null) {
+            // Surface backend regressions instead of defaulting to "PENDING" which would
+            // make an actually-REJECTED report silently render as pending review.
+            android.util.Log.w("WorkReportDto", "Report id=$id missing both current_status and report_status; rendering as UNKNOWN")
+        }
+        return WorkReport(
+            id = id,
+            reportDate = report_date,
+            workDescription = work_description,
+            attachments = normalizeAttachments(attachments),
+            reportStatus = resolvedStatus ?: "UNKNOWN",
+            branchName = branch_name,
+            submittedAt = submitted_at,
+            reviewedAt = reviewed_at,
+            reviewedByName = reviewed_by_name,
+            reviewerComments = reviewer_comments,
+            rejectionReason = rejection_reason,
+            createdAt = created_at,
+            updatedAt = updated_at
+        )
+    }
 }
 
 data class CreateWorkReportResponse(
@@ -814,7 +826,11 @@ data class CreatedWorkReportDto(
     val report_date: String,
     val work_description: String,
     val attachments_count: Int,
-    val report_status: String,
+    // Backend renamed `report_status` → `current_status`. Both nullable for safety;
+    // the repository only reads `id`, so this is a hygiene fix to prevent future NPE
+    // if any caller starts reading the status from the create response.
+    val current_status: String? = null,
+    val report_status: String? = null,
     val submitted_at: String,
     val reports_today: Int? = null,
     val remaining_reports_today: Int? = null

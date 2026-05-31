@@ -90,8 +90,26 @@ class LocationTrackingService : Service() {
         private const val SYNC_INTERVAL_MS = 300_000L         // 5 minutes
         private const val SYNC_THRESHOLD_COUNT = 50            // Sync when 50+ locations pending
 
-        // Accuracy filter - discard junk readings
-        private const val MAX_TRACKING_ACCURACY_METERS = 100f
+        // Accuracy filter — drop fixes the device admits are vague. 50 m balances clean input
+        // for OSRM map-matching against still letting indoor / factory-floor workers be tracked
+        // (Fused often reports 30–60 m accuracy through roofs and cold-start; 30 m caused
+        // long zero-fix gaps in those cases). Already much tighter than the legacy 100 m.
+        private const val MAX_TRACKING_ACCURACY_METERS = 50f
+
+        // Stationary dedupe — within this distance of the last kept fix counts as parked
+        // jitter (the cluster pattern that made admin map routes look like a star at the pin).
+        private const val STATIONARY_DISTANCE_METERS = 15.0
+
+        // Force a heartbeat fix at least every 5 min even while stationary, so admin dashboards
+        // still see the user is alive AND a slow-walking employee in tight quarters (lobby,
+        // store floor) isn't pinned to one spot forever when each step stays under the 15 m
+        // floor. Note: this is a lower-bound — if accuracy or other filters drop intervening
+        // fixes, the actual heartbeat gap can stretch past 5 min until a fix survives.
+        private const val STATIONARY_HEARTBEAT_SEC = 300.0
+
+        // Speed-outlier reject — implied speed from the last kept fix above this is a GPS
+        // teleport, not real movement. 50 m/s = 180 km/h, above any realistic transport mode.
+        private const val MAX_REALISTIC_SPEED_MPS = 50.0
 
         // GPS disabled check interval
         private const val GPS_CHECK_INTERVAL_MS = 30_000L     // Check every 30 seconds when GPS is disabled
@@ -169,6 +187,10 @@ class LocationTrackingService : Service() {
     private var geofenceId: Int? = null
     private var isTracking = false
     private var wakeLock: PowerManager.WakeLock? = null
+
+    // Last fix we chose to keep, for distance/speed-based filtering of the next incoming fix.
+    // Touched only on the main looper (locationCallback default), so no synchronization needed.
+    private var lastSavedLocation: android.location.Location? = null
 
     // ==========================================
     // SERVICE LIFECYCLE
@@ -442,12 +464,47 @@ class LocationTrackingService : Service() {
                 result.lastLocation?.let { location ->
                     Log.d(TAG, "📍 Location received: lat=${location.latitude}, lng=${location.longitude}, acc=${location.accuracy}m")
 
-                    // Discard junk readings with very poor accuracy
+                    // 1. Accuracy filter — drop vague fixes before they pollute the route.
                     if (location.accuracy > MAX_TRACKING_ACCURACY_METERS) {
                         Log.w(TAG, "⚠️ Discarding location: accuracy=${location.accuracy}m exceeds ${MAX_TRACKING_ACCURACY_METERS}m limit")
                         return
                     }
 
+                    // 2. Compare against the last fix we kept (if any).
+                    lastSavedLocation?.let { prev ->
+                        val dtSec = (location.elapsedRealtimeNanos - prev.elapsedRealtimeNanos) / 1_000_000_000.0
+
+                        // 2a. Defensive — Fused can replay an older cached fix; never persist one
+                        // that's not newer than the baseline (it would corrupt ordering).
+                        if (dtSec <= 0.0) {
+                            Log.d(TAG, "⏪ Discarding location: non-positive Δt=${"%.1f".format(dtSec)}s vs last kept fix (replay/cache)")
+                            return
+                        }
+
+                        val distM = location.distanceTo(prev).toDouble()
+
+                        // 2b. Stationary dedupe — within 15 m of last kept fix is parked jitter.
+                        // Force a heartbeat every 5 min so admins still see the user is alive and
+                        // a slow indoor walker isn't pinned to one spot for hours.
+                        if (distM < STATIONARY_DISTANCE_METERS && dtSec < STATIONARY_HEARTBEAT_SEC) {
+                            Log.d(TAG, "⏸️ Discarding location: stationary (Δ=${"%.1f".format(distM)}m, Δt=${"%.0f".format(dtSec)}s)")
+                            return
+                        }
+
+                        // 2c. Speed-outlier reject — implied speed > 50 m/s is a GPS teleport.
+                        // Sub-second Δt makes implied speed unstable (5 m in 100 ms = 50 m/s);
+                        // require ≥1 s of gap before trusting the ratio.
+                        if (dtSec >= 1.0) {
+                            val impliedMps = distM / dtSec
+                            if (impliedMps > MAX_REALISTIC_SPEED_MPS) {
+                                Log.w(TAG, "⚠️ Discarding location: implied speed=${"%.1f".format(impliedMps)} m/s exceeds ${MAX_REALISTIC_SPEED_MPS} m/s — GPS teleport")
+                                return
+                            }
+                        }
+                    }
+
+                    // 3. Passed all filters — remember this fix and persist.
+                    lastSavedLocation = location
                     serviceScope.launch {
                         saveLocation(location)
                     }
@@ -459,6 +516,20 @@ class LocationTrackingService : Service() {
     @SuppressLint("MissingPermission")
     private fun startLocationUpdates() {
         Log.d(TAG, "🔄 Starting location updates - interval=${LOCATION_INTERVAL_MS}ms")
+
+        // Remove any prior registration before re-requesting. Fused replaces same-callback
+        // registrations, but explicit removal avoids relying on that and is the documented
+        // pattern. Matters here because handleGpsEnabled() calls us on every GPS toggle.
+        try {
+            fusedLocationClient.removeLocationUpdates(locationCallback)
+        } catch (e: Exception) {
+            Log.w(TAG, "Pre-start removeLocationUpdates failed (likely first start)", e)
+        }
+
+        // Drop any stale baseline so the first fix of this session is always kept.
+        // (Called on fresh start AND after GPS-off → GPS-on, where the old fix is no longer
+        // a valid neighbour to compare distance against.)
+        lastSavedLocation = null
 
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
@@ -487,6 +558,9 @@ class LocationTrackingService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to stop location updates", e)
         }
+        // Defence-in-depth: drop the baseline on stop too, in case anything ever spawns a
+        // callback path that doesn't go through startLocationUpdates() (which also resets it).
+        lastSavedLocation = null
     }
 
     // ==========================================
