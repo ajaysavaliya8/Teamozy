@@ -44,6 +44,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.hrms.jeejateamozy.core.network.LeaveType
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -89,6 +91,12 @@ fun ApplyLeaveScreen(
     // Priority
     var selectedPriority by remember { mutableStateOf("normal") }
 
+    // Half-day fields
+    var isFirstDayHalf by remember { mutableStateOf(false) }
+    var firstDayHalfType by remember { mutableStateOf("FIRST_HALF") }
+    var isLastDayHalf by remember { mutableStateOf(false) }
+    var lastDayHalfType by remember { mutableStateOf("FIRST_HALF") }
+
     // ==========================================
     // UI State
     // ==========================================
@@ -118,6 +126,9 @@ fun ApplyLeaveScreen(
     var dateErrorMessage by remember { mutableStateOf("") }
     var reasonErrorMessage by remember { mutableStateOf("") }
 
+    // Server-side error dialog (shown for API/validation errors from backend)
+    var serverErrorDialogMessage by remember { mutableStateOf<String?>(null) }
+
     // ==========================================
     // Calculated Values
     // ==========================================
@@ -141,8 +152,33 @@ fun ApplyLeaveScreen(
         } else 0
     }
 
-    // Effective days is now same as numberOfDays (half-day removed from API)
-    val effectiveDays = numberOfDays.toDouble()
+    // Single-day = start and end are the same date
+    val isSingleDay = startDate != null && endDate != null && startDate == endDate
+
+    // Effective days = total - 0.5 per half toggle.
+    // Single-day half = 0.5; multi-day with both halves = total - 1.
+    val effectiveDays = remember(numberOfDays, isFirstDayHalf, isLastDayHalf, isSingleDay) {
+        when {
+            numberOfDays == 0 -> 0.0
+            isSingleDay -> if (isFirstDayHalf) 0.5 else 1.0
+            else -> numberOfDays.toDouble() -
+                    (if (isFirstDayHalf) 0.5 else 0.0) -
+                    (if (isLastDayHalf) 0.5 else 0.0)
+        }
+    }
+
+    // Reset half-day state when leave type doesn't allow it
+    LaunchedEffect(selectedLeaveType?.allowHalfDay) {
+        if (selectedLeaveType?.allowHalfDay != true) {
+            isFirstDayHalf = false
+            isLastDayHalf = false
+        }
+    }
+
+    // For single-day leave, the "last day" toggle is meaningless — clear it
+    LaunchedEffect(isSingleDay) {
+        if (isSingleDay) isLastDayHalf = false
+    }
 
     // ==========================================
     // File Picker
@@ -177,14 +213,8 @@ fun ApplyLeaveScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is LeaveEvent.ShowError -> {
-                    // Launch in separate coroutine to not block event collection
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = "❌ ${event.message}",
-                            duration = SnackbarDuration.Long,
-                            withDismissAction = true
-                        )
-                    }
+                    // Show iOS-style dialog instead of snackbar for server errors
+                    serverErrorDialogMessage = event.message
                 }
                 is LeaveEvent.ShowSuccess -> {
                     // Don't show snackbar here - will be shown on history screen
@@ -334,11 +364,21 @@ fun ApplyLeaveScreen(
         Log.d("LEAVE_SUBMIT", "  leaveReason: ${leaveReason.trim()}")
         Log.d("LEAVE_SUBMIT", "  priority: $selectedPriority")
 
+        // Half-day fields — only send when the leave type allows it.
+        // For single-day leave, backend rejects both halves, so only send first.
+        val typeAllowsHalf = selectedLeaveType!!.allowHalfDay
+        val sendFirstHalf = typeAllowsHalf && isFirstDayHalf
+        val sendLastHalf = typeAllowsHalf && !isSingleDay && isLastDayHalf
+
         viewModel.applyLeave(
             leaveTypeId = selectedLeaveType!!.id,
             startDate = startDate!!.format(dateFormatter),
             endDate = endDate!!.format(dateFormatter),
             leaveReason = leaveReason.trim(),
+            isFirstDayHalf = sendFirstHalf,
+            firstDayHalfType = if (sendFirstHalf) firstDayHalfType else null,
+            isLastDayHalf = sendLastHalf,
+            lastDayHalfType = if (sendLastHalf) lastDayHalfType else null,
             alternateContact = alternateContact.ifBlank { null },
             emergencyContact = emergencyContact.ifBlank { null },
             taskDependedOnYou = taskDependedOnYou,
@@ -426,6 +466,15 @@ fun ApplyLeaveScreen(
                         numberOfDays = numberOfDays,
                         workingDays = workingDays,
                         effectiveDays = effectiveDays,
+                        isSingleDay = isSingleDay,
+                        isFirstDayHalf = isFirstDayHalf,
+                        firstDayHalfType = firstDayHalfType,
+                        isLastDayHalf = isLastDayHalf,
+                        lastDayHalfType = lastDayHalfType,
+                        onFirstDayHalfChange = { isFirstDayHalf = it },
+                        onFirstDayHalfTypeChange = { firstDayHalfType = it },
+                        onLastDayHalfChange = { isLastDayHalf = it },
+                        onLastDayHalfTypeChange = { lastDayHalfType = it },
                         leaveReason = leaveReason,
                         alternateContact = alternateContact,
                         emergencyContact = emergencyContact,
@@ -618,6 +667,129 @@ fun ApplyLeaveScreen(
             )
         }
     }
+
+    // ==========================================
+    // Server Error Dialog (iOS-style)
+    // ==========================================
+    serverErrorDialogMessage?.let { message ->
+        LeaveErrorDialog(
+            message = message,
+            onDismiss = { serverErrorDialogMessage = null }
+        )
+    }
+}
+
+// ==========================================
+// HALF-DAY SELECTOR
+// ==========================================
+@Composable
+private fun HalfDaySelector(
+    isSingleDay: Boolean,
+    isFirstDayHalf: Boolean,
+    firstDayHalfType: String,
+    isLastDayHalf: Boolean,
+    lastDayHalfType: String,
+    onFirstDayHalfChange: (Boolean) -> Unit,
+    onFirstDayHalfTypeChange: (String) -> Unit,
+    onLastDayHalfChange: (Boolean) -> Unit,
+    onLastDayHalfTypeChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        HalfDayRow(
+            label = if (isSingleDay) "Half day" else "Half day on first day",
+            checked = isFirstDayHalf,
+            selectedType = firstDayHalfType,
+            onCheckedChange = onFirstDayHalfChange,
+            onTypeChange = onFirstDayHalfTypeChange
+        )
+
+        if (!isSingleDay) {
+            HalfDayRow(
+                label = "Half day on last day",
+                checked = isLastDayHalf,
+                selectedType = lastDayHalfType,
+                onCheckedChange = onLastDayHalfChange,
+                onTypeChange = onLastDayHalfTypeChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun HalfDayRow(
+    label: String,
+    checked: Boolean,
+    selectedType: String,
+    onCheckedChange: (Boolean) -> Unit,
+    onTypeChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
+            )
+        }
+
+        AnimatedVisibility(
+            visible = checked,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                HalfTypeChip(
+                    label = "First Half",
+                    selected = selectedType == "FIRST_HALF",
+                    modifier = Modifier.weight(1f),
+                    onClick = { onTypeChange("FIRST_HALF") }
+                )
+                HalfTypeChip(
+                    label = "Second Half",
+                    selected = selectedType == "SECOND_HALF",
+                    modifier = Modifier.weight(1f),
+                    onClick = { onTypeChange("SECOND_HALF") }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HalfTypeChip(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) Color(0xFF6366F1) else Color(0xFFF3F4F6)
+    val fg = if (selected) Color.White else Color(0xFF374151)
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = fg
+        )
+    }
 }
 
 // ==========================================
@@ -698,6 +870,15 @@ private fun LeaveApplicationContent(
     numberOfDays: Int,
     workingDays: Int,
     effectiveDays: Double,
+    isSingleDay: Boolean,
+    isFirstDayHalf: Boolean,
+    firstDayHalfType: String,
+    isLastDayHalf: Boolean,
+    lastDayHalfType: String,
+    onFirstDayHalfChange: (Boolean) -> Unit,
+    onFirstDayHalfTypeChange: (String) -> Unit,
+    onLastDayHalfChange: (Boolean) -> Unit,
+    onLastDayHalfTypeChange: (String) -> Unit,
     leaveReason: String,
     alternateContact: String,
     emergencyContact: String,
@@ -793,6 +974,31 @@ private fun LeaveApplicationContent(
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            // Half-day Options — only when leave type allows half-day AND dates picked
+            val showHalfDay = selectedLeaveType?.allowHalfDay == true &&
+                    startDate != null && endDate != null
+            if (showHalfDay) {
+                item {
+                    FormSection(
+                        title = "Half-day Options",
+                        icon = Icons.Outlined.Schedule,
+                        isRequired = false
+                    ) {
+                        HalfDaySelector(
+                            isSingleDay = isSingleDay,
+                            isFirstDayHalf = isFirstDayHalf,
+                            firstDayHalfType = firstDayHalfType,
+                            isLastDayHalf = isLastDayHalf,
+                            lastDayHalfType = lastDayHalfType,
+                            onFirstDayHalfChange = onFirstDayHalfChange,
+                            onFirstDayHalfTypeChange = onFirstDayHalfTypeChange,
+                            onLastDayHalfChange = onLastDayHalfChange,
+                            onLastDayHalfTypeChange = onLastDayHalfTypeChange
                         )
                     }
                 }
@@ -1605,5 +1811,92 @@ private fun createTempFileFromUri(context: Context, uri: Uri): File? {
     } catch (e: Exception) {
         Log.e("LEAVE_SUBMIT", "Error creating temp file: ${e.message}")
         null
+    }
+}
+
+// ==========================================
+// iOS-Style Error Dialog for server/API errors
+// ==========================================
+@Composable
+private fun LeaveErrorDialog(
+    message: String,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(0.92f),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Colored header bar (error red)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFEF4444))
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ErrorOutline,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.White
+                        )
+                        Text(
+                            text = "Unable to Apply Leave",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                // Content
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Leave Request Failed",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1F2937)
+                    )
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF4B5563),
+                        lineHeight = 20.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFEF4444)
+                        ),
+                        contentPadding = PaddingValues(vertical = 14.dp)
+                    ) {
+                        Text(
+                            text = "Dismiss",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
     }
 }
