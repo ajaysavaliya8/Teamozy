@@ -51,7 +51,7 @@ fun HomeTopBar(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.primary,
+        color = com.hrms.jeejateamozy.core.designsystem.TeamozyColors.AppBar,
         tonalElevation = 0.dp
     ) {
         Row(
@@ -159,7 +159,7 @@ fun HomeTopBar(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .offset(x = (-4).dp, y = 4.dp),
-                            containerColor = Color(0xFFFF5252),
+                            containerColor = Color(0xFFEF4444),
                             contentColor = Color.White
                         ) {
                             Text(

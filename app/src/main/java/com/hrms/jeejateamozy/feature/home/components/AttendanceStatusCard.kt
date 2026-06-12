@@ -71,16 +71,16 @@ fun AttendanceStatusCard(
     // Colors based on state
     val primaryColor = when {
         isCheckInNeeded -> Color(0xFF00C896)  // Green for check-in
-        isCheckOutNeeded && isOvertime -> Color(0xFFFF9800)  // Orange for overtime
-        isCheckOutNeeded -> Color(0xFFFF6B6B)  // Red for check-out
-        else -> Color(0xFF4CAF50)  // Green for completed
+        isCheckOutNeeded && isOvertime -> Color(0xFFF59E0B)  // Amber for overtime
+        isCheckOutNeeded -> Color(0xFFEF4444)  // Red for check-out
+        else -> Color(0xFF10B981)  // Green for completed
     }
 
     val gradientColors = when {
         isCheckInNeeded -> listOf(Color(0xFF00C896), Color(0xFF00A67E))
-        isCheckOutNeeded && isOvertime -> listOf(Color(0xFFFF9800), Color(0xFFF57C00))
-        isCheckOutNeeded -> listOf(Color(0xFFFF6B6B), Color(0xFFE55555))
-        else -> listOf(Color(0xFF4CAF50), Color(0xFF388E3C))
+        isCheckOutNeeded && isOvertime -> listOf(Color(0xFFF59E0B), Color(0xFFD97706))
+        isCheckOutNeeded -> listOf(Color(0xFFEF4444), Color(0xFFDC2626))
+        else -> listOf(Color(0xFF10B981), Color(0xFF059669))
     }
 
     Card(
@@ -231,7 +231,7 @@ fun AttendanceStatusCard(
                                 text = "Overtime: ${otH}h ${otM}m",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFFF5722)
+                                color = Color(0xFFF59E0B)
                             )
                         } else {
                             val remH = shiftInfo.remainingSeconds / 3600

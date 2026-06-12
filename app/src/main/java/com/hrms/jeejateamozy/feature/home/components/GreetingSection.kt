@@ -45,9 +45,9 @@ fun GreetingSection(
         ) {
             Text(
                 text = "$greeting, $firstName!",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = com.hrms.jeejateamozy.core.designsystem.TeamozyColors.Heading
             )
             Spacer(Modifier.width(6.dp))
             Text(
@@ -60,8 +60,8 @@ fun GreetingSection(
 
         Text(
             text = currentDate,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 13.sp,
+            color = com.hrms.jeejateamozy.core.designsystem.TeamozyColors.Secondary
         )
     }
 }

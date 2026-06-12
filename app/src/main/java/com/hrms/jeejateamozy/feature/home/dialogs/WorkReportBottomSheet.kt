@@ -189,7 +189,7 @@ fun WorkReportBottomSheet(
                     if (isOutOfRange) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = Color(0xFFFFEBEE)
+                            color = Color(0xFFEF4444).copy(alpha = 0.1f)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
