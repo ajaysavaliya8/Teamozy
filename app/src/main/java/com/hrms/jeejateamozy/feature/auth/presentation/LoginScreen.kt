@@ -250,9 +250,10 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         painter = painterResource(R.drawable.ic_teamozy_logo),
                         contentDescription = "Teamozy",
                         modifier = Modifier
-                            .size(96.dp)
+                            .size(88.dp)
+                            .clip(CircleShape)
                             .scale(logoScale),
-                        contentScale = ContentScale.Fit
+                        contentScale = ContentScale.Crop
                     )
                     Spacer(Modifier.height(14.dp))
                     Text("Welcome back", fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = Color.White)

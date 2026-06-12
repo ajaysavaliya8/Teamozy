@@ -40,7 +40,7 @@ fun SplashScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF062E1E)),
+            .background(Color(0xFFF8FDF9)),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -50,22 +50,22 @@ fun SplashScreen(
             Image(
                 painter = painterResource(R.drawable.ic_teamozy_logo),
                 contentDescription = "Teamozy",
-                modifier = Modifier.size(130.dp),
+                modifier = Modifier.size(140.dp),
                 contentScale = ContentScale.Fit
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
             Text(
                 text = "Teamozy",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = Color(0xFF062E1E),
                 letterSpacing = 1.sp
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 text = "HR Management System",
                 fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.6f)
+                color = Color(0xFF00875A)
             )
         }
     }
