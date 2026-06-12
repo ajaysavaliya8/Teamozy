@@ -30,7 +30,8 @@ data class DayDetailUiState(
     val showSubmitCorrectionDialog: Boolean = false,
     val isSubmittingCorrection: Boolean = false,
     val isWithdrawingCorrection: Boolean = false,
-    val showWithdrawDialog: Boolean = false
+    val showWithdrawDialog: Boolean = false,
+    val submitCorrectionError: String? = null
 )
 
 sealed class AttendanceHistoryEvent {
@@ -168,7 +169,7 @@ class AttendanceHistoryViewModel(
         attachmentUri: Uri? = null
     ) {
         viewModelScope.launch {
-            _dayDetailUiState.update { it.copy(isSubmittingCorrection = true) }
+            _dayDetailUiState.update { it.copy(isSubmittingCorrection = true, submitCorrectionError = null) }
 
             when (val outcome = correctionRepo.submitCorrectionRequest(
                 requestType = requestType,
@@ -195,8 +196,15 @@ class AttendanceHistoryViewModel(
                 }
 
                 is SubmitCorrectionRequestOutcome.Error -> {
-                    _dayDetailUiState.update { it.copy(isSubmittingCorrection = false) }
-                    _events.emit(AttendanceHistoryEvent.ShowError(outcome.message))
+                    // Surface the full (parsed) error in a dialog rather than a snackbar that
+                    // renders behind the still-open submit bottom sheet. Sheet stays open so
+                    // the user can fix the flagged field and resubmit.
+                    _dayDetailUiState.update {
+                        it.copy(
+                            isSubmittingCorrection = false,
+                            submitCorrectionError = outcome.message
+                        )
+                    }
                 }
             }
         }
@@ -247,6 +255,10 @@ class AttendanceHistoryViewModel(
 
     fun showWithdrawDialog(show: Boolean) {
         _dayDetailUiState.update { it.copy(showWithdrawDialog = show) }
+    }
+
+    fun dismissSubmitCorrectionError() {
+        _dayDetailUiState.update { it.copy(submitCorrectionError = null) }
     }
 
     // ==========================================

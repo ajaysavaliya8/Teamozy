@@ -3,6 +3,7 @@
 package com.hrms.jeejateamozy.feature.profile.presentation
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PrivateFileUrl
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentIdentityOutcome
@@ -72,8 +74,9 @@ fun ViewEmploymentIdentityScreen(
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = TeamozyColors.AppBar,
+                    titleContentColor = TeamozyColors.OnAppBar,
+                    navigationIconContentColor = TeamozyColors.OnAppBar
                 )
             )
         }
@@ -81,6 +84,7 @@ fun ViewEmploymentIdentityScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
             when {
@@ -143,7 +147,7 @@ fun ViewEmploymentIdentityScreen(
                                 Icon(
                                     imageVector = Icons.Default.Badge,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = TeamozyColors.Primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(Modifier.width(12.dp))
@@ -261,7 +265,7 @@ private fun IdentityDocumentCard(
                 Icon(
                     imageVector = Icons.Default.Description,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = TeamozyColors.Primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(12.dp))

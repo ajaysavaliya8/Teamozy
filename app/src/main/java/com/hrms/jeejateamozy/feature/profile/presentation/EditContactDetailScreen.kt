@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.feature.profile.data.ContactInfoOutcome
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
 import kotlinx.coroutines.launch
@@ -129,8 +130,9 @@ fun EditContactDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = TeamozyColors.AppBar,
+                    titleContentColor = TeamozyColors.OnAppBar,
+                    navigationIconContentColor = TeamozyColors.OnAppBar
                 )
             )
         }
@@ -149,7 +151,7 @@ fun EditContactDetailScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    .background(TeamozyColors.Background)
                     .verticalScroll(rememberScrollState())
             ) {
                 Spacer(Modifier.height(16.dp))
@@ -160,7 +162,7 @@ fun EditContactDetailScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                        containerColor = TeamozyColors.Primary.copy(alpha = 0.08f)
                     )
                 ) {
                     Row(
@@ -170,14 +172,14 @@ fun EditContactDetailScreen(
                         Icon(
                             Icons.Default.Info,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = TeamozyColors.Primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Fields marked as read-only are managed by HR and cannot be changed here.",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = TeamozyColors.Heading
                         )
                     }
                 }
@@ -356,7 +358,7 @@ fun EditContactDetailScreen(
                         checked = sameAsCurrent,
                         onCheckedChange = { sameAsCurrent = it },
                         colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedTrackColor = TeamozyColors.Primary,
                             checkedThumbColor = Color.White
                         )
                     )
@@ -455,13 +457,13 @@ fun EditContactDetailScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF4CAF50).copy(alpha = 0.1f)
+                            containerColor = Color(0xFF10B981).copy(alpha = 0.1f)
                         )
                     ) {
                         Text(
                             text = success,
                             modifier = Modifier.padding(12.dp),
-                            color = Color(0xFF2E7D32),
+                            color = Color(0xFF059669),
                             fontSize = 13.sp
                         )
                     }
@@ -518,7 +520,7 @@ fun EditContactDetailScreen(
                     enabled = !isLoading,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
+                        containerColor = TeamozyColors.Primary
                     )
                 ) {
                     if (isLoading) {
@@ -544,7 +546,7 @@ private fun SectionHeader(title: String) {
         text = title,
         fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
+        color = TeamozyColors.Primary,
         modifier = Modifier.padding(horizontal = 16.dp)
     )
 }
@@ -601,8 +603,8 @@ private fun ContactInputField(
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = Color(0xFFE2E8F0),
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedContainerColor = Color.White,
+                focusedBorderColor = TeamozyColors.Primary,
+                unfocusedContainerColor = TeamozyColors.FieldBg,
                 focusedContainerColor = Color.White
             )
         )

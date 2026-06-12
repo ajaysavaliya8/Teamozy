@@ -8,11 +8,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.foundation.background
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
@@ -61,8 +63,17 @@ fun WorkReportScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
+            // Tab switcher
+            TabSwitcher(
+                selectedTab = uiState.selectedTab,
+                onTabSelected = viewModel::onTabSelected
+            )
+
+            Spacer(Modifier.height(16.dp))
+
             // Date selector (for Add New) or Month selector (for History)
             when (uiState.selectedTab) {
                 WorkReportTab.ADD_NEW -> {
@@ -79,14 +90,6 @@ fun WorkReportScreen(
                     )
                 }
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Tab switcher
-            TabSwitcher(
-                selectedTab = uiState.selectedTab,
-                onTabSelected = viewModel::onTabSelected
-            )
 
             Spacer(Modifier.height(16.dp))
 
@@ -110,7 +113,7 @@ fun WorkReportScreen(
 
         // Success/Error messages
         if (uiState.submitSuccess) {
-            LaunchedEffect(Unit) {
+            LaunchedEffect(uiState.submitSuccess) {
                 kotlinx.coroutines.delay(2000)
                 viewModel.onDismissSubmitSuccess()
             }
@@ -235,12 +238,12 @@ private fun TabButton(
         modifier = modifier.height(48.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primary
+                TeamozyColors.Primary
             } else {
                 MaterialTheme.colorScheme.surfaceVariant
             },
             contentColor = if (isSelected) {
-                MaterialTheme.colorScheme.onPrimary
+                androidx.compose.ui.graphics.Color.White
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             }

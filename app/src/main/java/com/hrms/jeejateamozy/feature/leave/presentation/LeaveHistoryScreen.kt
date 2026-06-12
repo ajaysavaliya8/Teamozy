@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.LeaveApplication
 import com.hrms.jeejateamozy.core.network.LeaveSummary
 import com.hrms.jeejateamozy.core.network.PaginationInfo
@@ -94,12 +95,13 @@ fun LeaveHistoryScreen(
     }
 
     Scaffold(
+        containerColor = TeamozyColors.Background,
         snackbarHost = {
             SnackbarHost(snackbarHostState) { data ->
                 val isSuccess = data.visuals.message.contains("✅")
                 Snackbar(
                     snackbarData = data,
-                    containerColor = if (isSuccess) Color(0xFF4CAF50) else Color(0xFFF44336),
+                    containerColor = if (isSuccess) Color(0xFF10B981) else Color(0xFFEF4444),
                     contentColor = Color.White,
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -124,10 +126,19 @@ fun LeaveHistoryScreen(
                 actions = {
                     // Apply Leave button
                     IconButton(onClick = onNavigateToApplyLeave) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Apply Leave"
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(TeamozyColors.Primary, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Apply Leave",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                     // Refresh button
                     IconButton(onClick = {
@@ -145,14 +156,6 @@ fun LeaveHistoryScreen(
                 )
             )
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onNavigateToApplyLeave,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Apply Leave") },
-                modifier = Modifier.navigationBarsPadding()
-            )
-        }
     ) { paddingValues ->
         // Pull to refresh state
         var isRefreshing by remember { mutableStateOf(false) }
@@ -170,6 +173,7 @@ fun LeaveHistoryScreen(
             },
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
             LazyColumn(
@@ -321,7 +325,7 @@ private fun EnhancedLeaveApplicationCard(
                     Text(
                         text = ref,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = TeamozyColors.Primary
                     )
                 }
 
@@ -398,22 +402,22 @@ private fun EnhancedLeaveApplicationCard(
 private fun StatusBadge(status: String) {
     val (backgroundColor, textColor, icon) = when (status.lowercase()) {
         "approved" -> Triple(
-            Color(0xFF4CAF50),
+            Color(0xFF10B981),
             Color.White,
             Icons.Default.CheckCircle
         )
         "pending" -> Triple(
-            Color(0xFF2196F3),
+            Color(0xFFF59E0B),
             Color.White,
             Icons.Default.Schedule
         )
         "in_progress" -> Triple(
-            Color(0xFF9C27B0),
+            Color(0xFF8B5CF6),
             Color.White,
             Icons.Default.Autorenew
         )
         "rejected" -> Triple(
-            Color(0xFFF44336),
+            Color(0xFFEF4444),
             Color.White,
             Icons.Default.Cancel
         )
@@ -423,12 +427,12 @@ private fun StatusBadge(status: String) {
             Icons.Default.Block
         )
         "withdrawn" -> Triple(
-            Color(0xFF795548),
+            Color(0xFF64748B),
             Color.White,
             Icons.AutoMirrored.Filled.Undo
         )
         "draft" -> Triple(
-            Color(0xFFFF9800),
+            Color(0xFFF59E0B),
             Color.White,
             Icons.Default.Edit
         )
@@ -438,7 +442,7 @@ private fun StatusBadge(status: String) {
             Icons.Default.BeachAccess
         )
         "completed" -> Triple(
-            Color(0xFF8BC34A),
+            Color(0xFF10B981),
             Color.White,
             Icons.Default.DoneAll
         )
@@ -488,7 +492,7 @@ private fun LeaveSummaryCard(summary: LeaveSummary) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = TeamozyColors.Primary.copy(alpha = 0.1f)
         )
     ) {
         Row(
@@ -506,13 +510,13 @@ private fun LeaveSummaryCard(summary: LeaveSummary) {
                 Icon(
                     imageVector = Icons.Outlined.CalendarMonth,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = TeamozyColors.Primary,
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
                     text = "${summary.year}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = TeamozyColors.Primary
                 )
             }
 
@@ -526,9 +530,9 @@ private fun LeaveSummaryCard(summary: LeaveSummary) {
                     val count = summary.byStatus[key]
                     if (count != null && count.count > 0) {
                         val color = when (key) {
-                            "APPROVED" -> Color(0xFF4CAF50)
-                            "PENDING" -> Color(0xFF2196F3)
-                            "REJECTED" -> Color(0xFFF44336)
+                            "APPROVED" -> Color(0xFF10B981)
+                            "PENDING" -> Color(0xFFF59E0B)
+                            "REJECTED" -> Color(0xFFEF4444)
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
                         Surface(
@@ -551,7 +555,7 @@ private fun LeaveSummaryCard(summary: LeaveSummary) {
                     text = "${summary.totalDaysTaken}d",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = TeamozyColors.Primary
                 )
             }
         }
@@ -570,32 +574,21 @@ private fun StatusFilterRow(
         "All" to null,
         "Pending" to "pending",
         "Approved" to "approved",
-        "Rejected" to "rejected",
-        "Cancelled" to "cancelled",
-        "Withdrawn" to "withdrawn"
+        "Rejected" to "rejected"
     )
 
-    Column {
-        Text(
-            text = "Filter by Status",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(statuses) { (label, value) ->
-                FilterChip(
-                    selected = selectedStatus == value,
-                    onClick = { onStatusSelected(value) },
-                    label = { Text(label) },
-                    leadingIcon = if (selectedStatus == value) {
-                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                    } else null
-                )
-            }
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(statuses) { (label, value) ->
+            FilterChip(
+                selected = selectedStatus == value,
+                onClick = { onStatusSelected(value) },
+                label = { Text(label) },
+                leadingIcon = if (selectedStatus == value) {
+                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                } else null
+            )
         }
     }
 }

@@ -96,10 +96,19 @@ object NetworkErrorHandler {
         return try {
             val json = JSONObject(errorBody)
 
-            // 1. Check for standard "message" field
+            // 1. Check for standard "message" field. If the body also carries this
+            //    backend's field-level validation array (VALIDATION_ERROR), append each
+            //    field detail so the user sees exactly what's wrong, e.g.:
+            //      Some required fields are missing or invalid.
+            //      • Priority: Invalid option selected
             val message = json.optString("message")
             if (message.isNotBlank()) {
-                return message
+                val details = extractFieldErrorDetails(json.optJSONArray("data"))
+                return if (details.isNotEmpty()) {
+                    (listOf(message) + details).joinToString("\n")
+                } else {
+                    message
+                }
             }
 
             // 2. Check for "detail" field (FastAPI style)
@@ -156,6 +165,39 @@ object NetworkErrorHandler {
             null
         }
     }
+
+    /**
+     * Extract field-level validation details from this backend's error format:
+     * `"data": [{ "fields": ["priority"], "path": "", "message": "Invalid option selected" }]`
+     *
+     * Returns a list of bullet lines like "• Priority: Invalid option selected".
+     * Items without a message are skipped; returns empty if [dataArray] is null or has none.
+     */
+    private fun extractFieldErrorDetails(dataArray: JSONArray?): List<String> {
+        if (dataArray == null) return emptyList()
+        val details = mutableListOf<String>()
+        for (i in 0 until dataArray.length()) {
+            val item = dataArray.optJSONObject(i) ?: continue
+            val itemMessage = item.optString("message")
+            if (itemMessage.isBlank()) continue
+
+            val fieldsArray = item.optJSONArray("fields")
+            val fieldLabel = if (fieldsArray != null && fieldsArray.length() > 0) {
+                (0 until fieldsArray.length())
+                    .mapNotNull { idx -> fieldsArray.optString(idx).takeIf { it.isNotBlank() } }
+                    .joinToString(", ") { prettifyFieldName(it) }
+            } else {
+                ""
+            }
+
+            details += if (fieldLabel.isNotBlank()) "• $fieldLabel: $itemMessage" else "• $itemMessage"
+        }
+        return details
+    }
+
+    /** "requested_status" -> "Requested status" for human-readable field labels. */
+    private fun prettifyFieldName(field: String): String =
+        field.replace('_', ' ').replaceFirstChar { it.uppercaseChar() }
 
     /**
      * Try to extract error using Gson Map parsing

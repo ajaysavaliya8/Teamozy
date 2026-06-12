@@ -1,8 +1,7 @@
-package com.hrms.jeejateamozy.feature.leave.presentation
+﻿package com.hrms.jeejateamozy.feature.leave.presentation
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.LeaveType
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -57,7 +57,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
- * ✅ IMPROVED: Apply Leave Screen with Debug Logging
+ * âœ… IMPROVED: Apply Leave Screen with Debug Logging
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -180,7 +180,7 @@ fun ApplyLeaveScreen(
                     // Launch in separate coroutine to not block event collection
                     scope.launch {
                         snackbarHostState.showSnackbar(
-                            message = "❌ ${event.message}",
+                            message = "âŒ ${event.message}",
                             duration = SnackbarDuration.Long,
                             withDismissAction = true
                         )
@@ -201,7 +201,6 @@ fun ApplyLeaveScreen(
     // Validation Function (DEBUG VERSION)
     // ==========================================
     fun validateForm(): Boolean {
-        Log.d("LEAVE_SUBMIT", "========== VALIDATION STARTED ==========")
         var isValid = true
         val errorMessages = mutableListOf<String>()
 
@@ -214,87 +213,68 @@ fun ApplyLeaveScreen(
         dateErrorMessage = ""
 
         // Validate leave type
-        Log.d("LEAVE_SUBMIT", "Selected Leave Type: $selectedLeaveType")
         if (selectedLeaveType == null) {
             showLeaveTypeError = true
             errorMessages.add("Leave type is required")
             isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Leave type validation FAILED")
         } else {
-            Log.d("LEAVE_SUBMIT", "✅ Leave type validation PASSED")
         }
 
         // Validate dates
-        Log.d("LEAVE_SUBMIT", "Start Date: $startDate, End Date: $endDate")
         if (startDate == null || endDate == null) {
             showDateError = true
             dateErrorMessage = "Please select leave dates"
             errorMessages.add("Leave dates are required")
             isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Date validation FAILED")
         } else {
-            Log.d("LEAVE_SUBMIT", "✅ Date validation PASSED")
         }
 
         // Validate reason
-        Log.d("LEAVE_SUBMIT", "Leave Reason: '$leaveReason' (length: ${leaveReason.length})")
         if (leaveReason.isBlank()) {
             showReasonError = true
             reasonErrorMessage = "Please provide a reason for your leave"
             errorMessages.add("Leave reason is required")
             isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Reason validation FAILED - blank")
         } else if (leaveReason.length < 10) {
             showReasonError = true
             reasonErrorMessage = "Reason must be at least 10 characters"
             errorMessages.add("Leave reason is too short (min 10 characters)")
             isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Reason validation FAILED - too short")
         } else {
-            Log.d("LEAVE_SUBMIT", "✅ Reason validation PASSED")
         }
 
         // Validate dependency handler if task is dependent
-        Log.d("LEAVE_SUBMIT", "Task Depended: $taskDependedOnYou, Handler: '$dependencyHandledBy'")
         if (taskDependedOnYou && dependencyHandledBy.isBlank()) {
             showDependencyError = true
             errorMessages.add("Please specify who will handle your tasks")
             isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Dependency validation FAILED")
         }
 
         // Validate document if required (MANDATORY means always required)
         val docReq = selectedLeaveType?.documentRequirement?.uppercase()
-        Log.d("LEAVE_SUBMIT", "Document requirement: $docReq, Selected File: $selectedFileName")
         if (docReq == "MANDATORY" && selectedFileName == null) {
             errorMessages.add("This leave type requires a supporting document")
             isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Document validation FAILED")
         }
 
         // Validate alternate contact format if provided
         if (alternateContact.isNotBlank() && alternateContact.length < 10) {
             errorMessages.add("Alternate contact must be at least 10 digits")
             isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Alternate contact validation FAILED")
         }
 
         // Validate emergency contact format if provided
         if (emergencyContact.isNotBlank() && emergencyContact.length < 10) {
             errorMessages.add("Emergency contact must be at least 10 digits")
             isValid = false
-            Log.d("LEAVE_SUBMIT", "❌ Emergency contact validation FAILED")
         }
 
-        Log.d("LEAVE_SUBMIT", "========== VALIDATION RESULT: ${if (isValid) "PASSED ✅" else "FAILED ❌"} ==========")
-        Log.d("LEAVE_SUBMIT", "Error messages: $errorMessages")
 
         // Show error snackbar with all validation errors
         if (!isValid && errorMessages.isNotEmpty()) {
-            Log.d("LEAVE_SUBMIT", "Showing snackbar with error: ${errorMessages.first()}")
             scope.launch {
                 snackbarHostState.showSnackbar(
-                    message = "❌ ${errorMessages.first()}",
+                    message = "âŒ ${errorMessages.first()}",
                     duration = SnackbarDuration.Long,
                     withDismissAction = true
                 )
@@ -308,31 +288,20 @@ fun ApplyLeaveScreen(
     // Submit Handler (DEBUG VERSION)
     // ==========================================
     fun handleSubmit() {
-        Log.d("LEAVE_SUBMIT", "🚀 SUBMIT BUTTON CLICKED!")
 
         if (!validateForm()) {
-            Log.d("LEAVE_SUBMIT", "⛔ Validation failed, not submitting")
             return
         }
 
-        Log.d("LEAVE_SUBMIT", "✅ Validation passed, proceeding with submission")
 
         val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
         // Prepare file if selected
         var supportingDocumentFile: File? = null
         selectedFileUri?.let { uri ->
-            Log.d("LEAVE_SUBMIT", "Creating temp file from URI: $uri")
             supportingDocumentFile = createTempFileFromUri(context, uri)
-            Log.d("LEAVE_SUBMIT", "Temp file created: ${supportingDocumentFile?.absolutePath}")
         }
 
-        Log.d("LEAVE_SUBMIT", "Calling viewModel.applyLeave()")
-        Log.d("LEAVE_SUBMIT", "  leaveTypeId: ${selectedLeaveType!!.id}")
-        Log.d("LEAVE_SUBMIT", "  startDate: ${startDate!!.format(dateFormatter)}")
-        Log.d("LEAVE_SUBMIT", "  endDate: ${endDate!!.format(dateFormatter)}")
-        Log.d("LEAVE_SUBMIT", "  leaveReason: ${leaveReason.trim()}")
-        Log.d("LEAVE_SUBMIT", "  priority: $selectedPriority")
 
         viewModel.applyLeave(
             leaveTypeId = selectedLeaveType!!.id,
@@ -348,26 +317,26 @@ fun ApplyLeaveScreen(
             supportingDocumentFile = supportingDocumentFile
         )
 
-        Log.d("LEAVE_SUBMIT", "✅ viewModel.applyLeave() called")
     }
 
     // ==========================================
     // Main UI
     // ==========================================
     Scaffold(
+        containerColor = TeamozyColors.Background,
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
-                modifier = Modifier.padding(bottom = 100.dp) // ✅ FIX: Add padding to show above nav bar
+                modifier = Modifier.padding(bottom = 100.dp) // FIX: Add padding to show above nav bar
             ) { data ->
-                val isSuccess = data.visuals.message.contains("✅")
-                val isError = data.visuals.message.contains("❌")
+                val isSuccess = data.visuals.message.contains("âœ…")
+                val isError = data.visuals.message.contains("âŒ")
 
                 Snackbar(
                     snackbarData = data,
                     containerColor = when {
-                        isSuccess -> Color(0xFF4CAF50)
-                        isError -> Color(0xFFF44336)
+                        isSuccess -> Color(0xFF10B981)
+                        isError -> Color(0xFFEF4444)
                         else -> MaterialTheme.colorScheme.inverseSurface
                     },
                     contentColor = Color.White,
@@ -661,7 +630,7 @@ private fun NoLeaveTypesState(message: String, onNavigateBack: () -> Unit) {
                 imageVector = Icons.Outlined.EventBusy,
                 contentDescription = null,
                 modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                tint = TeamozyColors.Primary.copy(alpha = 0.6f)
             )
             Text(
                 text = message.ifBlank { "No leave types are assigned to you. Please contact HR." },
@@ -957,12 +926,12 @@ private fun LeaveApplicationContent(
                                 Icon(
                                     imageVector = Icons.Default.CloudUpload,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = TeamozyColors.Primary
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Upload Document",
-                                    color = MaterialTheme.colorScheme.primary,
+                                    text = "Select Media",
+                                    color = TeamozyColors.Primary,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
@@ -972,7 +941,7 @@ private fun LeaveApplicationContent(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                containerColor = TeamozyColors.Primary.copy(alpha = 0.08f)
                             )
                         ) {
                             Row(
@@ -989,7 +958,7 @@ private fun LeaveApplicationContent(
                                     Icon(
                                         imageVector = Icons.Default.Description,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
+                                        tint = TeamozyColors.Primary
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
@@ -1022,8 +991,8 @@ private fun LeaveApplicationContent(
                     Brush.verticalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                            MaterialTheme.colorScheme.surface
+                            TeamozyColors.Background.copy(alpha = 0.9f),
+                            TeamozyColors.Background
                         )
                     )
                 )
@@ -1033,10 +1002,10 @@ private fun LeaveApplicationContent(
                 onClick = onSubmit,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(16.dp),
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
+                    containerColor = TeamozyColors.Primary
                 ),
                 elevation = ButtonDefaults.buttonElevation(
                     defaultElevation = 4.dp,
@@ -1095,7 +1064,7 @@ private fun FormSection(
                     tint = if (hasError)
                         MaterialTheme.colorScheme.error
                     else
-                        MaterialTheme.colorScheme.primary,
+                        TeamozyColors.Primary,
                     modifier = Modifier.size(20.dp)
                 )
                 Text(
@@ -1138,7 +1107,7 @@ private fun LeaveTypeSelector(
                 colors = if (hasError) {
                     listOf(MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.error)
                 } else if (selectedLeaveType != null) {
-                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
+                    listOf(TeamozyColors.Primary, TeamozyColors.Primary)
                 } else {
                     listOf(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -1163,7 +1132,7 @@ private fun LeaveTypeSelector(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LeaveTypeChip(
                             text = selectedLeaveType.code,
-                            color = MaterialTheme.colorScheme.primary
+                            color = TeamozyColors.Primary
                         )
                         LeaveTypeChip(
                             text = if (selectedLeaveType.isPaid) "Paid" else "Unpaid",
@@ -1175,7 +1144,7 @@ private fun LeaveTypeSelector(
                         if (selectedLeaveType.applicationMode != null) {
                             LeaveTypeChip(
                                 text = selectedLeaveType.applicationMode,
-                                color = MaterialTheme.colorScheme.primary
+                                color = TeamozyColors.Primary
                             )
                         }
                     }
@@ -1220,7 +1189,7 @@ private fun DateRangeSelector(
                 colors = if (hasError) {
                     listOf(MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.error)
                 } else if (startDate != null && endDate != null) {
-                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
+                    listOf(TeamozyColors.Primary, TeamozyColors.Primary)
                 } else {
                     listOf(MaterialTheme.colorScheme.outlineVariant, MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -1228,7 +1197,7 @@ private fun DateRangeSelector(
         ),
         colors = CardDefaults.outlinedCardColors(
             containerColor = if (startDate != null && endDate != null)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                TeamozyColors.Primary.copy(alpha = 0.05f)
             else
                 MaterialTheme.colorScheme.surface
         )
@@ -1251,7 +1220,7 @@ private fun DateRangeSelector(
                             .padding(horizontal = 12.dp)
                             .size(32.dp)
                             .background(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                TeamozyColors.Primary.copy(alpha = 0.1f),
                                 CircleShape
                             ),
                         contentAlignment = Alignment.Center
@@ -1260,7 +1229,7 @@ private fun DateRangeSelector(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = TeamozyColors.Primary
                         )
                     }
 
@@ -1282,7 +1251,7 @@ private fun DateRangeSelector(
                     DaySummaryItem(
                         value = numberOfDays.toString(),
                         label = "Total Days",
-                        color = MaterialTheme.colorScheme.primary
+                        color = TeamozyColors.Primary
                     )
                     DaySummaryItem(
                         value = workingDays.toString(),
@@ -1304,7 +1273,7 @@ private fun DateRangeSelector(
                     Icon(
                         imageVector = Icons.Outlined.CalendarMonth,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        tint = TeamozyColors.Primary.copy(alpha = 0.6f),
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -1381,9 +1350,9 @@ private fun PrioritySelector(
     onPriorityChange: (String) -> Unit
 ) {
     val priorities = listOf(
-        Triple("normal", "Normal", Color(0xFF4CAF50)),
-        Triple("high", "High", Color(0xFFFF9800)),
-        Triple("urgent", "Urgent", Color(0xFFF44336))
+        Triple("normal", "Normal", Color(0xFF10B981)),
+        Triple("high", "High", Color(0xFFF59E0B)),
+        Triple("urgent", "Urgent", Color(0xFFEF4444))
     )
 
     Row(
@@ -1526,14 +1495,14 @@ private fun LeaveTypeItem(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                TeamozyColors.Primary.copy(alpha = 0.12f)
             else
                 MaterialTheme.colorScheme.surface
         ),
         border = if (isSelected) {
             CardDefaults.outlinedCardBorder().copy(
                 brush = Brush.linearGradient(
-                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary)
+                    listOf(TeamozyColors.Primary, TeamozyColors.Primary)
                 )
             )
         } else null
@@ -1555,7 +1524,7 @@ private fun LeaveTypeItem(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     LeaveTypeChip(
                         text = leaveType.code,
-                        color = MaterialTheme.colorScheme.primary
+                        color = TeamozyColors.Primary
                     )
                     LeaveTypeChip(
                         text = if (leaveType.isPaid) "Paid" else "Unpaid",
@@ -1571,7 +1540,7 @@ private fun LeaveTypeItem(
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = "Selected",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
             }
         }
@@ -1603,7 +1572,6 @@ private fun createTempFileFromUri(context: Context, uri: Uri): File? {
         inputStream.close()
         tempFile
     } catch (e: Exception) {
-        Log.e("LEAVE_SUBMIT", "Error creating temp file: ${e.message}")
         null
     }
 }

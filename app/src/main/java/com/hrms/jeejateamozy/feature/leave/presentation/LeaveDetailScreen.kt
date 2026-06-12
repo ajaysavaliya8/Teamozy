@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.LeaveApplicationDetail
 import com.hrms.jeejateamozy.core.network.TimelineEvent
 import com.hrms.jeejateamozy.feature.leave.data.LeaveApplicationDetailOutcome
@@ -83,7 +84,7 @@ fun LeaveDetailScreen(
             title = "Withdraw Leave",
             label = "Withdrawal Reason",
             confirmText = "Withdraw",
-            confirmColor = Color(0xFF795548),
+            confirmColor = Color(0xFF64748B),
             isLoading = isActionLoading,
             errorMessage = dialogErrorMessage,
             onDismiss = {
@@ -118,7 +119,7 @@ fun LeaveDetailScreen(
             title = "Request Cancellation",
             label = "Cancellation Reason",
             confirmText = "Request Cancellation",
-            confirmColor = Color(0xFFF44336),
+            confirmColor = Color(0xFFEF4444),
             isLoading = isActionLoading,
             errorMessage = dialogErrorMessage,
             onDismiss = {
@@ -149,11 +150,12 @@ fun LeaveDetailScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = TeamozyColors.Background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = detail?.referenceNumber ?: "Leave Details",
+                        text = "Leave Detail",
                         fontWeight = FontWeight.SemiBold
                     )
                 },
@@ -174,6 +176,7 @@ fun LeaveDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
             when {
@@ -215,9 +218,9 @@ private fun LeaveDetailContent(
         try {
             Color(android.graphics.Color.parseColor(it))
         } catch (e: Exception) {
-            MaterialTheme.colorScheme.primary
+            TeamozyColors.Primary
         }
-    } ?: MaterialTheme.colorScheme.primary
+    } ?: TeamozyColors.Primary
 
     val canWithdraw = detail.allowWithdraw
     val canCancel = detail.allowCancel
@@ -317,13 +320,13 @@ private fun LeaveDetailContent(
                         Icon(
                             imageVector = Icons.Default.Description,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = TeamozyColors.Primary,
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
                             text = "Document attached",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
+                            color = TeamozyColors.Primary
                         )
                     }
                 }
@@ -349,7 +352,7 @@ private fun LeaveDetailContent(
                             onClick = onWithdraw,
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF795548)
+                                containerColor = Color(0xFF64748B)
                             ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -363,12 +366,13 @@ private fun LeaveDetailContent(
                         }
                     }
                     if (canCancel) {
-                        Button(
+                        OutlinedButton(
                             onClick = onCancel,
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFF44336)
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFFEF4444)
                             ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(
@@ -377,7 +381,7 @@ private fun LeaveDetailContent(
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Request Cancellation")
+                            Text("Cancel Leave Request")
                         }
                     }
                 }
@@ -429,13 +433,13 @@ private fun StatusHeaderCard(
             // Paid/Unpaid indicator
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = if (isPaid) Color(0xFF4CAF50).copy(alpha = 0.1f) else Color(0xFFFF9800).copy(alpha = 0.1f)
+                color = if (isPaid) Color(0xFF10B981).copy(alpha = 0.1f) else Color(0xFFF59E0B).copy(alpha = 0.1f)
             ) {
                 Text(
                     text = if (isPaid) "Paid Leave" else "Unpaid Leave",
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isPaid) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                    color = if (isPaid) Color(0xFF10B981) else Color(0xFFF59E0B)
                 )
             }
         }
@@ -474,17 +478,17 @@ private fun StatusBadgeLarge(status: String) {
 private fun getStatusColors(status: String): Triple<Color, Color, ImageVector> {
     return when (status.lowercase()) {
         "approved", "upcoming", "completed", "on_leave" -> Triple(
-            Color(0xFF4CAF50),
+            Color(0xFF10B981),
             Color.White,
             Icons.Default.CheckCircle
         )
         "pending" -> Triple(
-            Color(0xFF2196F3),
+            Color(0xFFF59E0B),
             Color.White,
             Icons.Default.Schedule
         )
         "rejected" -> Triple(
-            Color(0xFFF44336),
+            Color(0xFFEF4444),
             Color.White,
             Icons.Default.Cancel
         )
@@ -494,12 +498,12 @@ private fun getStatusColors(status: String): Triple<Color, Color, ImageVector> {
             Icons.Default.Block
         )
         "withdrawn" -> Triple(
-            Color(0xFF795548),
+            Color(0xFF64748B),
             Color.White,
             Icons.Default.Undo
         )
         "draft" -> Triple(
-            Color(0xFFFF9800),
+            Color(0xFFF59E0B),
             Color.White,
             Icons.Default.Edit
         )
@@ -576,7 +580,7 @@ private fun DateDurationCard(
                     },
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = TeamozyColors.Primary
                 )
                 Text(
                     text = if (totalDays <= 1) "day" else "days",
@@ -651,7 +655,7 @@ private fun InfoCard(
                     imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
                 Text(
                     text = title,
@@ -673,7 +677,7 @@ private fun PendingWithCard(pendingWith: List<String>) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFFFF3E0)
+            containerColor = Color(0xFFF59E0B).copy(alpha = 0.1f)
         )
     ) {
         Column(
@@ -690,13 +694,13 @@ private fun PendingWithCard(pendingWith: List<String>) {
                     imageVector = Icons.Outlined.HourglassTop,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = Color(0xFFFF9800)
+                    tint = Color(0xFFF59E0B)
                 )
                 Text(
                     text = "Pending Approval",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFE65100)
+                    color = Color(0xFFD97706)
                 )
             }
 
@@ -709,12 +713,12 @@ private fun PendingWithCard(pendingWith: List<String>) {
                         imageVector = Icons.Default.Person,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        tint = Color(0xFFFF9800)
+                        tint = Color(0xFFF59E0B)
                     )
                     Text(
                         text = approver,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFE65100)
+                        color = Color(0xFFD97706)
                     )
                 }
             }
@@ -731,7 +735,7 @@ private fun ApproversCard(approvers: List<String>) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFE3F2FD)
+            containerColor = TeamozyColors.Primary.copy(alpha = 0.1f)
         )
     ) {
         Column(
@@ -748,13 +752,13 @@ private fun ApproversCard(approvers: List<String>) {
                     imageVector = Icons.Outlined.Groups,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = Color(0xFF1976D2)
+                    tint = TeamozyColors.Primary
                 )
                 Text(
                     text = "Approval Chain",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF0D47A1)
+                    color = TeamozyColors.Primary
                 )
             }
 
@@ -766,7 +770,7 @@ private fun ApproversCard(approvers: List<String>) {
                     // Number badge
                     Surface(
                         shape = CircleShape,
-                        color = Color(0xFF1976D2),
+                        color = TeamozyColors.Primary,
                         modifier = Modifier.size(24.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -781,7 +785,7 @@ private fun ApproversCard(approvers: List<String>) {
                     Text(
                         text = approver,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF0D47A1)
+                        color = TeamozyColors.PrimaryDark
                     )
                 }
             }
@@ -798,7 +802,7 @@ private fun RejectionCard(reason: String) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFFFEBEE)
+            containerColor = Color(0xFFEF4444).copy(alpha = 0.1f)
         )
     ) {
         Column(
@@ -815,19 +819,19 @@ private fun RejectionCard(reason: String) {
                     imageVector = Icons.Default.Cancel,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = Color(0xFFF44336)
+                    tint = Color(0xFFEF4444)
                 )
                 Text(
                     text = "Rejection Reason",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFC62828)
+                    color = Color(0xFFDC2626)
                 )
             }
             Text(
                 text = reason,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFC62828)
+                color = Color(0xFFDC2626)
             )
         }
     }
@@ -941,7 +945,7 @@ private fun TimelineCard(timeline: List<TimelineEvent>) {
                     imageVector = Icons.Outlined.Timeline,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
                 Text(
                     text = "Timeline",
@@ -970,11 +974,11 @@ private fun TimelineItem(
     isLast: Boolean
 ) {
     val eventColor = when {
-        event.event.contains("Approved", ignoreCase = true) -> Color(0xFF4CAF50)
-        event.event.contains("Rejected", ignoreCase = true) -> Color(0xFFF44336)
+        event.event.contains("Approved", ignoreCase = true) -> Color(0xFF10B981)
+        event.event.contains("Rejected", ignoreCase = true) -> Color(0xFFEF4444)
         event.event.contains("Cancelled", ignoreCase = true) -> Color(0xFF9E9E9E)
-        event.event.contains("Withdrawn", ignoreCase = true) -> Color(0xFF795548)
-        else -> MaterialTheme.colorScheme.primary
+        event.event.contains("Withdrawn", ignoreCase = true) -> Color(0xFF64748B)
+        else -> TeamozyColors.Primary
     }
 
     Row(
@@ -1049,7 +1053,7 @@ private fun TimelineItem(
                 Text(
                     text = reason,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFF44336)
+                    color = Color(0xFFEF4444)
                 )
             }
         }

@@ -1,5 +1,7 @@
 package com.hrms.jeejateamozy.feature.profile.presentation.components
 
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
+
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -212,7 +214,7 @@ fun MessageCard(
             containerColor = if (isError)
                 MaterialTheme.colorScheme.errorContainer
             else
-                androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                TeamozyColors.Success
         ),
         modifier = Modifier.fillMaxWidth()
     ) {

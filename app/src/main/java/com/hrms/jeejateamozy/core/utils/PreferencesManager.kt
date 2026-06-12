@@ -200,7 +200,7 @@ class PreferencesManager private constructor(context: Context) {
      * Use this on logout to remove all user data
      */
     fun clearAll() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
     }
 
     // ============================================

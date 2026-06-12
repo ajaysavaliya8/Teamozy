@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.CalendarDay
 import com.hrms.jeejateamozy.core.network.MonthSummary
 import kotlinx.coroutines.launch
@@ -68,25 +69,32 @@ fun AttendanceHistoryScreen(
     }
 
     Scaffold(
+        containerColor = TeamozyColors.Background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Attendance History") },
+                title = {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "Attendance History",
+                            fontWeight = FontWeight.Bold,
+                            color = TeamozyColors.Heading
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.Default.ArrowBack, "Back", tint = TeamozyColors.Heading)
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(Icons.Default.Refresh, "Refresh")
+                        Icon(Icons.Default.Refresh, "Refresh", tint = TeamozyColors.Heading)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = Color.White,
+                    scrolledContainerColor = Color.White
                 )
             )
         }
@@ -94,6 +102,7 @@ fun AttendanceHistoryScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(scaffoldPadding)
         ) {
             LazyColumn(
@@ -158,10 +167,11 @@ private fun CompactMonthNavigationBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -174,7 +184,7 @@ private fun CompactMonthNavigationBar(
                 Icon(
                     imageVector = Icons.Default.ChevronLeft,
                     contentDescription = "Previous Month",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
             }
 
@@ -186,12 +196,12 @@ private fun CompactMonthNavigationBar(
                     text = monthName,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = TeamozyColors.Heading
                 )
                 Text(
                     text = year.toString(),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    color = TeamozyColors.Secondary
                 )
             }
 
@@ -199,7 +209,7 @@ private fun CompactMonthNavigationBar(
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = "Next Month",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
             }
         }
@@ -212,62 +222,58 @@ private fun MonthSummaryCard(summary: MonthSummary) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Text(
-                text = "Monthly Summary",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+            SummaryStatItem(
+                value = summary.presentDays.toString(),
+                label = "Present",
+                valueColor = Color(0xFF10B981)
             )
-
-            HorizontalDivider()
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = "Total Time", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = summary.totalTime,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = "Present Days", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    text = "${summary.presentDays} days",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            if (summary.irregularDays > 0) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "Days with Issues", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        text = "${summary.irregularDays} days",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
+            VerticalDivider(modifier = Modifier.height(48.dp))
+            SummaryStatItem(
+                value = summary.irregularDays.toString(),
+                label = "Irregular",
+                valueColor = Color(0xFFEF4444)
+            )
+            VerticalDivider(modifier = Modifier.height(48.dp))
+            SummaryStatItem(
+                value = summary.totalTime,
+                label = "Total Time",
+                valueColor = TeamozyColors.Primary
+            )
         }
+    }
+}
+
+@Composable
+private fun SummaryStatItem(
+    value: String,
+    label: String,
+    valueColor: Color
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = valueColor
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -332,9 +338,9 @@ private fun CalendarDayItem(
     val parsedColor = remember(day.color) { parseHexColor(day.color) }
     val hasColor = parsedColor != Color.Transparent
 
-    val backgroundColor = if (hasColor) parsedColor.copy(alpha = 0.15f) else Color.Transparent
-    val borderColor = if (hasColor) parsedColor.copy(alpha = 0.4f) else Color(0xFFE0E0E0)
-    val textColor = Color.Black
+    val backgroundColor = if (hasColor) parsedColor.copy(alpha = 0.75f) else Color.Transparent
+    val borderColor = if (hasColor) parsedColor.copy(alpha = 0.9f) else Color(0xFFE0E0E0)
+    val textColor = if (hasColor) Color.White else Color.Black
 
     Box(
         modifier = Modifier
@@ -362,7 +368,7 @@ private fun CalendarDayItem(
                 Box(
                     modifier = Modifier
                         .size(6.dp)
-                        .background(Color(0xFF2196F3), shape = RoundedCornerShape(3.dp))
+                        .background(Color(0xFFF59E0B), shape = RoundedCornerShape(3.dp))
                 )
             }
         }
@@ -385,10 +391,11 @@ private fun CalendarLegend(days: List<CalendarDay>) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         FlowRow(
             modifier = Modifier

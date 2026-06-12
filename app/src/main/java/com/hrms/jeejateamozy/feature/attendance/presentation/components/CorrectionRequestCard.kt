@@ -153,10 +153,10 @@ fun CorrectionRequestCard(
 @Composable
 private fun StatusBadge(status: String) {
     val (backgroundColor, textColor) = when (status) {
-        "PENDING", "ACTIVE" -> Color(0xFF2196F3) to Color.White
-        "MORE_INFO_NEEDED" -> Color(0xFFFF9800) to Color.White
-        "APPROVED" -> Color(0xFF4CAF50) to Color.White
-        "REJECTED" -> Color(0xFFF44336) to Color.White
+        "PENDING", "ACTIVE" -> Color(0xFFF59E0B) to Color.White
+        "MORE_INFO_NEEDED" -> Color(0xFFF59E0B) to Color.White
+        "APPROVED" -> Color(0xFF10B981) to Color.White
+        "REJECTED" -> Color(0xFFEF4444) to Color.White
         "WITHDRAWN" -> Color(0xFF9E9E9E) to Color.White
         else -> Color(0xFF757575) to Color.White
     }

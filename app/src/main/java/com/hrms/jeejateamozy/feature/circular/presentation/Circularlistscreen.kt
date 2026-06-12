@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.Circular
 import com.hrms.jeejateamozy.core.network.CircularStats
 import java.text.SimpleDateFormat
@@ -79,7 +80,7 @@ fun CircularListScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
+                    containerColor = TeamozyColors.AppBar,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White,
                     actionIconContentColor = Color.White
@@ -90,6 +91,7 @@ fun CircularListScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
             LazyColumn(
@@ -190,48 +192,29 @@ fun CircularListScreen(
  */
 @Composable
 private fun StatsSection(stats: CircularStats) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = "Statistics",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                StatItem(
-                    icon = Icons.Outlined.Description,
-                    label = "Total",
-                    value = stats.totalCirculars.toString()
-                )
-                StatItem(
-                    icon = Icons.Outlined.PriorityHigh,
-                    label = "High Priority",
-                    value = stats.highPriority.toString(),
-                    iconTint = MaterialTheme.colorScheme.error
-                )
-                StatItem(
-                    icon = Icons.Outlined.NewReleases,
-                    label = "Recent",
-                    value = stats.recent7Days.toString(),
-                    iconTint = MaterialTheme.colorScheme.tertiary
-                )
-            }
-        }
+        StatItem(
+            icon = Icons.Outlined.Description,
+            label = "Total",
+            value = stats.totalCirculars.toString()
+        )
+        StatItem(
+            icon = Icons.Outlined.PriorityHigh,
+            label = "High Priority",
+            value = stats.highPriority.toString(),
+            iconTint = MaterialTheme.colorScheme.error
+        )
+        StatItem(
+            icon = Icons.Outlined.NewReleases,
+            label = "Recent",
+            value = stats.recent7Days.toString(),
+            iconTint = Color(0xFFF59E0B)
+        )
     }
 }
 
@@ -240,7 +223,7 @@ private fun StatItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     value: String,
-    iconTint: Color = MaterialTheme.colorScheme.primary
+    iconTint: Color = TeamozyColors.Primary
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
@@ -256,12 +239,12 @@ private fun StatItem(
             text = value,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            color = MaterialTheme.colorScheme.onSurface
         )
         Text(
             text = label,
             fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -276,7 +259,7 @@ private fun AppliedFiltersSection(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer
         )
@@ -325,7 +308,7 @@ private fun CircularCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -353,7 +336,7 @@ private fun CircularCard(
                     Text(
                         text = circular.circularType,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.primary
+                        color = TeamozyColors.Primary
                     )
                 }
 
@@ -429,7 +412,7 @@ private fun CircularCard(
 private fun PriorityBadge(priority: String) {
     val (backgroundColor, textColor) = when (priority.uppercase()) {
         "HIGH" -> Pair(MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.onError)
-        "MEDIUM" -> Pair(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.onTertiary)
+        "MEDIUM" -> Pair(Color(0xFFF59E0B), Color.White)
         else -> Pair(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
@@ -488,7 +471,7 @@ private fun EmptyState() {
 private fun ErrorCard(message: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.errorContainer
         )
@@ -527,7 +510,7 @@ private fun PaginationControls(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier

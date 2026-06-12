@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.image.CoilImageLoader
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
@@ -56,8 +57,8 @@ fun CompanyCard(
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                TeamozyColors.AppBar,
+                                TeamozyColors.AppBar.copy(alpha = 0.85f)
                             )
                         )
                     )
@@ -89,14 +90,14 @@ fun CompanyCard(
                             text = prefs.companyName?.uppercase() ?: "COMPANY NAME",
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
+                            color = TeamozyColors.OnAppBar
                         )
                         if (!prefs.companyWebsite.isNullOrBlank()) {
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = prefs.companyWebsite!!,
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
+                                color = TeamozyColors.OnAppBar.copy(alpha = 0.9f),
                                 textDecoration = TextDecoration.Underline,
                                 modifier = Modifier.clickable {
                                     openUrl(
@@ -112,7 +113,7 @@ fun CompanyCard(
                         Text(
                             text = prefs.companyAddress ?: "Company Address",
                             fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                            color = TeamozyColors.OnAppBar.copy(alpha = 0.9f)
                         )
                     }
                 }

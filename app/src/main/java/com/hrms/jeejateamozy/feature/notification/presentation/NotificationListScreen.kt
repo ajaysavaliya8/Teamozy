@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.ServerNotification
 import com.hrms.jeejateamozy.navigation.DeepLink
 import java.text.SimpleDateFormat
@@ -82,6 +83,7 @@ fun NotificationListScreen(
             onRefresh = { viewModel.refresh() },
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(padding)
         ) {
             when {
@@ -145,10 +147,10 @@ private fun NotificationTopBar(
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            titleContentColor = MaterialTheme.colorScheme.onPrimary,
-            navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-            actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+            containerColor = Color.White,
+            titleContentColor = TeamozyColors.Heading,
+            navigationIconContentColor = TeamozyColors.Heading,
+            actionIconContentColor = TeamozyColors.Heading
         )
     )
 }
@@ -275,20 +277,20 @@ private fun NotificationItem(
 
     // Colors based on state (fully opaque to hide swipe background)
     val backgroundColor = when {
-        isSelected -> MaterialTheme.colorScheme.primaryContainer
-        isUnread -> MaterialTheme.colorScheme.primaryContainer
+        isSelected -> TeamozyColors.Primary.copy(alpha = 0.12f)
+        isUnread -> TeamozyColors.Primary.copy(alpha = 0.08f)
         else -> MaterialTheme.colorScheme.surfaceContainerHighest
     }
 
     val iconBgColor = when {
-        isSelected -> MaterialTheme.colorScheme.primary
-        isUnread -> MaterialTheme.colorScheme.primary
+        isSelected -> TeamozyColors.Primary
+        isUnread -> TeamozyColors.Primary
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
 
     val iconTint = when {
-        isSelected -> MaterialTheme.colorScheme.onPrimary
-        isUnread -> MaterialTheme.colorScheme.onPrimary
+        isSelected -> Color.White
+        isUnread -> Color.White
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
@@ -321,7 +323,7 @@ private fun NotificationItem(
                     )
                 } else {
                     Icon(
-                        imageVector = getIcon(type),
+                        imageVector = getIcon(type, notification.title ?: ""),
                         contentDescription = null,
                         tint = iconTint,
                         modifier = Modifier.size(20.dp)
@@ -366,11 +368,12 @@ private fun NotificationItem(
     }
 }
 
-private fun getIcon(type: String): ImageVector {
+private fun getIcon(type: String, title: String = ""): ImageVector {
+    val ctx = "${type.lowercase()} ${title.lowercase()}"
     return when {
-        type.contains("circular") -> Icons.Default.Campaign
-        type.contains("leave") -> Icons.Default.BeachAccess
-        type.contains("attendance") -> Icons.Default.Schedule
+        ctx.contains("circular") -> Icons.Default.Campaign
+        ctx.contains("leave") -> Icons.Default.BeachAccess
+        ctx.contains("attendance") || ctx.contains("correction") -> Icons.Default.Schedule
         else -> Icons.Default.Notifications
     }
 }

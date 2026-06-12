@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.hrms.jeejateamozy.R
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.image.CoilImageLoader
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
@@ -68,7 +69,7 @@ fun ProfileHeader(
                         .clip(CircleShape)
                         .border(
                             3.dp,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                            TeamozyColors.Primary.copy(alpha = 0.3f),
                             CircleShape
                         ),
                     contentScale = ContentScale.Crop
@@ -151,7 +152,7 @@ fun ProfileHeader(
                             "$profileCompletion%",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = TeamozyColors.Primary,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -163,8 +164,8 @@ fun ProfileHeader(
                             .fillMaxWidth()
                             .height(6.dp)
                             .clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                        color = TeamozyColors.Primary,
+                        trackColor = TeamozyColors.Primary.copy(alpha = 0.2f),
                     )
                 }
             }
@@ -185,7 +186,7 @@ fun ProfileHeader(
                 Icons.Default.Phone,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = TeamozyColors.Primary
             )
             Spacer(Modifier.width(12.dp))
             Text(

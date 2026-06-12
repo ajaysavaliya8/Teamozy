@@ -24,7 +24,12 @@ object NetworkModule {
     }
 
     private val logging by lazy {
-        HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
+        HttpLoggingInterceptor().apply {
+            level = if (com.hrms.jeejateamozy.BuildConfig.DEBUG)
+                HttpLoggingInterceptor.Level.BODY
+            else
+                HttpLoggingInterceptor.Level.NONE
+        }
     }
 
     private val headersInterceptor = Interceptor { chain ->
@@ -67,6 +72,8 @@ object NetworkModule {
         val url = originalRequest.url.toString()
 
         val skipAuth = url.contains("send-login") || url.contains("verify-login")
+                || url.contains("forgot-password") || url.contains("verify-reset-otp")
+                || url.contains("reset-password")
 
         if (skipAuth) {
             chain.proceed(originalRequest)

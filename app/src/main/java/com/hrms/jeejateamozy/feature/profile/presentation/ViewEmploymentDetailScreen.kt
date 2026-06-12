@@ -2,6 +2,7 @@
 
 package com.hrms.jeejateamozy.feature.profile.presentation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.ui.LightStatusBarIcons
 import com.hrms.jeejateamozy.feature.profile.data.EmploymentDetailOutcome
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
@@ -87,9 +89,9 @@ fun ViewEmploymentDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF6200EE),
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor = TeamozyColors.AppBar,
+                    titleContentColor = TeamozyColors.OnAppBar,
+                    navigationIconContentColor = TeamozyColors.OnAppBar
                 )
             )
         }
@@ -97,6 +99,7 @@ fun ViewEmploymentDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
             if (isFetching) {
@@ -117,9 +120,9 @@ fun ViewEmploymentDetailScreen(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFFFEBEE)
+                                containerColor = Color(0xFFEF4444).copy(alpha = 0.1f)
                             ),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Row(
                                 modifier = Modifier.padding(12.dp),
@@ -128,10 +131,10 @@ fun ViewEmploymentDetailScreen(
                                 Icon(
                                     Icons.Default.Info,
                                     contentDescription = null,
-                                    tint = Color(0xFFD32F2F)
+                                    tint = Color(0xFFEF4444)
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text(msg, color = Color(0xFFD32F2F))
+                                Text(msg, color = Color(0xFFEF4444))
                             }
                         }
                     }
@@ -153,7 +156,7 @@ fun ViewEmploymentDetailScreen(
                                 "Employment Information",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF6200EE)
+                                color = TeamozyColors.Primary
                             )
 
                             HorizontalDivider()

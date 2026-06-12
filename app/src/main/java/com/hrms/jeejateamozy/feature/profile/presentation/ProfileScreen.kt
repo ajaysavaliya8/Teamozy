@@ -23,7 +23,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 import com.hrms.jeejateamozy.BuildConfig
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import com.hrms.jeejateamozy.feature.face.presentation.FaceRegistrationScreen
@@ -228,12 +230,17 @@ fun ProfileScreen(
 
     // Main Profile Screen
     Scaffold(
+        containerColor = TeamozyColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("My Profile", fontWeight = FontWeight.Bold) },
+                title = {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("My Profile", fontWeight = FontWeight.Bold, color = TeamozyColors.Heading)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TeamozyColors.Heading)
                     }
                 },
                 actions = {
@@ -243,15 +250,19 @@ fun ProfileScreen(
                             .padding(end = 8.dp)
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .background(TeamozyColors.Error.copy(alpha = 0.12f))
                     ) {
                         Icon(
                             Icons.Default.ExitToApp,
                             contentDescription = "Logout",
-                            tint = MaterialTheme.colorScheme.onErrorContainer
+                            tint = TeamozyColors.Error
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White,
+                    scrolledContainerColor = Color.White
+                )
             )
         }
     ) { paddingValues ->

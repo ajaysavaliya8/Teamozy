@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hrms.jeejateamozy.R
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.NetworkModule
 import com.hrms.jeejateamozy.core.utils.PreferencesManager
 import kotlinx.coroutines.launch
@@ -57,8 +59,9 @@ fun EditSocialMediaScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = TeamozyColors.AppBar,
+                    titleContentColor = TeamozyColors.OnAppBar,
+                    navigationIconContentColor = TeamozyColors.OnAppBar
                 )
             )
         }
@@ -67,23 +70,10 @@ fun EditSocialMediaScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                .background(TeamozyColors.Background)
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(Modifier.height(16.dp))
-
-            // Facebook
-            SocialMediaInputField(
-                iconRes = R.drawable.ic_facebook,          // full-color asset
-                contentDesc = "Facebook",
-                brandFocusColor = Color(0xFF1877F2),
-                value = facebook,
-                onValueChange = { facebook = it },
-                placeholder = "https://facebook.com/your.username",
-                imeAction = ImeAction.Next
-            )
-
-            Spacer(Modifier.height(12.dp))
 
             // LinkedIn
             SocialMediaInputField(
@@ -93,6 +83,19 @@ fun EditSocialMediaScreen(
                 value = linkedin,
                 onValueChange = { linkedin = it },
                 placeholder = "https://linkedin.com/in/your-id",
+                imeAction = ImeAction.Next
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // Facebook
+            SocialMediaInputField(
+                iconRes = R.drawable.ic_facebook,
+                contentDesc = "Facebook",
+                brandFocusColor = Color(0xFF1877F2),
+                value = facebook,
+                onValueChange = { facebook = it },
+                placeholder = "https://facebook.com/your.username",
                 imeAction = ImeAction.Next
             )
 
@@ -179,7 +182,7 @@ fun EditSocialMediaScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32))
+                    colors = CardDefaults.cardColors(containerColor = TeamozyColors.Success)
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -196,6 +199,8 @@ fun EditSocialMediaScreen(
                 }
                 Spacer(Modifier.height(12.dp))
             }
+
+            Spacer(Modifier.height(4.dp))
 
             // Save
             Button(
@@ -263,7 +268,7 @@ fun EditSocialMediaScreen(
                     .height(50.dp),
                 enabled = !isLoading,
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2))
+                colors = ButtonDefaults.buttonColors(containerColor = TeamozyColors.Primary)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -272,7 +277,7 @@ fun EditSocialMediaScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("SAVE")
+                    Text("Save Social Links")
                 }
             }
 
@@ -292,33 +297,42 @@ private fun SocialMediaInputField(
     imeAction: ImeAction,
     keyboardType: KeyboardType = KeyboardType.Uri
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        placeholder = { Text(placeholder) },
-        leadingIcon = {
-            // Use the original, full-color asset — no tint
+    Column(modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Image(
                 painter = painterResource(id = iconRes),
                 contentDescription = contentDesc,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(18.dp)
             )
-        },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = keyboardType,
-            imeAction = imeAction
-        ),
-        shape = RoundedCornerShape(12.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            // Neutral when not focused; brand accent on focus
-            unfocusedBorderColor = Color(0xFFE2E8F0),
-            focusedBorderColor = brandFocusColor,
-            unfocusedContainerColor = Color.White,
-            focusedContainerColor = Color.White
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = contentDesc,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF374151)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(placeholder, fontSize = 13.sp) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = keyboardType,
+                imeAction = imeAction
+            ),
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = Color(0xFFE2E8F0),
+                focusedBorderColor = brandFocusColor,
+                unfocusedContainerColor = Color.White,
+                focusedContainerColor = Color.White
+            )
         )
-    )
+    }
 }

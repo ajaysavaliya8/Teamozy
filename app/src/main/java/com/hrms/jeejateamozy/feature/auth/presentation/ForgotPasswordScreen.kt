@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.data.ResetOutcome
 import com.hrms.jeejateamozy.feature.auth.domain.usecase.LoginUseCase
@@ -110,8 +111,8 @@ fun ForgotPasswordScreen(
         }
     }
 
-    val headerGrad = Brush.verticalGradient(listOf(Color(0xFFEEF2FF), Color(0xFFF8FAFF)))
-    val primaryGrad = Brush.verticalGradient(listOf(Color(0xFF6366F1), Color(0xFF8B5CF6)))
+    val headerGrad = Brush.verticalGradient(listOf(TeamozyColors.AppBar, TeamozyColors.PrimaryDark))
+    val primaryGrad = Brush.verticalGradient(listOf(TeamozyColors.PrimaryGradientStart, TeamozyColors.PrimaryGradientEnd))
 
     val stepTitle = when (currentStep) {
         1 -> "Forgot Password"
@@ -128,7 +129,7 @@ fun ForgotPasswordScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snack) },
-        containerColor = Color(0xFFF6F7FB)
+        containerColor = TeamozyColors.Background
     ) { padding ->
         Column(
             Modifier
@@ -178,7 +179,7 @@ fun ForgotPasswordScreen(
                     Icon(
                         Icons.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color(0xFF6366F1)
+                        tint = TeamozyColors.Primary
                     )
                 }
 
@@ -226,7 +227,7 @@ fun ForgotPasswordScreen(
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp))
                             .background(
-                                if (step <= currentStep) Color(0xFF6366F1) else Color(0xFFE2E8F0)
+                                if (step <= currentStep) TeamozyColors.Primary else Color(0xFFE2E8F0)
                             )
                     )
                 }
@@ -270,7 +271,7 @@ fun ForgotPasswordScreen(
                                             }
                                         },
                                         placeholder = { Text("+91 98765 43210", color = Color(0xFF94A3B8)) },
-                                        leadingIcon = { Icon(Icons.Filled.Phone, null, tint = Color(0xFF6366F1)) },
+                                        leadingIcon = { Icon(Icons.Filled.Phone, null, tint = TeamozyColors.Primary) },
                                         singleLine = true,
                                         keyboardOptions = KeyboardOptions(
                                             keyboardType = KeyboardType.Number,
@@ -288,7 +289,7 @@ fun ForgotPasswordScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = OutlinedTextFieldDefaults.colors(
                                             unfocusedBorderColor = Color(0xFFE5E7EB),
-                                            focusedBorderColor = Color(0xFF6366F1),
+                                            focusedBorderColor = TeamozyColors.Primary,
                                             unfocusedContainerColor = Color(0xFFF8FAFC),
                                             focusedContainerColor = Color.White
                                         )
@@ -356,7 +357,7 @@ fun ForgotPasswordScreen(
                                                 .weight(1f)
                                                 .height(48.dp),
                                             shape = RoundedCornerShape(12.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                                            colors = ButtonDefaults.buttonColors(containerColor = TeamozyColors.Primary)
                                         ) {
                                             Text("Next", fontWeight = FontWeight.SemiBold)
                                         }
@@ -391,7 +392,7 @@ fun ForgotPasswordScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     if (!canResend && secondsLeft > 0) {
-                                        Text("Resend in ${secondsLeft}s", fontSize = 12.sp, color = Color(0xFF6366F1))
+                                        Text("Resend in ${secondsLeft}s", fontSize = 12.sp, color = TeamozyColors.Primary)
                                     } else {
                                         TextButton(
                                             onClick = {
@@ -410,7 +411,7 @@ fun ForgotPasswordScreen(
                                             },
                                             enabled = !loading
                                         ) {
-                                            Text("Resend OTP", fontWeight = FontWeight.SemiBold, color = Color(0xFF6366F1))
+                                            Text("Resend OTP", fontWeight = FontWeight.SemiBold, color = TeamozyColors.Primary)
                                         }
                                     }
                                 }
@@ -440,7 +441,7 @@ fun ForgotPasswordScreen(
                                         .fillMaxWidth()
                                         .height(52.dp),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                                    colors = ButtonDefaults.buttonColors(containerColor = TeamozyColors.Primary)
                                 ) {
                                     if (loading) {
                                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
@@ -460,7 +461,7 @@ fun ForgotPasswordScreen(
                                         value = newPassword,
                                         onValueChange = { error = null; newPassword = it },
                                         placeholder = { Text("Enter new password", color = Color(0xFF94A3B8)) },
-                                        leadingIcon = { Icon(Icons.Filled.Lock, null, tint = Color(0xFF6366F1)) },
+                                        leadingIcon = { Icon(Icons.Filled.Lock, null, tint = TeamozyColors.Primary) },
                                         trailingIcon = {
                                             TextButton(onClick = { newPasswordVisible = !newPasswordVisible }) {
                                                 Text(if (newPasswordVisible) "HIDE" else "SHOW", fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -481,7 +482,7 @@ fun ForgotPasswordScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = OutlinedTextFieldDefaults.colors(
                                             unfocusedBorderColor = Color(0xFFE5E7EB),
-                                            focusedBorderColor = Color(0xFF6366F1),
+                                            focusedBorderColor = TeamozyColors.Primary,
                                             unfocusedContainerColor = Color(0xFFF8FAFC),
                                             focusedContainerColor = Color.White
                                         )
@@ -494,7 +495,7 @@ fun ForgotPasswordScreen(
                                         value = confirmPassword,
                                         onValueChange = { error = null; confirmPassword = it },
                                         placeholder = { Text("Confirm new password", color = Color(0xFF94A3B8)) },
-                                        leadingIcon = { Icon(Icons.Filled.Lock, null, tint = Color(0xFF6366F1)) },
+                                        leadingIcon = { Icon(Icons.Filled.Lock, null, tint = TeamozyColors.Primary) },
                                         trailingIcon = {
                                             TextButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                                                 Text(if (confirmPasswordVisible) "HIDE" else "SHOW", fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -518,7 +519,7 @@ fun ForgotPasswordScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = OutlinedTextFieldDefaults.colors(
                                             unfocusedBorderColor = Color(0xFFE5E7EB),
-                                            focusedBorderColor = Color(0xFF6366F1),
+                                            focusedBorderColor = TeamozyColors.Primary,
                                             unfocusedContainerColor = Color(0xFFF8FAFC),
                                             focusedContainerColor = Color.White
                                         )
@@ -553,7 +554,7 @@ fun ForgotPasswordScreen(
                                         .fillMaxWidth()
                                         .height(52.dp),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                                    colors = ButtonDefaults.buttonColors(containerColor = TeamozyColors.Primary)
                                 ) {
                                     if (loading) {
                                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
@@ -621,7 +622,7 @@ fun ForgotPasswordScreen(
                 Text(
                     "Back to Sign In",
                     fontSize = 14.sp,
-                    color = Color(0xFF6366F1),
+                    color = TeamozyColors.Primary,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -653,7 +654,7 @@ private fun ForgotOtpBoxes(
                     shape = RoundedCornerShape(12.dp),
                     tonalElevation = if (ch.isNotEmpty()) 2.dp else 0.dp,
                     color = Color(0xFFF8FAFC),
-                    border = BorderStroke(1.dp, if (ch.isNotEmpty()) Color(0xFF6366F1) else Color(0xFFE2E8F0))
+                    border = BorderStroke(1.dp, if (ch.isNotEmpty()) TeamozyColors.Primary else Color(0xFFE2E8F0))
                 ) {
                     Box(
                         modifier = Modifier.size(width = 56.dp, height = 56.dp),

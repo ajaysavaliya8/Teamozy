@@ -10,12 +10,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.background
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.feature.profile.data.DaySchedule
 import com.hrms.jeejateamozy.feature.profile.data.ShiftDetailsData
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
@@ -71,8 +73,9 @@ fun ViewShiftDetailsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = TeamozyColors.AppBar,
+                    titleContentColor = TeamozyColors.OnAppBar,
+                    navigationIconContentColor = TeamozyColors.OnAppBar
                 )
             )
         }
@@ -80,6 +83,7 @@ fun ViewShiftDetailsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
             when {
@@ -142,7 +146,7 @@ fun ViewShiftDetailsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                containerColor = TeamozyColors.Primary.copy(alpha = 0.1f)
                             )
                         ) {
                             Row(
@@ -152,7 +156,7 @@ fun ViewShiftDetailsScreen(
                                 Icon(
                                     imageVector = Icons.Default.AccessTime,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = TeamozyColors.Primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(Modifier.width(12.dp))
@@ -214,7 +218,7 @@ private fun ShiftOverviewCard(data: ShiftDetailsData?) {
                 Icon(
                     imageVector = Icons.Default.Schedule,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = TeamozyColors.Primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(12.dp))
@@ -275,7 +279,7 @@ private fun ShiftOverviewCard(data: ShiftDetailsData?) {
                         weekOffDays.forEach { day ->
                             Card(
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    containerColor = TeamozyColors.Primary.copy(alpha = 0.15f)
                                 ),
                                 shape = RoundedCornerShape(6.dp)
                             ) {
@@ -283,7 +287,7 @@ private fun ShiftOverviewCard(data: ShiftDetailsData?) {
                                     text = day,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    color = TeamozyColors.PrimaryDark,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
@@ -318,7 +322,7 @@ private fun AttendancePoliciesCard(data: ShiftDetailsData?) {
                 Icon(
                     imageVector = Icons.Default.Policy,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = TeamozyColors.Primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(12.dp))
@@ -345,7 +349,7 @@ private fun AttendancePoliciesCard(data: ShiftDetailsData?) {
                     text = "Late In",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = TeamozyColors.Primary
                 )
                 Spacer(Modifier.height(8.dp))
                 InfoRow(
@@ -377,7 +381,7 @@ private fun AttendancePoliciesCard(data: ShiftDetailsData?) {
                     text = "Early Out",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = TeamozyColors.Primary
                 )
                 Spacer(Modifier.height(8.dp))
                 InfoRow(
@@ -409,7 +413,7 @@ private fun AttendancePoliciesCard(data: ShiftDetailsData?) {
                     text = "Overtime",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = TeamozyColors.Primary
                 )
                 Spacer(Modifier.height(8.dp))
                 ToggleRow(
@@ -438,7 +442,7 @@ private fun AttendancePoliciesCard(data: ShiftDetailsData?) {
                     text = "Short Leave",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = TeamozyColors.Primary
                 )
                 Spacer(Modifier.height(8.dp))
                 ToggleRow(
@@ -483,7 +487,7 @@ private fun ShiftSettingsCard(data: ShiftDetailsData?) {
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = TeamozyColors.Primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(12.dp))
@@ -549,7 +553,7 @@ private fun WeeklyScheduleCard(weeklySchedule: Map<String, DaySchedule>?) {
                 Icon(
                     imageVector = Icons.Default.CalendarMonth,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = TeamozyColors.Primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(12.dp))
@@ -697,7 +701,7 @@ private fun ToggleRow(label: String, enabled: Boolean) {
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = if (enabled)
-                    MaterialTheme.colorScheme.primaryContainer
+                    TeamozyColors.Primary.copy(alpha = 0.15f)
                 else
                     MaterialTheme.colorScheme.surfaceVariant
             ),
@@ -708,7 +712,7 @@ private fun ToggleRow(label: String, enabled: Boolean) {
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (enabled)
-                    MaterialTheme.colorScheme.onPrimaryContainer
+                    TeamozyColors.PrimaryDark
                 else
                     MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)

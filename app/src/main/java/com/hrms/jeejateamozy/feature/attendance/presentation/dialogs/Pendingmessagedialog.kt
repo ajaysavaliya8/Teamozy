@@ -301,9 +301,9 @@ private fun getMessageTypeStyle(type: String?): MessageTypeStyle {
         "WARNING" -> MessageTypeStyle(
             label = "WARNING",
             icon = Icons.Outlined.Warning,
-            iconColor = Color(0xFFFFA726),
-            backgroundColor = Color(0xFFFFF3E0),
-            textColor = Color(0xFFE65100)
+            iconColor = Color(0xFFF59E0B),
+            backgroundColor = Color(0xFFF59E0B).copy(alpha = 0.1f),
+            textColor = Color(0xFFD97706)
         )
         "CRITICAL" -> MessageTypeStyle(
             label = "⚠️ CRITICAL",

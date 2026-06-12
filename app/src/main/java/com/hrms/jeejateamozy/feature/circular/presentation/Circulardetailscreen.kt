@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.CircularDetail
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -61,7 +62,7 @@ fun CircularDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
+                    containerColor = TeamozyColors.AppBar,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )
@@ -71,6 +72,7 @@ fun CircularDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
             when {
@@ -150,7 +152,7 @@ private fun HeaderSection(circular: CircularDetail) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = TeamozyColors.Primary.copy(alpha = 0.10f)
         )
     ) {
         Column(
@@ -177,7 +179,7 @@ private fun HeaderSection(circular: CircularDetail) {
                 text = circular.title,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = TeamozyColors.Heading
             )
         }
     }
@@ -202,7 +204,7 @@ private fun DescriptionSection(description: String) {
                     Icons.Outlined.Description,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
@@ -243,7 +245,7 @@ private fun DatesSection(circular: CircularDetail) {
                     Icons.Outlined.CalendarToday,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
@@ -314,7 +316,7 @@ private fun AttachmentsSection(attachments: List<String>) {
                     Icons.Outlined.AttachFile,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
@@ -365,7 +367,7 @@ private fun AttachmentItem(attachment: String) {
                 Icons.Default.Download,
                 contentDescription = "Download",
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = TeamozyColors.Primary
             )
         }
     }
@@ -398,7 +400,7 @@ private fun TypeBadge(type: String) {
 private fun PriorityBadge(priority: String) {
     val (backgroundColor, textColor) = when (priority.uppercase()) {
         "HIGH" -> Pair(MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.onError)
-        "MEDIUM" -> Pair(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.onTertiary)
+        "MEDIUM" -> Pair(Color(0xFFF59E0B), Color.White)
         else -> Pair(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
     }
 

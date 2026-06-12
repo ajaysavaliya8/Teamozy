@@ -13,12 +13,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.ui.LightStatusBarIcons
 import com.hrms.jeejateamozy.feature.profile.data.PersonalInfoOutcome
 import com.hrms.jeejateamozy.feature.profile.data.ProfileRepository
@@ -104,11 +106,11 @@ fun EditPersonalInfoScreen(
     }
 
     val textFieldColors = OutlinedTextFieldDefaults.colors(
-        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-        focusedBorderColor = MaterialTheme.colorScheme.primary,
-        focusedLabelColor = MaterialTheme.colorScheme.primary,
-        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-        focusedContainerColor = MaterialTheme.colorScheme.surface
+        unfocusedBorderColor = TeamozyColors.Border,
+        focusedBorderColor = TeamozyColors.Primary,
+        focusedLabelColor = TeamozyColors.Primary,
+        unfocusedContainerColor = TeamozyColors.FieldBg,
+        focusedContainerColor = Color.White
     )
 
     LightStatusBarIcons()
@@ -132,9 +134,9 @@ fun EditPersonalInfoScreen(
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = TeamozyColors.AppBar,
+                    titleContentColor = TeamozyColors.OnAppBar,
+                    navigationIconContentColor = TeamozyColors.OnAppBar
                 )
             )
         }
@@ -232,7 +234,7 @@ fun EditPersonalInfoScreen(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    containerColor = TeamozyColors.Primary.copy(alpha = 0.1f)
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
@@ -243,12 +245,12 @@ fun EditPersonalInfoScreen(
                                     Icon(
                                         Icons.Default.CheckCircle,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        tint = TeamozyColors.PrimaryDark
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         msg,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        color = TeamozyColors.PrimaryDark,
                                         fontSize = 13.sp
                                     )
                                 }
@@ -271,7 +273,7 @@ fun EditPersonalInfoScreen(
                                     Icon(
                                         imageVector = Icons.Default.Lock,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = TeamozyColors.Primary,
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(Modifier.width(12.dp))
@@ -344,7 +346,7 @@ fun EditPersonalInfoScreen(
                                     Icon(
                                         imageVector = Icons.Default.Edit,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = TeamozyColors.Primary,
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(Modifier.width(12.dp))
@@ -539,13 +541,13 @@ fun EditPersonalInfoScreen(
                                 .height(50.dp),
                             enabled = !isLoading,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
+                                containerColor = TeamozyColors.Primary
                             ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             if (isLoading) {
                                 CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    color = Color.White,
                                     modifier = Modifier.size(24.dp)
                                 )
                             } else {
@@ -557,7 +559,7 @@ fun EditPersonalInfoScreen(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
+                                containerColor = TeamozyColors.Warning.copy(alpha = 0.12f)
                             ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -568,13 +570,13 @@ fun EditPersonalInfoScreen(
                                 Icon(
                                     Icons.Default.Warning,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    tint = TeamozyColors.WarningDark,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Text(
                                     "Only Blood Group, Marital Status, Spouse Name, Number of Children, Languages, and Religion can be updated. Other fields are managed by HR.",
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    color = TeamozyColors.WarningDark,
                                     fontSize = 12.sp
                                 )
                             }

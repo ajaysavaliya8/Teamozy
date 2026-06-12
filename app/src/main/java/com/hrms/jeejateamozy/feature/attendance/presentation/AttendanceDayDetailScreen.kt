@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.core.network.DayCorrectionRequest
 import com.hrms.jeejateamozy.core.network.DayTimesheet
 import com.hrms.jeejateamozy.core.network.PunchRecord
@@ -69,18 +70,19 @@ fun AttendanceDayDetailScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = TeamozyColors.Background,
         topBar = {
             TopAppBar(
-                title = { Text("Day Detail") },
+                title = { Text("Day Detail", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = TeamozyColors.AppBar,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
                 )
             )
         }
@@ -88,6 +90,7 @@ fun AttendanceDayDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(TeamozyColors.Background)
                 .padding(paddingValues)
         ) {
             when {
@@ -163,6 +166,28 @@ fun AttendanceDayDetailScreen(
                         isLoading = uiState.isWithdrawingCorrection
                     )
                 }
+            }
+
+            // Submit Correction Error Dialog — rendered above the bottom sheet so the
+            // (now fully-parsed) validation message is actually visible to the user.
+            uiState.submitCorrectionError?.let { errorMessage ->
+                AlertDialog(
+                    onDismissRequest = { viewModel.dismissSubmitCorrectionError() },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    title = { Text("Couldn't Submit Request") },
+                    text = { Text(errorMessage) },
+                    confirmButton = {
+                        TextButton(onClick = { viewModel.dismissSubmitCorrectionError() }) {
+                            Text("OK")
+                        }
+                    }
+                )
             }
         }
     }
@@ -268,7 +293,8 @@ private fun DayDetailContent(
                 Button(
                     onClick = onSubmitCorrection,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = TeamozyColors.Primary)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
@@ -292,7 +318,7 @@ private fun DateHeaderCard(dayName: String, formattedDate: String) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = TeamozyColors.Primary.copy(alpha = 0.12f)
         )
     ) {
         Column(
@@ -305,13 +331,13 @@ private fun DateHeaderCard(dayName: String, formattedDate: String) {
                 text = dayName,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = TeamozyColors.Primary
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = formattedDate,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                color = TeamozyColors.Primary.copy(alpha = 0.8f)
             )
         }
     }
@@ -420,7 +446,7 @@ private fun ShiftInfoCard(shiftName: String?, hours: String, startTime: String, 
                 Icon(
                     imageVector = Icons.Default.Schedule,
                     contentDescription = "Shift",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
                 Text(
                     text = "Shift Information",
@@ -461,7 +487,7 @@ private fun HoursSummaryCard(totalDisplay: String, productiveDisplay: String) {
                 Icon(
                     imageVector = Icons.Default.Timer,
                     contentDescription = "Hours",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
                 Text(
                     text = "Hours Summary",
@@ -501,7 +527,7 @@ private fun PunchRecordCard(punch: PunchRecord) {
                 Icon(
                     imageVector = if (punch.type == "CHECK IN") Icons.Default.Login else Icons.Default.Logout,
                     contentDescription = punch.type,
-                    tint = if (punch.type == "CHECK IN") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    tint = if (punch.type == "CHECK IN") TeamozyColors.Primary else MaterialTheme.colorScheme.error
                 )
                 Column {
                     Text(
@@ -523,7 +549,7 @@ private fun PunchRecordCard(punch: PunchRecord) {
                     Icon(
                         imageVector = Icons.Default.LocationOn,
                         contentDescription = "Location",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = TeamozyColors.Primary
                     )
                 }
             }

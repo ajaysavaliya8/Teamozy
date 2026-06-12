@@ -61,6 +61,7 @@ import com.hrms.jeejateamozy.feature.auth.data.AuthOutcome
 import com.hrms.jeejateamozy.feature.auth.data.AuthRepository
 import com.hrms.jeejateamozy.feature.auth.data.FindCompanyOutcome
 import com.hrms.jeejateamozy.feature.auth.domain.usecase.LoginUseCase
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 import com.hrms.jeejateamozy.feature.auth.presentation.dialogs.AppVersionUpdateDialog  // ⚡ NEW IMPORT
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -207,8 +208,8 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     }
 
     // Palette
-    val primaryGrad = Brush.verticalGradient(listOf(Color(0xFF6366F1), Color(0xFF8B5CF6)))
-    val headerGrad = Brush.verticalGradient(listOf(Color(0xFFEEF2FF), Color(0xFFF8FAFF)))
+    val primaryGrad = Brush.verticalGradient(listOf(TeamozyColors.PrimaryGradientStart, TeamozyColors.PrimaryGradientEnd))
+    val headerGrad = Brush.verticalGradient(listOf(TeamozyColors.AppBar, TeamozyColors.PrimaryDark))
     val logoScale by animateFloatAsState(
         if (loading) 0.96f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -217,7 +218,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
     Scaffold(
         snackbarHost = { SnackbarHost(snack) },
-        containerColor = Color(0xFFF6F7FB)
+        containerColor = TeamozyColors.Background
     ) { padding ->
 
         Column(
@@ -291,7 +292,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                 }
                             },
                             placeholder = { Text("+91 98765 43210", color = Color(0xFF94A3B8)) },
-                            leadingIcon = { Icon(Icons.Filled.Phone, null, tint = Color(0xFF6366F1)) },
+                            leadingIcon = { Icon(Icons.Filled.Phone, null, tint = TeamozyColors.Primary) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Number,
@@ -309,7 +310,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 unfocusedBorderColor = Color(0xFFE5E7EB),
-                                focusedBorderColor = Color(0xFF6366F1),
+                                focusedBorderColor = TeamozyColors.Primary,
                                 unfocusedContainerColor = Color(0xFFF8FAFC),
                                 focusedContainerColor = Color.White
                             )
@@ -360,7 +361,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     value = password,
                                     onValueChange = { error = null; password = it },
                                     placeholder = { Text("Enter your password", color = Color(0xFF94A3B8)) },
-                                    leadingIcon = { Icon(Icons.Filled.Lock, null, tint = Color(0xFF6366F1)) },
+                                    leadingIcon = { Icon(Icons.Filled.Lock, null, tint = TeamozyColors.Primary) },
                                     trailingIcon = {
                                         TextButton(onClick = { passwordVisible = !passwordVisible }) {
                                             Text(if (passwordVisible) "HIDE" else "SHOW", fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -393,7 +394,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     shape = RoundedCornerShape(12.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         unfocusedBorderColor = Color(0xFFE5E7EB),
-                                        focusedBorderColor = Color(0xFF6366F1),
+                                        focusedBorderColor = TeamozyColors.Primary,
                                         unfocusedContainerColor = Color(0xFFF8FAFC),
                                         focusedContainerColor = Color.White
                                     )
@@ -483,7 +484,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                         .weight(1f)
                                         .height(48.dp),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                                    colors = ButtonDefaults.buttonColors(containerColor = TeamozyColors.Primary)
                                 ) {
                                     if (loading && otp.length == 4) {
                                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
@@ -511,7 +512,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                         .fillMaxWidth()
                                         .height(52.dp),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                                    colors = ButtonDefaults.buttonColors(containerColor = TeamozyColors.Primary)
                                 ) {
                                     if (loading) {
                                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
@@ -528,7 +529,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     Text(
                                         "Forgot Password?",
                                         fontSize = 13.sp,
-                                        color = Color(0xFF6366F1),
+                                        color = TeamozyColors.Primary,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -734,7 +735,7 @@ private fun DeviceRegistrationDialog(
                             Icon(
                                 Icons.Filled.Phone,
                                 contentDescription = null,
-                                tint = Color(0xFF6366F1),
+                                tint = TeamozyColors.Primary,
                                 modifier = Modifier.size(20.dp)
                             )
                             Column {
@@ -789,7 +790,7 @@ private fun DeviceRegistrationDialog(
                             .fillMaxWidth()
                             .height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                        colors = ButtonDefaults.buttonColors(containerColor = TeamozyColors.Primary)
                     ) {
                         if (otpLoading) {
                             CircularProgressIndicator(
@@ -827,7 +828,7 @@ private fun DeviceRegistrationDialog(
                                     Text(
                                         "Resend in ${secondsLeft}s",
                                         fontSize = 12.sp,
-                                        color = Color(0xFF6366F1)
+                                        color = TeamozyColors.Primary
                                     )
                                 }
                             }
@@ -839,7 +840,7 @@ private fun DeviceRegistrationDialog(
                                     onOtpChange(clean)
                                 },
                                 placeholder = { Text("Enter 4-digit OTP", color = Color(0xFF94A3B8)) },
-                                leadingIcon = { Icon(Icons.Filled.Lock, null, tint = Color(0xFF6366F1)) },
+                                leadingIcon = { Icon(Icons.Filled.Lock, null, tint = TeamozyColors.Primary) },
                                 trailingIcon = {
                                     if (canResend) {
                                         TextButton(onClick = onSendOtp, enabled = !otpLoading) {
@@ -860,7 +861,7 @@ private fun DeviceRegistrationDialog(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     unfocusedBorderColor = Color(0xFFE5E7EB),
-                                    focusedBorderColor = Color(0xFF6366F1),
+                                    focusedBorderColor = TeamozyColors.Primary,
                                     unfocusedContainerColor = Color(0xFFF8FAFC),
                                     focusedContainerColor = Color.White
                                 )
@@ -952,7 +953,7 @@ private fun RowScope.SegItem(text: String, selected: Boolean, onClick: () -> Uni
                 text,
                 fontSize = 14.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                color = if (selected) Color(0xFF6366F1) else Color(0xFF64748B)
+                color = if (selected) TeamozyColors.Primary else Color(0xFF64748B)
             )
         }
     }
@@ -982,7 +983,7 @@ private fun OtpBoxes(
                     shape = RoundedCornerShape(12.dp),
                     tonalElevation = if (ch.isNotEmpty()) 2.dp else 0.dp,
                     color = Color(0xFFF8FAFC),
-                    border = BorderStroke(1.dp, if (ch.isNotEmpty()) Color(0xFF6366F1) else Color(0xFFE2E8F0))
+                    border = BorderStroke(1.dp, if (ch.isNotEmpty()) TeamozyColors.Primary else Color(0xFFE2E8F0))
                 ) {
                     Box(
                         modifier = Modifier.size(width = 56.dp, height = 56.dp),

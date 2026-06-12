@@ -43,18 +43,20 @@ class TeamozyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "✅ FCM Token refreshed: ${token.take(20)}...")
+        if (com.hrms.jeejateamozy.BuildConfig.DEBUG) {
+            Log.d(TAG, "✅ FCM Token refreshed: ${token.take(20)}...")
+        }
         PreferencesManager.getInstance(this).fcmToken = token
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        Log.d(TAG, "========================================")
-        Log.d(TAG, "📨 FCM MESSAGE RECEIVED")
-        Log.d(TAG, "  From: ${message.from}")
-        Log.d(TAG, "  Data: ${message.data}")
-        Log.d(TAG, "========================================")
+        if (com.hrms.jeejateamozy.BuildConfig.DEBUG) {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📨 FCM MESSAGE RECEIVED type=${message.data["type"]}")
+            Log.d(TAG, "========================================")
+        }
 
         val data = message.data
         val type = data["type"] ?: data["notification_type"] ?: ""

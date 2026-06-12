@@ -27,10 +27,10 @@ fun CorrectionStatusBadge(
     modifier: Modifier = Modifier
 ) {
     val (icon, backgroundColor) = when (status) {
-        "PENDING", "ACTIVE" -> Icons.Default.Schedule to Color(0xFF2196F3)
-        "APPROVED" -> Icons.Default.CheckCircle to Color(0xFF4CAF50)
-        "REJECTED" -> Icons.Default.Cancel to Color(0xFFF44336)
-        "MORE_INFO_NEEDED" -> Icons.Default.Info to Color(0xFFFF9800)
+        "PENDING", "ACTIVE" -> Icons.Default.Schedule to Color(0xFFF59E0B)
+        "APPROVED" -> Icons.Default.CheckCircle to Color(0xFF10B981)
+        "REJECTED" -> Icons.Default.Cancel to Color(0xFFEF4444)
+        "MORE_INFO_NEEDED" -> Icons.Default.Info to Color(0xFFF59E0B)
         "WITHDRAWN" -> Icons.Default.Close to Color(0xFF9E9E9E)
         else -> Icons.Default.Circle to Color(0xFF9E9E9E)
     }
@@ -72,6 +72,6 @@ fun CorrectionPendingDot(
     Box(
         modifier = modifier
             .size(6.dp)
-            .background(Color(0xFF2196F3), shape = RoundedCornerShape(3.dp))
+            .background(Color(0xFFF59E0B), shape = RoundedCornerShape(3.dp))
     )
 }

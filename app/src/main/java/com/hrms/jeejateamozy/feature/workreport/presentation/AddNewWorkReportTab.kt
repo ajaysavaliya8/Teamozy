@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 
 @Composable
 fun AddNewWorkReportTab(
@@ -249,14 +250,14 @@ fun AddNewWorkReportTab(
                         imageVector = Icons.Default.Image,
                         contentDescription = "Select media",
                         modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = TeamozyColors.Primary
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = "Select Media",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = TeamozyColors.Primary
                     )
                 }
             }
@@ -285,14 +286,14 @@ fun AddNewWorkReportTab(
                 .height(56.dp),
             enabled = !uiState.isSubmitting && uiState.workDescription.trim().length >= 10,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary
+                containerColor = TeamozyColors.Primary
             ),
             shape = MaterialTheme.shapes.large
         ) {
             if (uiState.isSubmitting) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
+                    color = Color.White
                 )
             } else {
                 Text(
@@ -359,7 +360,7 @@ fun AddNewWorkReportTab(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF4CAF50).copy(alpha = 0.1f)
+                    containerColor = Color(0xFF10B981).copy(alpha = 0.1f)
                 )
             ) {
                 Row(
@@ -371,13 +372,13 @@ fun AddNewWorkReportTab(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = Color(0xFF4CAF50)
+                        tint = Color(0xFF10B981)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "Work report submitted successfully!",
                         fontSize = 14.sp,
-                        color = Color(0xFF2E7D32),
+                        color = Color(0xFF059669),
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -419,10 +420,10 @@ private fun WorkReportTextField(
                 )
             },
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                focusedBorderColor = TeamozyColors.Primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline
             ),
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(12.dp),
             maxLines = Int.MAX_VALUE
         )
     }
@@ -454,7 +455,7 @@ private fun AttachmentItem(
                 Icon(
                     imageVector = Icons.Default.AttachFile,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = TeamozyColors.Primary
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
