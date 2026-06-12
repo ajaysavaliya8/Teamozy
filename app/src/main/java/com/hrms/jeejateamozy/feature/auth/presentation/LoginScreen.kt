@@ -25,12 +25,16 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.hrms.jeejateamozy.R
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -242,23 +246,21 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
+                    Image(
+                        painter = painterResource(R.drawable.ic_teamozy_logo),
+                        contentDescription = "Teamozy",
                         modifier = Modifier
-                            .size(84.dp)
-                            .clip(CircleShape)
-                            .background(primaryGrad)
+                            .size(96.dp)
                             .scale(logoScale),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("T", fontSize = 44.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
+                        contentScale = ContentScale.Fit
+                    )
                     Spacer(Modifier.height(14.dp))
-                    Text("Welcome back", fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A))
+                    Text("Welcome back", fontSize = 26.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "Sign in to continue to Teamozy",
                         fontSize = 14.sp,
-                        color = Color(0xFF64748B),
+                        color = Color.White.copy(alpha = 0.75f),
                         fontWeight = FontWeight.Medium
                     )
                 }
