@@ -546,15 +546,27 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + androidx.compose.animation.shrinkVertically()
                     ) {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2)),
-                            shape = RoundedCornerShape(12.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFFEF2F2))
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFDC2626),
+                                modifier = Modifier.size(18.dp).padding(top = 1.dp)
+                            )
                             Text(
                                 text = error.orEmpty(),
                                 color = Color(0xFF991B1B),
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(14.dp)
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
