@@ -7,6 +7,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -540,35 +541,35 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         }
                     }
 
-                    // Error
-                    AnimatedVisibility(
-                        visible = !error.isNullOrBlank(),
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + androidx.compose.animation.shrinkVertically()
+                    // Error — alpha-only so layout space is always reserved (no scroll shift)
+                    val errorAlpha by animateFloatAsState(
+                        targetValue = if (error.isNullOrBlank()) 0f else 1f,
+                        animationSpec = tween(durationMillis = 250),
+                        label = "error-alpha"
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(errorAlpha)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFFEF2F2))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFFFEF2F2))
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.Top,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                Icons.Filled.Warning,
-                                contentDescription = null,
-                                tint = Color(0xFFDC2626),
-                                modifier = Modifier.size(18.dp).padding(top = 1.dp)
-                            )
-                            Text(
-                                text = error.orEmpty(),
-                                color = Color(0xFF991B1B),
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = error.orEmpty(),
+                            color = Color(0xFF991B1B),
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
