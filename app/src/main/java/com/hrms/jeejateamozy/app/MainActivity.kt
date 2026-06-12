@@ -10,15 +10,27 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import com.hrms.jeejateamozy.R
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
@@ -372,11 +384,22 @@ private fun InlineSplash(
         )
     }
 
+    var splashVisible by remember { mutableStateOf(false) }
+    val splashAlpha by animateFloatAsState(
+        targetValue = if (splashVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 800),
+        label = "splash-alpha"
+    )
+
     LaunchedEffect(retryTrigger) {
+        splashVisible = true
+        val startTime = System.currentTimeMillis()
         status = "Verifying session..."
 
         when (val outcome = authRepository.verifyToken()) {
             is AuthOutcome.Success -> {
+                val elapsed = System.currentTimeMillis() - startTime
+                if (elapsed < 1800L) delay(1800L - elapsed)
                 Log.d("SplashScreen", "Token valid - navigating to home")
                 onComplete(true)
             }
@@ -391,33 +414,46 @@ private fun InlineSplash(
                 showNoInternetDialog = true
             }
             else -> {
+                val elapsed = System.currentTimeMillis() - startTime
+                if (elapsed < 1800L) delay(1800L - elapsed)
                 Log.d("SplashScreen", "Token invalid or missing - navigating to login")
                 onComplete(false)
             }
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8FDF9)),
+        contentAlignment = Alignment.Center
+    ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.alpha(splashAlpha)
         ) {
+            Image(
+                painter = painterResource(R.drawable.ic_teamozy_logo),
+                contentDescription = "Teamozy",
+                modifier = Modifier
+                    .size(140.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(Modifier.height(20.dp))
             Text(
                 text = "Teamozy",
-                style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF062E1E),
+                letterSpacing = 1.sp
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = "HR Management System",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 13.sp,
+                color = Color(0xFF00875A)
             )
-            Spacer(Modifier.height(48.dp))
-            CircularProgressIndicator()
-            Spacer(Modifier.height(16.dp))
-            Text(text = status, textAlign = TextAlign.Center)
         }
     }
 }
