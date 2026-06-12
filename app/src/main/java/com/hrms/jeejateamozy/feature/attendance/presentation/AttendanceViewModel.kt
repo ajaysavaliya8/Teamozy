@@ -1484,5 +1484,13 @@ data class AttendanceUiState(
 
     // Live geofence display (display-only; server stays the authority)
     val geofence: Geofence? = null,
-    val geoStatus: GeoStatus = GeoStatus.Disabled
+    val geoStatus: GeoStatus = GeoStatus.Disabled,
+
+    // Home screen extras
+    val streakDays: Int = 0,
+    val shiftName: String? = null,
+    val shiftTime: String? = null,
+    val shiftStatus: String? = null,
+    val latestCircularTitle: String? = null,
+    val latestCircularTimeAgo: String? = null
 )

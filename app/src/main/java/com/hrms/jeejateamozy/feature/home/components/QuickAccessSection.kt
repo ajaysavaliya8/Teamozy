@@ -3,20 +3,15 @@ package com.hrms.jeejateamozy.feature.home.presentation.components
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.Campaign
+import androidx.compose.material.icons.outlined.BeachAccess
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.hrms.jeejateamozy.core.designsystem.QuickAccessCard
 import com.hrms.jeejateamozy.core.designsystem.SectionHeader
 import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 
-/**
- * Quick Access Section — matches Figma home (node 72:2):
- * white cards with a small tinted icon tile (rose / teal / amber).
- */
 @Composable
 fun QuickAccessSection(
     onCircularClick: () -> Unit = {},
@@ -24,20 +19,6 @@ fun QuickAccessSection(
     onWorkReportClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    data class Item(
-        val icon: ImageVector,
-        val title: String,
-        val tile: Color,
-        val tint: Color,
-        val onClick: () -> Unit
-    )
-
-    val items = listOf(
-        Item(Icons.Outlined.BeachAccess, "Leaves", TeamozyColors.TileRose, TeamozyColors.Error, onApplyLeavesClick),
-        Item(Icons.Outlined.Campaign, "Circulars", TeamozyColors.TileTeal, TeamozyColors.Success, onCircularClick),
-        Item(Icons.AutoMirrored.Outlined.Assignment, "Reports", TeamozyColors.TileAmber, TeamozyColors.Warning, onWorkReportClick)
-    )
-
     Column(modifier = modifier.fillMaxWidth()) {
         SectionHeader(
             text = "Quick Access",
@@ -52,16 +33,33 @@ fun QuickAccessSection(
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items.forEach { item ->
-                QuickAccessCard(
-                    icon = item.icon,
-                    label = item.title,
-                    tileColor = item.tile,
-                    iconTint = item.tint,
-                    onClick = item.onClick,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            // Leaves — green tile (#d7f0e6)
+            QuickAccessCard(
+                icon = Icons.Outlined.BeachAccess,
+                label = "Leaves",
+                tileColor = TeamozyColors.TileLeaves,
+                iconTint = TeamozyColors.TileIconLeaves,
+                onClick = onApplyLeavesClick,
+                modifier = Modifier.weight(1f)
+            )
+            // Circulars — blue tile (#e5f1ff)
+            QuickAccessCard(
+                icon = Icons.Outlined.Campaign,
+                label = "Circulars",
+                tileColor = TeamozyColors.TileCirculars,
+                iconTint = TeamozyColors.TileIconCirculars,
+                onClick = onCircularClick,
+                modifier = Modifier.weight(1f)
+            )
+            // Reports — amber tile (#f8edd3)
+            QuickAccessCard(
+                icon = Icons.AutoMirrored.Outlined.Assignment,
+                label = "Reports",
+                tileColor = TeamozyColors.TileReports,
+                iconTint = TeamozyColors.TileIconReports,
+                onClick = onWorkReportClick,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

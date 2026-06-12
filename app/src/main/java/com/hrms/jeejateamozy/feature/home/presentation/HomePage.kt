@@ -34,6 +34,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import com.hrms.jeejateamozy.core.ui.LightStatusBarIcons
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
+import com.hrms.jeejateamozy.feature.home.presentation.components.TodayShiftCard
+import com.hrms.jeejateamozy.feature.home.presentation.components.WhatsNewCard
 import org.koin.compose.koinInject
 
 private const val TAG = "HomePage"
@@ -156,6 +159,7 @@ fun HomePage(
     LightStatusBarIcons()
 
     Scaffold(
+        containerColor = TeamozyColors.Background,
         snackbarHost = {
             SnackbarHost(
                 hostState = snack,
@@ -190,6 +194,7 @@ fun HomePage(
                 // Greeting Section
                 GreetingSection(
                     userName = prefs.userName,
+                    streakDays = ui.streakDays,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
                 )
 
@@ -214,7 +219,7 @@ fun HomePage(
                     }
                 )
 
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(20.dp))
 
                 // Quick Access Section
                 QuickAccessSection(
@@ -231,6 +236,32 @@ fun HomePage(
                         onNavigateToWorkReport()
                     }
                 )
+
+                Spacer(Modifier.height(12.dp))
+
+                // Today's Shift card
+                val shiftName = ui.shiftName
+                if (!shiftName.isNullOrBlank()) {
+                    TodayShiftCard(
+                        shiftName = shiftName,
+                        shiftTime = ui.shiftTime,
+                        shiftStatus = ui.shiftStatus,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                // What's New card (latest circular)
+                val latestCircularTitle = ui.latestCircularTitle
+                if (!latestCircularTitle.isNullOrBlank()) {
+                    WhatsNewCard(
+                        title = latestCircularTitle,
+                        timeAgo = ui.latestCircularTimeAgo,
+                        onClick = { onNavigateToCircular() },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
 
             // Bottom padding to scroll above the navigation bar
             Spacer(Modifier.height(paddingValues.calculateBottomPadding() + 16.dp))

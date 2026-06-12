@@ -9,32 +9,24 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.hrms.jeejateamozy.core.designsystem.TeamozyColors
 
-// Enum for navigation screens
 enum class NavigationScreen {
     HOME,
     ATTENDANCE,
     PROFILE
 }
 
-/**
- * Bottom Navigation Bar Component
- * Manages navigation between main app screens
- *
- * ✅ Properly handles both:
- * - 3-button navigation (back, home, recent)
- * - Gesture navigation (swipe up)
- */
 @Composable
 fun BottomNavigationBar(
     currentScreen: NavigationScreen,
     onScreenSelected: (NavigationScreen) -> Unit
 ) {
     NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
-        // ✅ KEY FIX: Add navigation bar padding to prevent content from going behind system nav bar
+        containerColor = Color.White,
+        tonalElevation = 0.dp,
         modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
     ) {
         NavigationBarItem(
@@ -46,7 +38,14 @@ fun BottomNavigationBar(
                     contentDescription = "Home"
                 )
             },
-            label = { Text("Home") }
+            label = { Text("Home") },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = TeamozyColors.Primary,
+                selectedTextColor = TeamozyColors.Primary,
+                indicatorColor = Color.Transparent,
+                unselectedIconColor = TeamozyColors.Secondary,
+                unselectedTextColor = TeamozyColors.Secondary
+            )
         )
 
         NavigationBarItem(
@@ -58,7 +57,14 @@ fun BottomNavigationBar(
                     contentDescription = "Attendance"
                 )
             },
-            label = { Text("Attendance") }
+            label = { Text("Attendance") },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = TeamozyColors.Primary,
+                selectedTextColor = TeamozyColors.Primary,
+                indicatorColor = Color.Transparent,
+                unselectedIconColor = TeamozyColors.Secondary,
+                unselectedTextColor = TeamozyColors.Secondary
+            )
         )
 
         NavigationBarItem(
@@ -70,7 +76,14 @@ fun BottomNavigationBar(
                     contentDescription = "Profile"
                 )
             },
-            label = { Text("Profile") }
+            label = { Text("Profile") },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = TeamozyColors.Primary,
+                selectedTextColor = TeamozyColors.Primary,
+                indicatorColor = Color.Transparent,
+                unselectedIconColor = TeamozyColors.Secondary,
+                unselectedTextColor = TeamozyColors.Secondary
+            )
         )
     }
 }
